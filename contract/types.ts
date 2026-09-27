@@ -15,6 +15,8 @@ export interface Target {
   id: string; issue: string; title: string; component: string; kind: "bug" | "feature";
   severity: 1 | 2 | 3; status: "open" | "engaged" | "resolved"; pos: Pos; customers: string[];
 }
+export interface Customer { id: string; name: string; contact: string; contactSlug: string; slug: string } // slug = companies/<id>
+export interface World { components: Component[]; buildings: Building[]; targets: Target[]; customers: Customer[] } // GET brain /world
 export interface Team { id: number; name: string; color: string; autopilot: boolean; members: string[] }
 export interface Order {
   id: string; unitId: string; targetId: string; status: "proposed" | "active" | "done" | "cancelled" | "failed";
@@ -28,10 +30,12 @@ export interface State {
 
 // Bridge API events (GET /events on qm-bridge and mock-bridge)
 export type BridgeEvent =
-  | { type: "activity"; unitId: string; kind: "message" | "tool" | "thinking" | "error"; text: string; tool?: string; args?: unknown }
-  | { type: "reply"; unitId: string; text: string }
+  | { type: "activity"; unitId: string; orderId?: string; kind: "message" | "tool" | "thinking" | "error"; text: string; tool?: string; args?: unknown }
+  | { type: "reply"; unitId: string; orderId?: string; text: string }
+  | { type: "error"; unitId: string; orderId?: string; text: string }
   | { type: "usage"; unitId: string; tokens: number; usd: number };
 export interface SpawnRequest { id: string; name: string; model: string; effort: string; role: string; team: number | null }
+export interface SendRequest { text: string; orderId?: string; targetId?: string; componentId?: string }
 export interface SpawnResponse { sessionId: string | null; sessionUrl: string | null }
 
 // Proposer API (POST /propose on autopilot and commander)

@@ -39,7 +39,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type
 - `POST /api/orders/:id/cancel` · `POST /api/orders/:id/go` · `POST /api/orders/:id/adjust` {unitId?, targetId?}
 - `POST /api/teams` {id, members} (control group assign) · `PATCH /api/teams/:id` {autopilot?, name?}
 - `POST /api/reset` resets the demo world
-- Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page/:slug`, `GET /api/brain/stats` pass through to the brain service unchanged
+- Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page?slug=`, `GET /api/brain/stats` pass through to the brain service unchanged
 - Types: `contract/types.ts` is authoritative where an example disagrees. Timestamps are epoch milliseconds everywhere; issue ids are strings like "LUM-12".
 
 ## Microservices (every component is its own service or package; they talk only over HTTP)
@@ -59,12 +59,14 @@ Rules: no service imports another service's code. Shared TypeScript types live o
 
 ## Bridge API (qm-bridge and mock-bridge implement the same API)
 - `POST /units` {id, name, model, effort, role, team} -> {sessionId, sessionUrl}
-- `POST /units/:id/send` {text} -> {ok}  (an order or a direct message)
+- `POST /units/:id/send` {text, orderId?, targetId?, componentId?} -> {ok}  (orders carry orderId, targetId, componentId; direct messages omit them)
 - `PATCH /units/:id` {team} -> {ok}
 - `DELETE /units/:id` -> {ok}
 - `GET /events` SSE, each message `data: {...}` is one of:
   - `{"type": "activity", "unitId", "kind": "message"|"tool"|"thinking"|"error", "text", "tool"?, "args"?}`
-  - `{"type": "reply", "unitId", "text"}` (final reply for the current order)
+  - `{"type": "reply", "unitId", "orderId"?, "text"}` (terminal: final reply for that order)
+  - `{"type": "error", "unitId", "orderId"?, "text"}` (terminal: the order failed)
+  - activity events also carry `orderId` when they belong to an order. The engine ignores terminal events whose orderId is not the unit's current order (stale completions after cancel).
   - `{"type": "usage", "unitId", "tokens", "usd"}` (optional)
 - `GET /health`
 
@@ -77,9 +79,11 @@ GBrain tool calls made by agents arrive as activity with `kind: "tool"` and `too
 - `GET /graph` -> {nodes: [{id, type, title}], edges: [{from, to, type}]}
 - `GET /stats` -> {pages}
 - `GET /search?q=` -> [{slug, title, snippet}]
-- `GET /page/:slug` -> {slug, title, body}
+- `GET /page?slug=<slug>` -> {slug, title, body}  (slug as a query parameter, URL-encoded, so slashes are safe)
 - `POST /reset` restores the demo world
-Calls are serialized inside the service (PGLite is single-writer). The game brain lives at ~/Workspace/hackathon-gbrain/brain.pglite (keyless).
+One DB owner: services/brain is the only process that opens the game brain. All access, including GBrain MCP for QM agents, goes through it (for example it runs `gbrain serve` as its own child and exposes an MCP facade at http://127.0.0.1:4617/mcp, or another design raid-gbrain chooses and agrees with raid-qm-plan before M2). Nothing else runs `gbrain` against the game brain while the service is up.
+
+Slug conventions: `components/<componentId>`, `issues/<issue lowercased, e.g. lum-12>`, `companies/<customerId>`, `people/<contact-slug>`, `units/<unitId>`, `learnings/<issue>-<unitId>-<epoch ms>`. Target.customers holds customer ids. The game brain lives at ~/Workspace/hackathon-gbrain/brain.pglite (keyless).
 
 ## Forge API (services/forge, port 4612; the River building)
 The user names a new agent type and describes its job; the Forge generates synthetic training data for that job, fine-tunes a model with the River API, evaluates it, and then units of that type can be trained (spawned) from the Forge.

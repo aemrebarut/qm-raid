@@ -12,13 +12,13 @@ Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, 
 - Times: `order.vetoDeadline`, `MemoryOp.ts` and event `ts` are epoch ms. `target.issue` is a string like `LUM-12`. `target.customers` holds customer ids (brain slug `companies/<id>`).
 - Bridge send body: `{text, orderId, targetId, componentId}` for orders, `{text}` for direct messages. Terminal events (`reply`, `error`) whose `orderId` is not the unit's current order are dropped (stale after cancel). `error` -> order `failed`, unit `idle`.
 - Movement: one tile step every 333 ms (about 3 tiles/s), step `sign(dx), sign(dy)` (diagonal allowed), stop when Chebyshev distance to the target is <= 1. Emit `unit.moved` per step.
-- Order prompt text (mock-bridge parses it, qm-bridge forwards it as is):
+- Order prompt text (mock-bridge parses the `issue <ID>` and `Component:` lines, qm-bridge forwards it as is). The engine fills `<learningSlug>` = `learnings/<issue lowercased>-<unitId>-<Date.now()>` at send time:
   ```
   Order <orderId>: work on issue <issue> "<title>" (<kind>, severity <n>).
   Component: <componentId>
   Customers: <customerId>, <customerId>
   GBrain pages: components/<componentId>, issues/<issue lowercased>, companies/<customerId>
-  First recall from GBrain what we know about this component, issue and customers. Do the work. Then remember what you learned in GBrain (one learning page, linked to the component and issue). End with a short reply.
+  Lumen is a synthetic product with no code checkout; GBrain is your only source. 1) Recall first: read the pages above and search GBrain for house rules and past learnings on this component. 2) Decide the fix and say it in 3 to 5 sentences, naming any rule you applied. 3) Remember: write one GBrain page <learningSlug> (type learning) with what you learned, linking [[components/<componentId>]] and [[issues/<issue lowercased>]]. Reply in at most 4 sentences.
   ```
 - GBrain tool classification (robust to MCP name variants like `mcp__gbrain__put_page`, `gbrain_search`): lowercase the tool name; if it contains `gbrain`: contains `link` -> `memory.link`; contains `put`, `remember`, `write`, `capture` or `add_page` -> `memory.remember`; anything else -> `memory.recall`. Slugs from `args.slugs`, `args.slug`, `args.page`, `args.from`/`args.to`, else from `args.query` text.
 - Mock gbrain args shape: `gbrain.recall` {query, slugs: [...]}, `gbrain.remember` {slug, text, links: [...]}, `gbrain.add_link` {from, to, linkType}. Slugs follow the contract conventions: `components/<c>`, `issues/lum-12`, `companies/<id>`, `learnings/<issue lowercased>-<unitId>-<epoch ms>`.

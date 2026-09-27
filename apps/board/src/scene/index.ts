@@ -132,7 +132,12 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
           }
         }
         v = new UnitView(u, color, from);
-        v.onStrike = (p) => fx.sparksAt(p);
+        const uv = v;
+        v.onStrike = (p) => {
+          fx.sparksAt(p);
+          const o = uv.unit.orderId ? store.getState().orders.find((x) => x.id === uv.unit.orderId) : undefined;
+          if (o) targets.get(o.targetId)?.hit(); // art camps flinch
+        };
         units.set(u.id, v);
         unitsG.add(v.group);
       }

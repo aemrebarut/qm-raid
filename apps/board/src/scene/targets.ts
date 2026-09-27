@@ -1,6 +1,8 @@
 // Targets: bugs are monsters, features are crystal outcrops; both sized by severity, with a camp patch and an issue tag.
 import * as THREE from "three";
 import type { Target } from "../core";
+import { makeTarget } from "../../../../packages/art/src";
+import { artOn } from "./art";
 import { CONDENSED, hash, makeLabel, mat, mesh, tileToWorld } from "./util";
 
 const BUG_COLORS: Record<number, string> = { 1: "#7fb341", 2: "#e0892e", 3: "#b8322a" };
@@ -46,12 +48,18 @@ export class TargetView {
   private readonly puffs: THREE.Mesh[] = [];
   private titleTag: THREE.Sprite | null = null;
   private riseT = 0; // seconds left of the spawn rise
+  /** packages/art camp (flag 'targets'); the placeholder body is not built then. */
+  private readonly art: ReturnType<typeof makeTarget> | null = null;
 
   constructor(t: Target) {
     this.id = t.id;
     this.target = t;
     this.phase = (hash(t.id) % 1000) / 160;
     this.size = 0.75 + 0.22 * (t.severity ?? 1);
+    if (artOn("targets")) {
+      this.art = makeTarget({ kind: t.kind, severity: t.severity, seed: hash(t.id) });
+      this.size = (this.art.radius + 0.15) / 0.58; // selection rings hug the art camp
+    }
     this.group.userData = { kind: "target", id: t.id };
     this.group.name = `target:${t.id}`;
     this.group.position.copy(tileToWorld(t.pos.x, t.pos.y));
@@ -61,7 +69,7 @@ export class TargetView {
     camp.position.y = 0.07;
     camp.scale.setScalar(this.size * 0.9);
     camp.receiveShadow = true;
-    this.group.add(camp);
+    if (!this.art) this.group.add(camp);
 
     this.ring = new THREE.Mesh(G.ring, new THREE.MeshBasicMaterial({ color: "#f2e27a", transparent: true, depthWrite: false }));
     this.ring.rotation.x = -Math.PI / 2;
@@ -76,7 +84,10 @@ export class TargetView {
     hit.visible = false; // raycast only, never drawn
     this.group.add(this.ring, this.engagedRing, hit);
 
-    if (t.kind === "feature") {
+    if (this.art) {
+      this.skin = new THREE.MeshLambertMaterial(); // unused with art bodies
+      this.group.add(this.art.object3d);
+    } else if (t.kind === "feature") {
       const [c, e] = CRYSTAL_COLORS[t.severity] ?? CRYSTAL_COLORS[1];
       this.skin = new THREE.MeshLambertMaterial({ color: c, emissive: e, flatShading: true });
       const parts: [number, number, number, number, number][] = [[0, 0, 1.0, 2.2, 0], [0.16, 0.08, 0.65, 1.4, 0.35], [-0.14, 0.1, 0.55, 1.2, -0.4], [0.02, -0.16, 0.5, 1.0, 0.2]];
@@ -133,16 +144,24 @@ export class TargetView {
 
     this.tag = plaque(t.issue, t.severity, 0.26);
     this.tag.visible = false; // shown when zoomed in (TargetView.detail), hovered or selected
-    this.tag.position.y = 0.8 * this.size + 0.25;
+    this.tag.position.y = this.art ? this.art.height + 0.3 : 0.8 * this.size + 0.25;
     this.group.add(this.tag);
 
     this.update(t);
   }
 
   update(t: Target) {
+    const was = this.target.status;
     this.target = t;
     this.group.position.copy(tileToWorld(t.pos.x, t.pos.y));
     const resolved = t.status === "resolved";
+    if (this.art) {
+      if (resolved && was !== "resolved") this.art.defeat(); // stays in the resolved look
+      else if (!resolved) this.art.setState(t.status === "engaged" ? "engaged" : "open");
+      this.engagedRing.visible = t.status === "engaged";
+      this.tag.material.opacity = resolved ? 0.5 : 1;
+      return;
+    }
     this.flag.visible = resolved;
     this.engagedRing.visible = t.status === "engaged";
     for (const p of this.puffs) p.visible = t.status === "engaged";
@@ -170,7 +189,7 @@ export class TargetView {
       const t = this.target;
       const title = t.title.length > 44 ? t.title.slice(0, 43) + "\u2026" : t.title;
       this.titleTag = plaque(`${t.issue}  ${title}`, t.severity, 0.28);
-      this.titleTag.position.y = 0.8 * this.size + 0.55;
+      this.titleTag.position.y = this.art ? this.art.height + 0.6 : 0.8 * this.size + 0.55;
       this.titleTag.renderOrder = 12;
       this.group.add(this.titleTag);
     } else if (!show && this.titleTag) {
@@ -187,6 +206,9 @@ export class TargetView {
 
   /** Newly spawned issue: the camp rises out of the ground (with the scene's portal effect). */
   rise() { this.riseT = RISE; this.tag.visible = false; this.group.position.y = -0.9; this.group.scale.setScalar(0.3); }
+
+  /** A unit strike landed (art camps flinch). */
+  hit() { this.art?.hit(); }
 
   /** Order acknowledged: flash the target green (AoE style). */
   orderFlash() { this.flash = 1.2; }
@@ -205,7 +227,8 @@ export class TargetView {
     this.tag.visible = TargetView.detail && !this.titleTag && this.riseT === 0;
     const st = this.target.status;
     const s = this.size;
-    if (st === "resolved") {
+    if (this.art) this.art.tick(t, dt);
+    else if (st === "resolved") {
       this.body.scale.set(s, s * 0.55, s);
       this.body.position.y = 0;
     } else if (this.target.kind === "feature") {
@@ -223,7 +246,7 @@ export class TargetView {
       this.engagedRing.scale.setScalar(s * (0.8 + p * 0.6));
       (this.engagedRing.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - p);
     }
-    if (st === "engaged") {
+    if (st === "engaged" && !this.art) {
       for (const m of this.puffs) {
         const ph = (t * 0.45 + m.userData.phase) % 1;
         const a = m.userData.phase * Math.PI * 2;
@@ -245,6 +268,7 @@ export class TargetView {
     this.titleTag?.material.map?.dispose();
     this.titleTag?.material.dispose();
     this.skin.dispose();
+    this.art?.dispose();
     for (const p of this.puffs) (p.material as THREE.Material).dispose();
     this.tag.material.map?.dispose();
     this.tag.material.dispose();

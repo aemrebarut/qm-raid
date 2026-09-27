@@ -32,6 +32,14 @@ async function listPages(): Promise<PageRow[]> {
   return rows.filter((r) => !HIDDEN.has(r.slug));
 }
 
+// Write lock: each mutation's whole read-modify-write runs alone (the gbrain queue only orders single RPCs).
+let writeChain: Promise<unknown> = Promise.resolve();
+function exclusive<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn);
+  writeChain = run.catch(() => {});
+  return run;
+}
+
 // Learnings written by this process, so recall finds them before gbrain's idle sweep turns their wikilinks into links.
 const recentLearnings: { slug: string; component: string; issue: string }[] = [];
 
@@ -201,14 +209,14 @@ async function route(req: Request): Promise<Response> {
   if (req.method === "POST" && p === "/remember") {
     const b = await body(req);
     if (!b.unitId || !b.text) return fail("unitId and text required");
-    return json(await remember(String(b.unitId), b.targetId, String(b.text)));
+    return json(await exclusive(() => remember(String(b.unitId), b.targetId, String(b.text))));
   }
-  if (req.method === "POST" && p === "/reset") return json(await reset());
+  if (req.method === "POST" && p === "/reset") return json(await exclusive(reset));
   if (req.method === "POST" && p === "/forget") {
     // Test cleanup (not in the contract): soft-delete one game-made page.
     const slug = String((await body(req)).slug ?? "");
     if (!/^(learnings\/|units\/)/.test(slug)) return fail("only learnings/* and units/* can be forgotten");
-    await tool("delete_page", { slug, force: true });
+    await exclusive(() => tool("delete_page", { slug, force: true }));
     const i = recentLearnings.findIndex((l) => l.slug === slug);
     if (i >= 0) recentLearnings.splice(i, 1);
     graphCache = null;
@@ -230,4 +238,8 @@ Bun.serve({
   },
 });
 console.log(`[brain] listening on http://${HOST}:${PORT}`);
-startMcp({ search, getPage, recall, remember, addLink }, MCP_PORT);
+startMcp({
+  search, getPage, recall,
+  remember: (unitId, targetId, text) => exclusive(() => remember(unitId, targetId, text)),
+  addLink: (from, to, linkType) => exclusive(() => addLink(from, to, linkType)),
+}, MCP_PORT);

@@ -26,7 +26,7 @@ export interface WorkflowRun { id: string; teamId: number; targetId: string; sta
 export interface Team { id: number; name: string; color: string; autopilot: boolean; members: string[]; workflow: Workflow | null }
 export interface Order {
   id: string; unitId: string; targetId: string; status: "proposed" | "active" | "done" | "cancelled" | "failed";
-  source: "user" | "autopilot"; vetoDeadline: number | null; reply: string | null;
+  source: "user" | "autopilot" | "workflow"; runId?: string; nodeId?: string; vetoDeadline: number | null; reply: string | null;
 }
 export interface MemoryOp { ts: number; unitId: string; op: "recall" | "remember" | "link"; slugs: string[]; summary: string }
 export interface State {

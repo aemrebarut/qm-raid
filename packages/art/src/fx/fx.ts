@@ -16,7 +16,7 @@ interface Effect { t: number; dur: number; update(k: number, dt: number): void; 
 export const FX_COLORS = {
   recall: "#4aa3ff",
   recallCore: "#dff0ff",
-  remember: "#ffc94a",
+  remember: "#f0c24a",
   rememberCore: "#fff3c4",
   approve: "#7ee06a",
   changes: "#ff6a4a",
@@ -178,14 +178,20 @@ export class ArtFx {
   // Board-compatible primitives
   // =====================================================================================
 
-  /** Glowing beam between two (possibly moving) points, with streaks flowing from `from` to `to`. */
+  /**
+   * Glowing beam between two (possibly moving) points, streaks flowing from `from` to `to`.
+   * width: outer glow radius hint (board passes 0.09 to 0.13); the glow is capped at 0.25 wide and the core is ~0.07,
+   * tinted (never pure white) and low opacity, so overlapping beams under ACES never clip. Fades in 0.15 s, out 0.4 s.
+   */
   beam(from: Pt, to: Pt, color: THREE.ColorRepresentation, dur = 1.8, width = 0.09) {
     const streak = streakTexture().clone();
     streak.needsUpdate = true;
-    const outer = new THREE.Mesh(beamGeo(), additive(color, streak, 0.5));
-    const inner = new THREE.Mesh(beamGeo(), additive("#ffffff", undefined, 0.85));
-    const endGlow = glowSprite(color, 0.9);
-    const startGlow = glowSprite(color, 1.2, 0.8);
+    const core = new THREE.Color(color).lerp(new THREE.Color("#ffffff"), 0.7); // #4aa3ff -> ~#cfe9ff
+    const outerR = Math.min(0.125, width * 0.95), innerR = Math.min(0.04, Math.max(0.03, width * 0.28));
+    const outer = new THREE.Mesh(beamGeo(), additive(color, streak, 0.35));
+    const inner = new THREE.Mesh(beamGeo(), additive(core, undefined, 0.55));
+    const endGlow = glowSprite(color, 0.45, 0.6);
+    const startGlow = glowSprite(color, 0.5, 0.4);
     const g = new THREE.Group();
     g.add(outer, inner, endGlow, startGlow);
     outer.renderOrder = inner.renderOrder = 5;
@@ -194,29 +200,30 @@ export class ArtFx {
     this.add({
       t: 0, dur,
       update: (k, dt) => {
+        const secs = k * dur;
         a.copy(at(from)); b.copy(at(to));
-        const grow = easeOut(Math.min(1, k / 0.18));
-        const fade = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+        const grow = easeOut(Math.min(1, secs / 0.15));
+        const fade = Math.min(1, (dur - secs) / 0.4);
         b.lerpVectors(a, b, grow);
         dir.subVectors(b, a);
         const len = Math.max(0.001, dir.length());
         mid.addVectors(a, b).multiplyScalar(0.5);
         q.setFromUnitVectors(UP, dir.normalize());
-        const wob = 1 + Math.sin(k * 50) * 0.12;
-        for (const [m, w] of [[outer, width * 2 * wob], [inner, width * 0.42]] as const) {
+        const wob = 1 + Math.sin(secs * 21) * 0.1;
+        for (const [m, w] of [[outer, outerR * wob], [inner, innerR]] as const) {
           m.position.copy(mid);
           m.quaternion.copy(q);
-          m.scale.set(w * fade, len, w * fade);
+          m.scale.set(w, len, w);
         }
         streak.repeat.set(1, len * 0.8);
-        streak.offset.y += dt * 2.5; // cylinder v runs bottom to top; beam points from a to b, so flow toward b
-        (outer.material as THREE.MeshBasicMaterial).opacity = 0.55 * fade;
-        (inner.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade;
+        streak.offset.y += dt * 2.5; // cylinder v runs bottom to top; the beam points from a to b, so streaks flow to b
+        (outer.material as THREE.MeshBasicMaterial).opacity = 0.35 * fade;
+        (inner.material as THREE.MeshBasicMaterial).opacity = 0.55 * fade;
         endGlow.position.copy(b);
-        endGlow.material.opacity = fade;
-        endGlow.scale.setScalar(0.8 + Math.sin(k * 30) * 0.1);
+        endGlow.material.opacity = 0.6 * fade;
+        endGlow.scale.setScalar(0.42 + Math.sin(secs * 12) * 0.05);
         startGlow.position.copy(a);
-        startGlow.material.opacity = 0.8 * fade;
+        startGlow.material.opacity = 0.4 * fade;
       },
       done: () => {
         this.group.remove(g);
@@ -245,9 +252,9 @@ export class ArtFx {
         if (trail) {
           trailAcc += dt;
           vel.subVectors(p, prev).multiplyScalar(-0.15 / Math.max(dt, 1e-3));
-          while (trailAcc > 0.016) {
-            trailAcc -= 0.016;
-            this.glow.emitAt(p, vel, { color: trail, speed: 0, life: 0.45, size: 0.14, grow: 0.3, gravity: -0.1 });
+          while (trailAcc > 0.025) {
+            trailAcc -= 0.025;
+            this.glow.emitAt(p, vel, { color: trail, speed: 0, life: 0.4, size: 0.1, grow: 0.3, gravity: -0.1 });
           }
         }
         prev.copy(p);
@@ -273,22 +280,24 @@ export class ArtFx {
 
   /** Expanding soft ring on the ground plus glow and sparks at a point. */
   burst(p: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.2, dur = 0.8) {
-    const ring = new THREE.Mesh(flatGeo(), additive(color, softRingTexture()));
+    // Half the size and brightness of the old board burst: many fire at once and they are additive, untonemapped.
+    const ring = new THREE.Mesh(flatGeo(), additive(color, softRingTexture(), 0.6));
     ring.renderOrder = 4;
-    const glow = glowSprite(color, size);
+    const glow = glowSprite(color, size * 0.5, 0.45);
     const g = new THREE.Group();
     g.add(ring, glow);
     g.position.copy(p);
     this.group.add(g);
-    this.glow.emit(p, 14, { color, speed: 1.6, life: 0.6, gravity: 2.5, up: 1, size: 0.1 });
+    this.glow.emit(p, 7, { color, speed: 1.2, life: 0.5, gravity: 2.5, up: 1, size: 0.07 });
+    dur = Math.min(dur, 0.6);
     this.add({
       t: 0, dur,
       update: (k) => {
         const e = easeOut(k);
-        ring.scale.setScalar(0.2 + e * size * 1.6);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - k;
-        glow.material.opacity = (1 - k) * 0.9;
-        glow.scale.setScalar(size * (0.6 + e * 0.6));
+        ring.scale.setScalar(0.15 + e * size * 0.9);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - k);
+        glow.material.opacity = 0.45 * (1 - k);
+        glow.scale.setScalar(size * 0.5 * (0.6 + e * 0.5));
       },
       done: () => { this.group.remove(g); (ring.material as THREE.Material).dispose(); glow.material.dispose(); },
     });
@@ -413,19 +422,19 @@ export class ArtFx {
   recallBeam(from: Pt, to: Pt, opts: { dur?: number; color?: THREE.ColorRepresentation; ground?: number } = {}) {
     const dur = opts.dur ?? 2.4;
     const color = opts.color ?? FX_COLORS.recall;
-    this.beam(from, to, color, dur, 0.13);
+    this.beam(from, to, color, dur, 0.12);
 
     const circle = new THREE.Mesh(flatGeo(), additive(color, runeCircleTexture()));
     circle.renderOrder = 4;
     const glyphs: THREE.Sprite[] = [];
     const g = new THREE.Group();
     g.add(circle);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 4; i++) {
       const s = new THREE.Sprite(new THREE.SpriteMaterial({
         map: runeTex(i), color: i % 2 ? FX_COLORS.recallCore : color, transparent: true, depthWrite: false,
-        blending: THREE.AdditiveBlending, toneMapped: false,
+        blending: THREE.AdditiveBlending, toneMapped: false, opacity: 0.8,
       }));
-      s.scale.setScalar(0.2);
+      s.scale.setScalar(0.1);
       s.renderOrder = 8;
       glyphs.push(s);
       g.add(s);
@@ -439,31 +448,33 @@ export class ArtFx {
       update: (k, dt) => {
         base.copy(at(to)).setY(ground + 0.03);
         g.position.copy(base);
-        const inK = easeOutBack(Math.min(1, k / 0.25));
-        const fade = k > 0.75 ? 1 - (k - 0.75) / 0.25 : 1;
-        circle.scale.setScalar(0.95 * inK);
+        const secs = k * dur;
+        const inK = easeOutBack(Math.min(1, secs / 0.3));
+        const fade = Math.min(1, secs / 0.15, (dur - secs) / 0.4);
+        circle.scale.setScalar(0.7 * inK);
         circle.rotation.y = k * 2.2;
-        (circle.material as THREE.MeshBasicMaterial).opacity = 0.85 * fade;
+        (circle.material as THREE.MeshBasicMaterial).opacity = 0.5 * fade;
         glyphs.forEach((s, i) => {
           const ph = (k * 1.6 + i / glyphs.length) % 1; // each glyph loops bottom to top
           const ang = i * (Math.PI * 2 / glyphs.length) + k * 7;
           const r = 0.42 * (1 - ph * 0.55);
           s.position.set(Math.cos(ang) * r, 0.1 + ph * 1.1, Math.sin(ang) * r);
-          s.material.opacity = Math.sin(Math.PI * ph) * fade;
-          s.scale.setScalar(0.16 + 0.08 * Math.sin(Math.PI * ph));
+          s.material.opacity = 0.8 * Math.sin(Math.PI * ph) * fade;
+          s.scale.setScalar(0.08 + 0.04 * Math.sin(Math.PI * ph));
         });
-        // Motes streaming down the beam toward the unit
+        // Twelve glyph motes stream down the beam toward the unit over its life
         moteAcc += dt;
-        if (k > 0.15 && k < 0.8) {
+        const every = (dur * 0.65) / 12;
+        if (k > 0.1 && k < 0.75) {
           a.copy(at(from)); b.copy(at(to));
           dir.subVectors(b, a);
-          while (moteAcc > 0.03) {
-            moteAcc -= 0.03;
+          while (moteAcc > every) {
+            moteAcc -= every;
             const u = Math.random();
             this.tmp.copy(a).addScaledVector(dir, u);
             this.tmp.x += (Math.random() - 0.5) * 0.15;
             this.tmp.z += (Math.random() - 0.5) * 0.15;
-            this.glow.emitAt(this.tmp, dir.clone().multiplyScalar(0.5), { color: FX_COLORS.recallCore, speed: 0, life: 0.5, size: 0.07 });
+            this.glow.emitAt(this.tmp, dir.clone().multiplyScalar(0.5), { color: FX_COLORS.recallCore, speed: 0, life: 0.6, size: 0.08 });
           }
         } else moteAcc = 0;
       },
@@ -476,7 +487,7 @@ export class ArtFx {
     // Flash at the unit when the beam lands
     this.after(0.4, () => {
       const p = at(to).clone();
-      this.glow.emit(p, 16, { color: FX_COLORS.recallCore, speed: 1.2, life: 0.6, gravity: -0.5, up: 0.6, size: 0.09 });
+      this.glow.emit(p, 6, { color: FX_COLORS.recallCore, speed: 0.9, life: 0.5, gravity: -0.5, up: 0.6, size: 0.07 });
     });
   }
 
@@ -487,14 +498,14 @@ export class ArtFx {
   rememberOrb(from: Pt, to: Pt, onArrive?: () => void, opts: { dur?: number } = {}) {
     const g = new THREE.Group();
     const core = new THREE.Mesh(orbGeo(), new THREE.MeshBasicMaterial({ color: FX_COLORS.rememberCore, toneMapped: false }));
-    const halo = glowSprite(FX_COLORS.remember, 0.9);
+    const halo = glowSprite(FX_COLORS.remember, 0.6, 0.7);
     const orbiters = [glowSprite("#fff0b0", 0.22), glowSprite("#ffb82e", 0.18)];
     g.add(core, halo, ...orbiters);
     g.renderOrder = 12;
     let t = 0;
     const tickOrb = () => {
       t += 1 / 60;
-      halo.scale.setScalar(0.85 + Math.sin(t * 18) * 0.12);
+      halo.scale.setScalar(0.55 + Math.sin(t * 18) * 0.08);
       orbiters.forEach((o, i) => {
         const a = t * 9 + i * Math.PI;
         o.position.set(Math.cos(a) * 0.2, Math.sin(a * 1.3) * 0.08, Math.sin(a) * 0.2);
@@ -508,9 +519,9 @@ export class ArtFx {
       halo.material.dispose();
       orbiters.forEach((o) => o.material.dispose());
       const p = at(to).clone();
-      this.pulseAt(p, FX_COLORS.remember);
-      this.burst(p, "#ffd45a", 2.0, 1.0);
-      this.glow.emit(p, 26, { color: "#ffe28a", speed: 2.2, life: 0.9, gravity: 1.2, up: 0.9, size: 0.1 });
+      this.pulseAt(p, FX_COLORS.remember, 0.8, 0.5);
+      this.burst(p, FX_COLORS.remember, 1.0, 0.5);
+      this.glow.emit(p, 10, { color: "#ffe28a", speed: 1.4, life: 0.5, gravity: 1.2, up: 0.9, size: 0.07 });
       onArrive?.();
     }, FX_COLORS.remember);
   }
@@ -531,7 +542,7 @@ export class ArtFx {
           const e = easeOut(Math.min(1, kk));
           m.position.set(p.x, p.y - 0.4 + e * 0.8, p.z);
           m.scale.setScalar(0.3 + e * size);
-          (m.material as THREE.MeshBasicMaterial).opacity = kk <= 0 ? 0 : (1 - Math.min(1, kk)) * 0.9;
+          (m.material as THREE.MeshBasicMaterial).opacity = kk <= 0 ? 0 : (1 - Math.min(1, kk)) * 0.55;
         });
       },
       done: () => rings.forEach((m) => { this.group.remove(m); (m.material as THREE.Material).dispose(); }),

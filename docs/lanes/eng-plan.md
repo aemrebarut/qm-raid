@@ -11,6 +11,7 @@ Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, 
 - Events: emit exactly the `EngineEvent` union from contract/types.ts (commit ca1a93d); type `emit` against it so tsc catches drift. Envelope `{seq, ts: epoch ms, type, ...payload}`; `seq` increments per engine process. `forge.updated` carries `{unitType}`. SSE: send `state.snapshot` first, then a `: ping` comment every 15 s.
 - Times: `order.vetoDeadline`, `MemoryOp.ts` and event `ts` are epoch ms. `target.issue` is a string like `LUM-12`. `target.customers` holds customer ids (brain slug `companies/<id>`).
 - Bridge send body: `{text, orderId, targetId, componentId}` for orders, `{text}` for direct messages. Terminal events (`reply`, `error`) whose `orderId` is not the unit's current order are dropped (stale after cancel). `error` -> order `failed`, unit `idle`.
+- Order ids are never reused in one engine process (reset keeps the counter running), so a late pre-reset reply can never match a new order (rev P1).
 - Movement: one tile step every 333 ms (about 3 tiles/s), step `sign(dx), sign(dy)` (diagonal allowed), stop when Chebyshev distance to the target is <= 1. Emit `unit.moved` per step.
 - Order prompt text (mock-bridge parses the `issue <ID>` and `Component:` lines, qm-bridge forwards it as is). The engine fills `<learningSlug>` = `learnings/<issue lowercased>-<unitId>-<Date.now()>` at send time:
   ```

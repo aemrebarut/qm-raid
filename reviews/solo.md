@@ -245,9 +245,18 @@ Reviewed the diffs and Analyst decision. During the previous loadout review, eng
 - `143b3bf` had two documentation mismatches: it described plugins=[] disabling Brain calls and overstated rule isolation as rule text never appearing in training. Sent both to raid-river; reviewed `cec81d4`, which fixes TEST.md and the PIPELINE.md split description. No remaining finding in those docs. Saved metric arithmetic supports the published numbers, subject to the eval limitations above.
 - Findings and resolutions were sent via Herdr session `default` to raid-river, raid-gbrain and the Analyst as appropriate. Only this review log was edited by raid-rev.
 
+## 2026-09-27: Fast reset `7b38b28`
+
+Reviewed the full diff. Reset now hides game-created pages before returning, deletes them in separate write-lock turns, rewrites only changed seed bodies, and increases both Bun servers' idle timeout.
+
+- Reused the review's separate keyless PGLite on 4636/4637. `BRAIN_URL=http://127.0.0.1:4636 BRAIN_MCP_URL=http://127.0.0.1:4637/mcp SMOKE_WRITE=1 SMOKE_RESET=1 bun run test`: all PASS, including the new reset-under-15-seconds assertion and immediate pool refill. Stopped service PID 57402 and child 57450; verified no remaining processes/listeners. The shared live Brain was untouched.
+- A lightweight deferred-delete probe confirmed a learning recreated after reset survives a queued purge. The working tree had additional reset timing logs and health diagnostics by this check; those do not change the deletion algorithm and are not separately accepted as a submitted revision.
+
+**Open P2: successful reset is not durable until background deletion finishes.** `services/brain/src/server.ts` initializes tombstones as an empty process-local Set. With delete_page deferred, POST /reset returns 200 and the old learning disappears; constructing fresh service state over the same backing pages before releasing deletion makes that learning visible again. A restart/crash after acknowledged reset can therefore restore learnings, units and spawned issues. Persist pending tombstones/reset generation before returning success and restore it before serving reads, clearing entries safely after deletion or recreation. A health flag can guide planned restarts but cannot make acknowledged reset survive a crash. Sent the reproduction to raid-gbrain and copied the Analyst. The owner reports deployment planned for the 16:06 restart; this review did not perform that restart.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `d8fd4b8`; both new-issue P2s are resolved and the independent isolated write/reset smoke passes. Live deployment of those fixes remains pending the Analyst's restart hold.
+- `raid-gbrain`: reviewed through `7b38b28`; both `d8fd4b8` P2s are resolved and independent isolated write/reset smokes pass. One open P2: fast-reset tombstones are not durable across restart before purge finishes. Owner reports live deployment planned for 16:06.
 - `raid-river`: reviewed reviewer profile `8c53b75`, sections `4809371`, locked Library `3899028`, docs `143b3bf`/`cec81d4`, and winner fixes `59581c3`/`bdddd30`. All reported findings resolved; offline checks and live dryRun/bridge smoke pass. Reviewer eval limitations are documented above.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

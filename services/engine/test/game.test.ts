@@ -177,3 +177,32 @@ test("E9 control groups and team orders; E13 Barracks spawn", () => {
   expect(store.state.teams.find((t) => t.id === 5)).toMatchObject({ color: "#888888", members: [sp.unit.id] });
   expect(spawnUnit({ class: "wizard" }).ok).toBe(false);
 });
+
+test("M5: reset returns the exact demo start and leaves the veto log alone", async () => {
+  const { writeFileSync, readFileSync } = await import("node:fs");
+  const { fixtureUnits } = await import("../src/fixture.ts");
+  writeFileSync(VETO, '{"action":"go"}\n');
+  orderFor(["u1"], "t101");
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: store.state.orders[0]!.id, text: "done" });
+  orderFor(["u2"], "t102");
+  patchTeam(1, { autopilot: true, name: "Renamed" });
+  game.assignTeam({ id: 3, members: ["u4"] });
+  game.spawnUnit({ class: "knight", team: 2 });
+  onBridgeEvent({ type: "usage", unitId: "u2", tokens: 500, usd: 0.01 });
+  onBridgeEvent({ type: "activity", unitId: "u3", kind: "tool", text: "r", tool: "gbrain.recall", args: {} });
+  calls.length = 0;
+  await resetWorld();
+  const fresh = fixtureState();
+  const pick = (u: any) => ({ id: u.id, pos: u.pos, status: u.status, team: u.team, orderId: u.orderId, class: u.class, model: u.model });
+  expect(store.state.units.map(pick)).toEqual(fixtureUnits().map(pick));
+  expect(store.state.targets.every((t) => t.status === "open")).toBe(true);
+  expect(store.state.targets.length).toBe(fresh.targets.length);
+  expect(store.state.teams).toEqual(fresh.teams);
+  expect(store.state.teams.every((t) => !t.autopilot)).toBe(true);
+  expect(store.state.orders).toEqual([]);
+  expect(store.state.memory.recent).toEqual([]);
+  expect(store.state.stats).toEqual({ spentUsd: 0, tokens: 0 });
+  expect(readFileSync(VETO, "utf8")).toBe('{"action":"go"}\n');
+  expect(calls.some((c) => c.url.endsWith("/reset"))).toBe(true); // BRAIN_RESET defaults to on
+  expect(calls.filter((c) => /\/units\/u\d+$/.test(c.url)).length).toBeGreaterThanOrEqual(7); // bridge DELETE per old unit
+});

@@ -61,7 +61,7 @@ async function loadWorld(): Promise<void> {
     state.components = world.components;
     if (Array.isArray(world.buildings) && world.buildings.length) state.buildings = world.buildings;
     state.targets = world.targets.map((t) => ({
-      ...t, issue: String(t.issue), status: t.status ?? "open", customers: Array.isArray(t.customers) ? t.customers : [],
+      ...t, issue: String(t.issue), status: "open", customers: Array.isArray(t.customers) ? t.customers : [],
       pos: t.pos && Number.isFinite(t.pos.x) && Number.isFinite(t.pos.y) ? t.pos : inZone(t),
     }));
     for (const c of world.customers ?? []) customers.set(c.id, c);

@@ -1,6 +1,8 @@
 // Brain service: the game world and GBrain game memory over HTTP (docs/CONTRACT.md, Brain API).
 import { tool, childPid } from "./gbrain.ts";
-import { loadWorld, issueSlug } from "./world.ts";
+import { loadWorld, issueSlug, BRAIN_DIR } from "./world.ts";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { startMcp } from "./mcp.ts";
 
 const PORT = Number(process.env.BRAIN_PORT ?? 4616);
@@ -69,6 +71,11 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
     for (const l of back) if (l.from_slug.startsWith("learnings/")) add(l.from_slug);
   }
   for (const l of recentLearnings) if (l.component === comp || (target && l.issue === target.issue)) add(l.slug);
+  // Keep the newest learnings only (slug ends in epoch ms).
+  const learned = slugs.filter((s) => s.startsWith("learnings/"));
+  const ms = (s: string) => Number(s.split("-").pop()) || 0;
+  const keep = new Set(learned.sort((a, b) => ms(b) - ms(a)).slice(0, 6));
+  for (let i = slugs.length - 1; i >= 0; i--) if (slugs[i].startsWith("learnings/") && !keep.has(slugs[i])) slugs.splice(i, 1);
   if (query) for (const r of await search(query)) add(r.slug);
   const parts: string[] = [];
   for (const s of slugs) {
@@ -82,7 +89,14 @@ async function ensureUnitPage(unitId: string) {
   const slug = `units/${unitId}`;
   if (await getPage(slug)) return slug;
   // Links come from wikilinks (gbrain serve sweeps them); add_link is refused on a managed brain.
-  await tool("put_page", { slug, content: `---\ntype: unit\ntitle: Unit ${unitId}\n---\nAgent unit ${unitId} in the QM Raid game. Works issues in [[lumen]].\n` });
+  const content = `---\ntype: unit\ntitle: Unit ${unitId}\n---\nAgent unit ${unitId} in the QM Raid game. Works issues in [[lumen]].\n`;
+  try {
+    await tool("put_page", { slug, content });
+  } catch {
+    // Soft-deleted by a reset: bring it back.
+    await tool("restore_page", { slug }).catch(() => {});
+    await tool("put_page", { slug, content, force: true });
+  }
   return slug;
 }
 
@@ -98,13 +112,6 @@ async function remember(unitId: string, targetId: string | undefined, text: stri
   const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim()}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
   await tool("put_page", { slug, content });
   if (target) recentLearnings.push({ slug, component: target.component, issue: target.issue });
-  // Also a durable fact scoped to the component, so the gbrain recall verb finds it for later waves.
-  if (target) {
-    await tool("remember", {
-      fact: text.trim().slice(0, 500), provenance: `qm-raid ${unitId} on ${target.issue}`,
-      entity: `components/${target.component}`,
-    }).catch((e) => console.error("[brain] remember fact", e.message));
-  }
   graphCache = null;
   return { slug };
 }
@@ -126,6 +133,34 @@ async function addLink(from: string, to: string, linkType?: string) {
   await tool("put_page", { slug: from, content, force: true });
   graphCache = null;
   return { ok: true, from, to };
+}
+
+function worldFiles(dir = BRAIN_DIR, prefix = ""): { slug: string; content: string }[] {
+  const out: { slug: string; content: string }[] = [];
+  for (const f of readdirSync(dir).sort()) {
+    const full = join(dir, f);
+    if (statSync(full).isDirectory()) out.push(...worldFiles(full, `${prefix}${f}/`));
+    else if (f.endsWith(".md")) out.push({ slug: `${prefix}${f.slice(0, -3)}`, content: readFileSync(full, "utf8") });
+  }
+  return out;
+}
+
+// Demo reset: soft-delete game-made pages (learnings, units) and rewrite the world pages from world/brain.
+async function reset() {
+  let deleted = 0;
+  for (const type of ["learning", "unit"]) {
+    const rows = await tool<PageRow[]>("list_pages", { type, limit: 1000 });
+    for (const r of rows) {
+      await tool("delete_page", { slug: r.slug, force: true }).then(() => deleted++).catch((e) => console.error("[brain] reset delete", r.slug, e.message));
+    }
+  }
+  let restored = 0;
+  for (const f of worldFiles()) {
+    await tool("put_page", { slug: f.slug, content: f.content, force: true }).then(() => restored++).catch((e) => console.error("[brain] reset put", f.slug, e.message));
+  }
+  recentLearnings.length = 0;
+  graphCache = null;
+  return { ok: true, deleted, restored };
 }
 
 async function body(req: Request): Promise<any> {
@@ -157,6 +192,17 @@ async function route(req: Request): Promise<Response> {
     const b = await body(req);
     if (!b.unitId || !b.text) return fail("unitId and text required");
     return json(await remember(String(b.unitId), b.targetId, String(b.text)));
+  }
+  if (req.method === "POST" && p === "/reset") return json(await reset());
+  if (req.method === "POST" && p === "/forget") {
+    // Test cleanup (not in the contract): soft-delete one game-made page.
+    const slug = String((await body(req)).slug ?? "");
+    if (!/^(learnings\/|units\/)/.test(slug)) return fail("only learnings/* and units/* can be forgotten");
+    await tool("delete_page", { slug, force: true });
+    const i = recentLearnings.findIndex((l) => l.slug === slug);
+    if (i >= 0) recentLearnings.splice(i, 1);
+    graphCache = null;
+    return json({ ok: true, slug });
   }
   return fail("not found", 404);
 }

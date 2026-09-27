@@ -401,6 +401,17 @@ const clips: Record<string, Script> = {
     let s = await state(c.page);
     // The reviewer is a River-trained Rule Warden (Forge type forge-rule-warden): reuse an idle one or train one now.
     const RW = flag("reviewer", "forge-rule-warden");
+    // An idle formation from an earlier take holds the Rule Warden: disband it so Form team is shown fresh.
+    const oldTeam = s.teams.find((t: any) => t.workflow && t.members.some((m: string) => s.units.find((u: any) => u.id === m)?.class === RW)
+      && !(s.workflowRuns ?? []).some((r: any) => r.teamId === t.id && r.status === "running")
+      && t.members.every((m: string) => s.units.find((u: any) => u.id === m)?.status === "idle"));
+    if (oldTeam) {
+      await js(c.page, `raid.api.clearWorkflow(${oldTeam.id})`);
+      for (const m of oldTeam.members) await js(c.page, `raid.api.patchUnit(${JSON.stringify(m)}, { team: null })`);
+      c.log("disbanded-old-team", { teamId: oldTeam.id, members: oldTeam.members });
+      await wait(1000);
+      s = await state(c.page);
+    }
     let warden = idleUnits(s, (x) => x.class === RW)[0];
     if (!warden && s.unitTypes.some((t: any) => t.id === RW && t.status === "ready")) {
       const sp = c.waitFor((e) => e.type === "unit.spawned" && e.unit?.class === RW, 20000, "warden spawned");
@@ -408,8 +419,9 @@ const clips: Record<string, Script> = {
       const e = await sp;
       if (e) { c.focus.add(e.unit.id); c.mark("warden-trained", { unitId: e.unit.id, unitName: e.unit.name }, null); await wait(4500); s = await state(c.page); warden = s.units.find((u: any) => u.id === e.unit.id); }
     }
-    let pool = idleUnits(s, (x) => x.team == null && x.id !== warden?.id && x.class !== RW);
-    if (pool.length < (warden ? 2 : 3)) pool = idleUnits(s, (x) => x.id !== warden?.id && x.class !== RW);
+    const QMC = ["knight", "ranger", "scout"]; // planner and implementer are real QM agents (QM intercut)
+    let pool = idleUnits(s, (x) => x.team == null && QMC.includes(x.class) && x.id !== warden?.id);
+    if (pool.length < (warden ? 2 : 3)) pool = idleUnits(s, (x) => QMC.includes(x.class) && x.id !== warden?.id);
     const three = warden ? [...pool.slice(0, 2), warden] : pool.slice(0, 3); // member order = planner, implementer, reviewer
     if (three.length < 3) return c.mark("need-3-idle-units");
     three.forEach((u: any) => { claimed.add(u.id); c.focus.add(u.id); });
@@ -564,6 +576,10 @@ const clips: Record<string, Script> = {
       ev = await c.waitFor((e) => e.type === "order.updated" && e.order?.id === p1.order.id && e.order?.status === "cancelled", 4000, "veto cancel");
     }
     c.mark(ev ? "veto" : "veto-missing", { orderId: ev?.order?.id ?? p1.order.id, unitId: ev?.order?.unitId, confirmed: !!ev, proposals: proposals.length + (more ? 0 : 0) });
+    // Approve the next proposal with Go (else its ring runs out and it goes by itself).
+    await wait(2500);
+    const went0 = c.waitFor((e) => e.type === "order.updated" && e.order?.source === "autopilot" && e.order?.status === "active", 4000);
+    if (await clickHud(c, "button.hud-btn-go", "Go")) { c.mark("approve"); await went0; }
     // The other proposal runs out its ring and goes by itself.
     const went = await c.waitFor((e) => e.type === "order.updated" && e.order?.source === "autopilot" && e.order?.status === "active", 20000, "autopilot go");
     if (went) c.mark("autopilot-go", { orderId: went.order.id, unitId: went.order.unitId });
@@ -580,7 +596,7 @@ const clips: Record<string, Script> = {
     const s = await state(c.page);
     // Analyst HOLD 16:04: no loadout PATCH on real QM units until raid-qm-impl's fix; mock only unless --loadout-real.
     if (s.backend !== "mock" && !has("loadout-real")) { c.note_(`loadout skipped: backend ${s.backend} (HOLD, pass --loadout-real after the all clear)`); return c.mark("loadout-skipped"); }
-    const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s)[0] ?? s.units[0];
+    const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s, (x) => ["ranger", "scout"].includes(x.class))[0] ?? idleUnits(s)[0] ?? s.units[0];
     claimed.add(u.id); c.focus.add(u.id);
     await selectUnit(c, u);
     c.mark("select", { unitId: u.id, unitName: u.name });
@@ -653,6 +669,27 @@ clips.hero = async (c) => {
   const beam = await c.waitFor((e) => e.type === "memory.recall", Number(flag("hero-wait", "60000")), "hero recall beam");
   if (beam) c.mark("hero-beam", { unitId: beam.unitId }, null);
   await wait(5000);
+};
+
+// Move (new build): select the idle squad, right-click open ground, they walk there.
+clips.move = async (c) => {
+  const s = await state(c.page);
+  const ids = s.units.filter((u: any) => u.status === "idle").map((u: any) => u.id);
+  if (!ids.length) return c.mark("no-idle-squad");
+  ids.forEach((id: string) => c.focus.add(id));
+  await js(c.page, `raid.bus.select(${JSON.stringify(ids)})`);
+  c.mark("select-squad", { unitIds: ids }, null);
+  await wait(1200);
+  // Open ground three tiles south-east of the squad, checked free of units and camps.
+  const p = await js(c.page, `(() => { const sc = raidScene; const ids = ${JSON.stringify(ids)}; const vs = ids.map(i => sc.units.get(i)).filter(Boolean); if (!vs.length) return null;
+    const cx = vs.reduce((a, v) => a + v.group.position.x, 0) / vs.length, cz = vs.reduce((a, v) => a + v.group.position.z, 0) / vs.length;
+    for (const [dx, dz] of [[3, 3], [-3, 3], [3, -3], [0, 4], [4, 0], [-3, -3]]) { const q = sc.units.values().next().value.group.position.clone(); q.set(cx + dx, 0, cz + dz); q.project(sc.iso.camera);
+      const r = sc.renderer.domElement.getBoundingClientRect(); const x = Math.round((q.x + 1) / 2 * r.width + r.left), y = Math.round((1 - q.y) / 2 * r.height + r.top);
+      if (x > 80 && y > 80 && x < innerWidth - 420 && y < innerHeight - 200 && document.elementFromPoint(x, y) === sc.renderer.domElement) return { x, y }; } return null; })()`);
+  if (!p) return c.mark("no-open-ground");
+  await clickAt(c, p, "right");
+  c.mark("move", { unitIds: ids }, p, c.clickAt);
+  await wait(6000);
 };
 
 const pending: Promise<void>[] = [];
@@ -800,7 +837,7 @@ async function run(name: string, script: Script) {
   return finishRec(c, rec, backend);
 }
 
-const order = ["orders", "teams", "forge", "autopilot", "loadout", "hero"].filter((n) => !only.length || only.includes(n));
+const order = ["orders", "teams", "forge", "autopilot", "loadout", "move", "hero"].filter((n) => !only.length || only.includes(n));
 const results: any[] = [];
 try {
   if (has("parallel") && order.includes("teams")) {

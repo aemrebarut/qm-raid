@@ -21,7 +21,8 @@ const config = {
 // Demo memory: learnings the mock agents remembered, oldest first. Cleared by POST /debug/reset or when the last unit is deleted.
 let learnings: Learning[] = [];
 
-// Loadout catalog (GET /catalog): a fixed, plausible list of QM skills and plugins. GBrain is the default plugin.
+// Loadout catalog (GET /catalog): a fixed, plausible list of QM skills and plugins. GBrain is locked on for every unit
+// (Analyst): its description leads with "The Library: always on." and a loadout PATCH without it keeps it.
 const CATALOG: CatalogItem[] = [
   { id: "debug", name: "Debug", description: "Reproduce first, bisect, then fix the root cause", kind: "skill" },
   { id: "write-tests", name: "Write tests", description: "Regression test first, then the fix", kind: "skill" },
@@ -30,7 +31,7 @@ const CATALOG: CatalogItem[] = [
   { id: "plan", name: "Plan", description: "Break a task into short numbered steps before coding", kind: "skill" },
   { id: "customer-reply", name: "Customer reply", description: "Write customer updates in the house tone", kind: "skill" },
   { id: "refactor", name: "Refactor", description: "Small safe refactors with tests kept green", kind: "skill" },
-  { id: "gbrain", name: "GBrain", description: "Team memory: recall pages and learnings, remember what you learned", kind: "plugin" },
+  { id: "gbrain", name: "GBrain", description: "The Library: always on. Team memory: recall pages and learnings, remember what you learned", kind: "plugin" },
   { id: "github", name: "GitHub", description: "Read issues and pull requests, open draft PRs", kind: "plugin" },
   { id: "linear", name: "Linear", description: "Read and update tickets", kind: "plugin" },
   { id: "sentry", name: "Sentry", description: "Look up error events and stack traces", kind: "plugin" },
@@ -57,6 +58,7 @@ function mergeLoadout(cur: Loadout, p: unknown): Loadout | string {
     const bad = (v as string[]).find((x) => !known.has(x));
     if (bad) return `unknown ${k === "skills" ? "skill" : "plugin"} ${bad}`;
     next[k] = [...new Set(v as string[])];
+    if (k === "plugins" && !next.plugins.includes("gbrain")) next.plugins.unshift("gbrain"); // GBrain is locked on
   }
   return next;
 }
@@ -133,8 +135,8 @@ function play(u: MockUnit, req: SendRequest) {
   const slot = order ? u.timers.order : u.timers.chat;
   if (order) u.orderId = req.orderId ?? null;
   const demo = config.script === "demo";
-  // loadout: without the gbrain plugin the unit makes no gbrain calls; skills and standing orders show up in the script
-  const steps = buildScript(u.id, u.name, req, { loadout: u.loadout, errorRate: config.fail, noGbrain: config.noGbrain || !u.loadout.plugins.includes("gbrain"), mcpRate: config.mcpNames, demo, learnings, review: config.review });
+  // loadout: skills and standing orders show up in the script (GBrain is always on, so only noGbrain turns it off)
+  const steps = buildScript(u.id, u.name, req, { loadout: u.loadout, errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames, demo, learnings, review: config.review });
   const speed = config.speed;
   for (const s of steps) {
     const t = setTimeout(() => {

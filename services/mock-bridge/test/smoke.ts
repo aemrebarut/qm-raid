@@ -85,15 +85,15 @@ await post(`/units/${N}/send`, { text: flow("oN", REVIEW, [pPlan, pImpl, pChange
 await setConfig({ review: "changes" });
 await post(`/units/${O}/send`, { text: flow("oO", REVIEW, [pPlan, pImpl, pChanges, pImpl]), orderId: "oO", targetId: "t12", componentId: "billing" });
 await setConfig({ review: saved.review ?? "loop" });
-// loadout: catalog, PATCH merge and validation, marker activity; T loses the gbrain plugin before its order
+// loadout: catalog, PATCH merge and validation, marker activity; T asks for no plugins, but GBrain is locked on
 const T = `smokeT-${run}`;
 const catalog = (await (await fetch(URL_ + "/catalog")).json()).items as Array<{ id: string; kind: string; name: string; description: string }>;
-check(Array.isArray(catalog) && catalog.some((c) => c.id === "gbrain" && c.kind === "plugin") && catalog.filter((c) => c.kind === "skill").length >= 5 && catalog.every((c) => c.id && c.name && c.description), `GET /catalog: ${catalog?.length} items, gbrain plugin included`);
+check(Array.isArray(catalog) && catalog.some((c) => c.id === "gbrain" && c.kind === "plugin" && c.description.startsWith("The Library: always on.")) && catalog.filter((c) => c.kind === "skill").length >= 5 && catalog.every((c) => c.id && c.name && c.description), `GET /catalog: ${catalog?.length} items, gbrain plugin included and marked always on`);
 await post("/units", { id: T, name: T, model: "mock", effort: "low", role: "worker", team: 1 });
 const lo1 = await (await post(`/units/${T}`, { loadout: { instructions: "Always write the regression test first.", skills: ["write-tests", "debug"], plugins: [] }, model: "gpt-6-sol", effort: "high" }, "PATCH")).json();
 const lo2 = await post(`/units/${T}`, { loadout: { skills: ["no-such-skill"] } }, "PATCH");
 const tView = await (await fetch(`${URL_}/units/${T}`)).json();
-check(lo1.ok === true && lo1.applied === "live" && lo1.loadout?.skills?.join(",") === "write-tests,debug" && lo1.loadout?.plugins?.length === 0 && lo1.model === "gpt-6-sol" && lo1.effort === "high" && lo2.status === 400 && tView.loadout?.skills?.length === 2, "PATCH /units/:id {loadout, model, effort} -> {ok, loadout, model, effort, applied}; unknown skill -> 400");
+check(lo1.ok === true && lo1.applied === "live" && lo1.loadout?.skills?.join(",") === "write-tests,debug" && lo1.loadout?.plugins?.join(",") === "gbrain" && lo1.model === "gpt-6-sol" && lo1.effort === "high" && lo2.status === 400 && tView.loadout?.skills?.length === 2, "PATCH /units/:id {loadout, model, effort} -> {ok, loadout, model, effort, applied}; plugins [] keeps GBrain; unknown skill -> 400");
 await post(`/units/${T}/send`, { text: prompt("oT"), orderId: "oT", targetId: "t12", componentId: "billing" });
 // more presets (recon, testfirst, herald, duel): scout, tester, herald, judge
 const P = `smokeP-${run}`, Q = `smokeQ-${run}`, R = `smokeR-${run}`, S = `smokeS-${run}`;
@@ -187,8 +187,8 @@ check(/failing test for LUM-12/.test(replyOf(Q) ?? "") && /Acceptance check: /.t
 check(rReply.startsWith("Subject: Fixed: ") && /Acme Robotics/.test(rReply) && /What broke: /.test(rReply) && /What we fixed: /.test(rReply) && /What you need to do: /.test(rReply) && !/VERDICT/.test(rReply) && of(R).some((x) => x.type === "activity" && x.tool === "gbrain.get_page" && (x as any).args?.slug === "companies/acme-robotics"), "workflow herald: customer update (what broke, what we fixed, what to do), reads the company page");
 check(lastLine(sReply) === `VERDICT: APPROVED (winner: ${M})` && sReply.includes(N), `workflow judge: ${lastLine(sReply)}`);
 const tEv = of(T);
-check(tEv.some((x) => x.type === "activity" && /^Loadout changed: model gpt-6-sol \(high\); skills: Write tests, Debug; plugins: none; standing orders/.test(x.text) && (x as any).orderId === undefined), "loadout change emits the 'Loadout changed' marker activity");
-check(orderDone(T, "oT") && !tEv.some((x) => x.type === "activity" && /gbrain/.test(x.tool ?? "")) && tEv.some((x) => x.type === "activity" && (x as any).orderId === "oT" && /^Loadout: skills write-tests, debug; standing orders "Always write/.test(x.text)), "loadout without gbrain: no gbrain calls; the order opens with the loadout note");
+check(tEv.some((x) => x.type === "activity" && /^Loadout changed: model gpt-6-sol \(high\); skills: Write tests, Debug; plugins: GBrain; standing orders/.test(x.text) && (x as any).orderId === undefined), "loadout change emits the 'Loadout changed' marker activity");
+check(orderDone(T, "oT") && tEv.some((x) => x.type === "activity" && /gbrain/.test(x.tool ?? "")) && tEv.some((x) => x.type === "activity" && (x as any).orderId === "oT" && /^Loadout: skills write-tests, debug; standing orders "Always write/.test(x.text)), "GBrain locked on: the order still recalls and remembers, and opens with the loadout note");
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;
 check(JSON.stringify(restored) === JSON.stringify(saved), "config restored");
 

@@ -377,6 +377,8 @@ function worldFiles(dir = BRAIN_DIR, prefix = ""): { slug: string; content: stri
 
 // Demo reset: soft-delete game-made pages (learnings, units) and rewrite the world pages from world/brain.
 async function reset() {
+  const t0 = Date.now();
+  console.log(`[brain] ${new Date(t0).toISOString()} reset start`);
   // Learnings, units and spawned issues (issue pages not in world/brain) vanish from every read at once; the pool refills.
   const worldSlugs = new Set(worldFiles().map((f) => f.slug));
   const doomed: string[] = [];
@@ -391,6 +393,7 @@ async function reset() {
     await tool("put_page", { slug: f.slug, content: f.content, force: true }).then(() => restored++).catch((e) => console.error("[brain] reset put", f.slug, e.message));
   }
   invalidateGraph();
+  console.log(`[brain] ${new Date().toISOString()} reset answered in ${Date.now() - t0} ms (hidden ${doomed.length}, rewrote ${restored})`);
   void purge();
   return { ok: true, deleted: doomed.length, restored };
 }
@@ -415,7 +418,7 @@ async function purge() {
   } finally {
     purging = false;
   }
-  console.log(`[brain] purge done; ${tombstones.size} still hidden`);
+  console.log(`[brain] ${new Date().toISOString()} purge done (${attempted.size} deletes); ${tombstones.size} still hidden`);
 }
 
 async function body(req: Request): Promise<any> {
@@ -425,7 +428,8 @@ async function body(req: Request): Promise<any> {
 async function route(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const p = url.pathname;
-  if (req.method === "GET" && p === "/health") return json({ ok: true, service: "brain", gbrainPid: childPid() });
+  // pendingDeletes > 0: a reset's background purge is still running; do not restart the brain until it is 0.
+  if (req.method === "GET" && p === "/health") return json({ ok: true, service: "brain", gbrainPid: childPid(), pendingDeletes: tombstones.size, purging });
   if (req.method === "GET" && p === "/world") {
     const world = loadWorld();
     return json({ ...world, targets: [...world.targets, ...(await spawnedTargets())] });

@@ -56,7 +56,15 @@ async function callTool(ops: BrainOps, name: string, a: any): Promise<unknown> {
   }
 }
 
+// One log line per MCP request with its duration, so a slow turn start can be traced to the facade or not.
 async function handle(ops: BrainOps, msg: any): Promise<object | null> {
+  const t0 = Date.now();
+  const out = await handleInner(ops, msg);
+  console.log(`[mcp] ${new Date(t0).toISOString()} ${msg?.method ?? "?"}${msg?.params?.name ? ` ${msg.params.name}` : ""} ${Date.now() - t0} ms`);
+  return out;
+}
+
+async function handleInner(ops: BrainOps, msg: any): Promise<object | null> {
   const { id, method, params } = msg ?? {};
   if (id === undefined || id === null) return null; // notification
   const ok = (result: unknown) => ({ jsonrpc: "2.0", id, result });

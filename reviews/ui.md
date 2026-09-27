@@ -2,6 +2,8 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
+Current M1 checkpoint: all actionable findings below are resolved. Six board smoke tests, typecheck, build, health, and isolated interaction checks pass. The lead supplied live browser acceptance in `docs/TEST.md`; reviewer independently verified code and synthetic event/DOM behavior, not GPU pixels.
+
 ## Review procedure
 
 1. Read each submitted commit with `git show <sha>` and record its scope.
@@ -83,3 +85,15 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Isolated scene checks used real Three.js geometry/raycasting and real input listeners with a mocked renderer and canvas drawing context. Verified 6 units, 8 targets, 3 buildings; unit/target/Library picking; right-click target POST; movement interpolation; and zoom calculations. This does not verify WebGL pixels or GPU behavior.
 - **P2 open, assigned to raid-ui-scene:** holding W over the canvas, focusing the HUD message textarea, then releasing W leaves camera movement latched. HUD stops keyup propagation, so scene's bubbling window listener never clears the held key. Reproduced continued movement of 0.19 tiles in the following frame. Capture keyup and/or clear held keys on focus into editable controls; match cleanup to listener registration. Copied HUD and lead.
 - No M1 build blockers found. Visual render and browser-console checks remain unverified by reviewer.
+
+## M1 follow-up: dd7cd25, 65e26c7, 29f2964, 7bb7714
+
+- Corrected the submitted HUD SHA: expansion/fix is `29f2964`; `ac78e4d` is a reviewer-log commit. Read the actual HUD expansion diff and the later keyup fix.
+- **Message-draft P2 resolved in 29f2964:** the delayed u1 completion leaves u2's new draft and notice untouched. Separate check confirms edits to the same unit's draft also survive completion.
+- **Latched-W P2 resolved in 7bb7714:** repeating W down over canvas, focus textarea, release W yields zero further camera movement. Scene-side capture/focus robustness remains optional.
+- Bottom-panel isolated checks passed: command buttons resolve current selection without needing a grid rebuild; Recall, Message, Order, two-click Retire with DELETE, Barracks spawn, and minimap coordinate inversion. Global feed text and six-line cap behave as intended.
+- `dd7cd25`: retirement reducer removes unit/team membership, and `linkSelection` removes it from selection. Shared contract includes DELETE and `unit.retired`.
+- `65e26c7`: proposal deadline is relative to current time. Dev proposals, recall, remember, and status mutations produce local store events without network requests.
+- `bun test test/`: 6 passed, 0 failed, 38 assertions. Typecheck, production build (34 modules), and board `/health` pass.
+- Lead-provided browser evidence (`d5b3014`, `docs/TEST.md` M1 ui): live world renders, unit/target click panels work, right-click order u1 to t108 walks and recalls, no console errors on load. Distinct from reviewer's mocked-renderer evidence.
+- Analyst rule recorded for future Forge reviews: any check creating a type must pass `dryRun: true`; real River training is reserved for demo types. All command checks in this review used a mocked fetch.

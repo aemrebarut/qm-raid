@@ -64,7 +64,7 @@ Reviewed e346453 Loadout integration and i2 evidence at both sizes. Slate treatm
 
 Capture gaps sent to director: i2-loadout.png shows unselected overview, i2-workflow images do not show a running workflow, and i2-rolepick images show the preset grid rather than active role selection. These files do not establish coverage of the named states. Assert state before taking the next shot; shared mock team edits can invalidate fixed team assumptions.
 
-## R6 panels aa3d28b, 2026-09-27 15:57 PDT
+## R6 panels aa3d28b, 2026-09-27 15:54 PDT
 
 **Verdict: R4 P2 fixes pass.** Source reviewed after the Analyst's approved per-command Git workaround restored access. Changes were not attributed to a commit until aa3d28b was supplied.
 
@@ -73,9 +73,20 @@ Capture gaps sent to director: i2-loadout.png shows unselected overview, i2-work
 - Hover card: pan a node 20 px above the graph bottom. Tooltip bottom 580.28 px, field bottom 589 px, no clipping. Hover redraw and click-to-page still pass; at 1280 backing canvas and CSS both 916x411. Offline-to-reopen recovery passes. Zero page errors.
 - Forge fallback: actual mock state displays trained/base Style, Grounded, Overall and Verdict metrics without model URIs, and Dry types say No eval score. Full endpoint rendering is being checked with a routed synthetic payload because the mock endpoint is not yet available.
 
-## R7 iteration i3, initial pass 2026-09-27 15:58 PDT
+## R7 iteration i3, initial pass 2026-09-27 15:54 PDT
 
 Art-on overview, unit, Library, Forge and proposals inspected against the director's art-direction block. World labels are now legible, model portraits read clearly, Library uses the field well, and Forge results are scannable. Main HUD no longer reads as parchment scaffolding.
 
 1. **P2, raid-look-hud: compact proposals truncate the issue identifier.** In i3-proposals.png rows show Ada > LUM-10..., Bram > LUM-1..., Cato > LUM-1...; Cancel, Adjust and Go occupy most of the 320 px row. Preserve the full short issue ID and unit name before any optional title. Use the planned icon controls for secondary actions. Acceptance: distinguish LUM-101, LUM-102 and LUM-103 beside each Go button at both viewports. Sent to owner and director.
 2. **P2 visual, raid-look-hud: empty Activity remains a blank well.** i3-unit.png repeats Activity as tab and section header, then reserves roughly 100 px for an empty feed. Collapse that section when empty so the message composer anchors to content. Sent to owner and director.
+
+
+### R6-R7 followup, 2026-09-27 16:00 PDT
+
+Full Forge endpoint rendering passes with a routed synthetic payload at 1280: Overall 0.66 versus 0.73 gives -0.07 in danger red; Grounded 0.52 versus 0.66 gives -0.14. Training statistics and two sample columns render, no horizontal overflow (530 px client and scroll width). This is fixture validation, not a claim that the live endpoint has landed.
+
+All 32 i3 images inspected. Additional coverage caveat: i3-formation-1280.png shows the fallback FIXTURE backend and a different map. Director notified and capture setup assertions are now in 28fc9b7. 54b3d61 group summary uses its space well; New issue slate treatment matches the HUD. 8ecc599 right-aligned Loadout switches visually pass in a fresh 1280 capture, with reachable Apply and no browser page errors. Empty Activity CSS reviewed; next fixed-state shot will confirm its appearance.
+
+**P2 integration, raid-look-hud:** Message command is swallowed while Loadout is active. Repro: select a unit, open Loadout, click Message in the command card. Loadout remains aria-selected=true and keyboard focus stays on the command button. SidePanel.focusMessage only focuses when the hidden composer is already visible. Switch to Activity before focusing. Reported to HUD owner and director; no message was sent.
+
+Resource discipline after the Analyst's 15:57 notice: at most one short-lived browser at a time, closed after each check; use saved captures and source review where sufficient. Devbrain code/look-review update confirmed by a read after the initial asynchronous write receipt.

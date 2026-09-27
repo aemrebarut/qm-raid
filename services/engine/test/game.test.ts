@@ -2,12 +2,17 @@
 import { beforeEach, expect, test } from "bun:test";
 import type { Order } from "../../../contract/types.ts";
 
-// Bridge and brain calls succeed without a network.
-globalThis.fetch = (async () => new Response(JSON.stringify({ ok: true }), { status: 200 })) as unknown as typeof fetch;
+// Bridge and brain calls succeed without a network; /propose answers with `proposeAnswer`.
+let proposeAnswer: unknown = { proposals: [] };
+globalThis.fetch = (async (url: string) =>
+  new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 })) as unknown as typeof fetch;
+const VETO = `/tmp/engine-test-vetoes-${process.pid}.jsonl`;
+process.env.VETO_LOG = VETO;
 
 const { store } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
-const { createOrders, onBridgeEvent, resetWorld } = await import("../src/game.ts");
+const { createOrders, onBridgeEvent, resetWorld, autopilotTick, goOrder, adjustOrder, cancelOrder } = await import("../src/game.ts");
+const { patchTeam, tick } = await import("../src/game.ts");
 
 const unit = (id: string) => store.state.units.find((u) => u.id === id)!;
 const order = (id: string) => store.state.orders.find((o) => o.id === id)!;
@@ -74,4 +79,46 @@ test("order ids stay unique across reset, so a late pre-reset reply cannot finis
 test("nested MCP args {mcpServer, args} are unwrapped for slugs", () => {
   onBridgeEvent({ type: "activity", unitId: "u5", kind: "tool", text: "r", tool: "gbrain.recall", args: { mcpServer: "gbrain", args: { componentId: "auth" } } });
   expect(store.state.memory.recent.at(-1)!.slugs).toEqual(["components/auth"]);
+});
+
+test("autopilot proposes, and go / adjust / cancel / expiry each resolve and log one veto row", async () => {
+  const { rmSync, readFileSync } = await import("node:fs");
+  rmSync(VETO, { force: true });
+  patchTeam(1, { autopilot: true });
+  proposeAnswer = { proposals: [
+    { unitId: "u1", targetId: "t101", reason: "sev 3" },
+    { unitId: "u2", targetId: "t101", reason: "duplicate target, skipped" },
+    { unitId: "u2", targetId: "t104", reason: "sev 3 auth" },
+    { unitId: "u3", targetId: "t106", reason: "sev 2" },
+    { unitId: "u4", targetId: "t108", reason: "not an autopilot team, skipped" },
+  ] };
+  await autopilotTick();
+  const proposed = store.state.orders.filter((o) => o.status === "proposed");
+  expect(proposed.map((o) => o.unitId)).toEqual(["u1", "u2", "u3"]);
+  expect(unit("u1").status).toBe("waiting_approval");
+  expect(proposed[0]!.vetoDeadline! - Date.now()).toBeGreaterThan(14000);
+  const [a, b, c] = proposed;
+  expect(goOrder(a!.id).ok).toBe(true);
+  expect(order(a!.id).status).toBe("active");
+  expect(unit("u1").status).toBe("moving");
+  expect(adjustOrder(b!.id, { targetId: "t105" }).ok).toBe(true);
+  expect(order(b!.id).targetId).toBe("t105");
+  expect(order(b!.id).status).toBe("active");
+  expect(cancelOrder(c!.id).ok).toBe(true);
+  expect(unit("u3").status).toBe("idle");
+  expect(goOrder(c!.id).ok).toBe(false);
+  // Expiry: next proposal with a past deadline activates on the tick.
+  proposeAnswer = { proposals: [{ unitId: "u3", targetId: "t107", reason: "sev 2" }] };
+  await autopilotTick();
+  const d = store.state.orders.find((o) => o.status === "proposed")!;
+  d.vetoDeadline = Date.now() - 1;
+  tick();
+  expect(order(d.id).status).toBe("active");
+  await Bun.sleep(100);
+  const rows = readFileSync(VETO, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(rows.map((r) => r.action)).toEqual(["go", "adjust", "cancel", "expired"]);
+  expect(rows[1].adjustedTo).toEqual({ targetId: "t105" });
+  expect(rows[0].proposal).toEqual({ unitId: "u1", targetId: "t101", reason: "sev 3" });
+  expect(rows[0].context.units.length).toBe(3);
+  proposeAnswer = { proposals: [] };
 });

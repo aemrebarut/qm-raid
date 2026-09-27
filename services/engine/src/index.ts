@@ -1,7 +1,7 @@
 // Engine service: game state, orders, teams and the SSE event stream on 127.0.0.1:4610.
 import { BRAIN_URL, BRIDGE_URL, HOST, PORT } from "./config.ts";
 import { listenerCount, recentEvents, snapshotChunk, store, subscribe } from "./store.ts";
-import { assignTeam, cancelOrder, createOrders, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit, startGame } from "./game.ts";
+import { adjustOrder, assignTeam, cancelOrder, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit, startGame } from "./game.ts";
 
 process.on("unhandledRejection", (err) => console.error("[engine] unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("[engine] uncaught exception:", err));
@@ -80,7 +80,8 @@ async function route(req: Request): Promise<Response> {
   if (m === "POST") {
     if (p === "/api/orders") return reply(createOrders(b));
     if ((mm = p.match(/^\/api\/orders\/([^/]+)\/cancel$/))) return reply(cancelOrder(decodeURIComponent(mm[1]!)));
-    if (p.match(/^\/api\/orders\/[^/]+\/(go|adjust)$/)) return json({ ok: false, error: "go and adjust arrive with the autopilot (M3)" }, 501);
+    if ((mm = p.match(/^\/api\/orders\/([^/]+)\/go$/))) return reply(goOrder(decodeURIComponent(mm[1]!)));
+    if ((mm = p.match(/^\/api\/orders\/([^/]+)\/adjust$/))) return reply(adjustOrder(decodeURIComponent(mm[1]!), b));
     if (p === "/api/units") return reply(spawnUnit(b));
     if ((mm = p.match(/^\/api\/units\/([^/]+)\/message$/))) return reply(await messageUnit(decodeURIComponent(mm[1]!), b));
     if (p === "/api/teams") return reply(assignTeam(b));

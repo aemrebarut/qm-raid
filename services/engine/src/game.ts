@@ -1,6 +1,8 @@
 // Game rules: world loading, orders, movement, teams, and mapping bridge events to engine events.
-import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Target, Team, Unit, World } from "../../../contract/types.ts";
-import { BRAIN_URL, BRIDGE_URL, CLASS_MODELS, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, TILES_PER_SEC } from "./config.ts";
+import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, World } from "../../../contract/types.ts";
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { AUTOPILOT_EVERY_MS, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
 import { fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
@@ -19,6 +21,10 @@ function runtime(unitId: string): Runtime {
 }
 
 let customers = new Map<string, Customer>();
+// Autopilot: per-unit work history for /propose, and the proposal context per proposed order for the veto log.
+const history = new Map<string, { targetId: string; component: string }[]>();
+type ProposeContext = { units: unknown[]; targets: unknown[]; memory: string };
+const proposals = new Map<string, { proposal: Proposal; context: ProposeContext }>();
 let nextOrder = 1;
 let nextUnit = 1;
 const TEAM_COLORS = ["#d64545", "#3b7dd8", "#3fa34d", "#d4a017"];
@@ -156,7 +162,13 @@ function completeOrder(o: Order, reply: string): void {
   o.reply = reply;
   emit("order.updated", { order: o });
   releaseUnit(o);
-  refreshTarget(targetById(o.targetId), true);
+  const t = targetById(o.targetId);
+  if (t) {
+    const h = history.get(o.unitId) ?? [];
+    h.push({ targetId: t.id, component: t.component });
+    history.set(o.unitId, h.slice(-10));
+  }
+  refreshTarget(t, true);
   void brainFallback(o, reply, used);
 }
 
@@ -348,6 +360,8 @@ function destFor(u: Unit, t: Target): Pos {
 }
 
 function tick(): void {
+  const now = Date.now();
+  for (const o of S().orders) if (o.status === "proposed" && o.vetoDeadline !== null && o.vetoDeadline <= now) resolveProposal(o, "expired");
   for (const u of S().units) {
     if (u.status !== "moving") continue;
     const r = runtime(u.id);
@@ -369,6 +383,7 @@ function tick(): void {
 
 function cancelIfOpen(o: Order | undefined): void {
   if (!o || (o.status !== "active" && o.status !== "proposed")) return;
+  if (o.status === "proposed") logVeto(o, "cancel");
   o.status = "cancelled";
   emit("order.updated", { order: o });
   releaseUnit(o);
@@ -556,6 +571,8 @@ export function patchTeam(id: number, body: any): Result {
 export async function resetWorld(): Promise<Result> {
   const sessions = new Map(S().units.map((u) => [u.id, u.qm]));
   for (const r of rt.values()) { if (r.animTimer) clearTimeout(r.animTimer); r.dest = null; r.sentOrderId = null; }
+  history.clear();
+  proposals.clear();
   await loadWorld();
   // Keep bridge sessions for units that survive the reset.
   for (const u of S().units) {
@@ -566,11 +583,129 @@ export async function resetWorld(): Promise<Result> {
   return { ok: true };
 }
 
+// ---------- autopilot (E10, E11) ----------
+
+function logVeto(o: Order, action: "cancel" | "adjust" | "go" | "expired", adjustedTo: { unitId?: string; targetId?: string } = {}): void {
+  const p = proposals.get(o.id);
+  if (!p) return;
+  proposals.delete(o.id);
+  const row = JSON.stringify({ ts: Date.now(), proposal: p.proposal, context: p.context, action, adjustedTo }) + "\n";
+  // One write at a time so rows land in resolution order.
+  vetoWrites = vetoWrites
+    .then(() => mkdir(dirname(VETO_LOG), { recursive: true }))
+    .then(() => appendFile(VETO_LOG, row))
+    .catch((err) => logOnce("vetolog", `cannot write ${VETO_LOG}: ${err}`));
+}
+let vetoWrites: Promise<unknown> = Promise.resolve();
+
+// Proposed -> active: the unit starts walking.
+function activate(o: Order): void {
+  const u = unitById(o.unitId);
+  const t = targetById(o.targetId);
+  if (!u || !t) return failOrder(o, "unit or target is gone");
+  o.status = "active";
+  u.orderId = o.id;
+  u.status = "moving";
+  runtime(u.id).dest = destFor(u, t);
+  emit("order.updated", { order: o });
+  emit("unit.updated", { unit: u });
+  emit("unit.status", { unitId: u.id, status: u.status });
+  refreshTarget(t);
+}
+
+function resolveProposal(o: Order, action: "go" | "expired"): void {
+  if (o.status !== "proposed") return;
+  logVeto(o, action);
+  activate(o);
+}
+
+export function goOrder(id: string): Result {
+  const o = orderById(id);
+  if (!o) return fail("unknown order", 404);
+  if (o.status !== "proposed") return fail(`order is ${o.status}, not proposed`);
+  resolveProposal(o, "go");
+  return { ok: true, order: o };
+}
+
+export function adjustOrder(id: string, body: any): Result {
+  const o = orderById(id);
+  if (!o) return fail("unknown order", 404);
+  if (o.status !== "proposed") return fail(`order is ${o.status}, not proposed`);
+  if (!body || typeof body !== "object") return fail("body must be a JSON object");
+  const adjustedTo: { unitId?: string; targetId?: string } = {};
+  if (body.targetId !== undefined) {
+    const t = typeof body.targetId === "string" ? targetById(body.targetId) : undefined;
+    if (!t) return fail("unknown targetId");
+    if (t.status === "resolved") return fail("target already resolved");
+    adjustedTo.targetId = t.id;
+  }
+  if (body.unitId !== undefined) {
+    const u = typeof body.unitId === "string" ? unitById(body.unitId) : undefined;
+    if (!u) return fail("unknown unitId");
+    adjustedTo.unitId = u.id;
+  }
+  logVeto(o, "adjust", adjustedTo);
+  if (adjustedTo.unitId && adjustedTo.unitId !== o.unitId) {
+    releaseUnit(o);
+    const nu = unitById(adjustedTo.unitId)!;
+    cancelIfOpen(nu.orderId ? orderById(nu.orderId) : undefined);
+    o.unitId = nu.id;
+  }
+  if (adjustedTo.targetId) o.targetId = adjustedTo.targetId;
+  activate(o);
+  return { ok: true, order: o };
+}
+
+let proposing = false;
+async function autopilotTick(): Promise<void> {
+  if (proposing) return;
+  const teams = S().teams.filter((t) => t.autopilot);
+  if (!teams.length) return;
+  const units = [...new Set(teams.flatMap((t) => t.members))].map(unitById).filter((u): u is Unit => !!u && u.status === "idle" && !u.orderId);
+  if (!units.length) return;
+  const taken = new Set(S().orders.filter((o) => o.status === "active" || o.status === "proposed").map((o) => o.targetId));
+  const targets = S().targets.filter((t) => t.status !== "resolved" && !taken.has(t.id));
+  if (!targets.length) return;
+  const context: ProposeContext = {
+    units: units.map((u) => ({ id: u.id, class: u.class, team: u.team, status: u.status, pos: u.pos, history: history.get(u.id) ?? [] })),
+    targets: targets.map((t) => ({ id: t.id, component: t.component, severity: t.severity, kind: t.kind, status: t.status, pos: t.pos, customers: t.customers })),
+    memory: S().memory.recent.slice(-5).map((m) => m.summary).join("\n"),
+  };
+  proposing = true;
+  try {
+    const res = await sendJson<{ proposals?: Proposal[] }>("POST", `${PROPOSER_URL}/propose`, context, 8000);
+    if (res.status !== 200 || !Array.isArray(res.data?.proposals)) {
+      logOnce("proposer", `proposer unavailable at ${PROPOSER_URL} (status ${res.status})`);
+      return;
+    }
+    const used = new Set<string>();
+    for (const p of res.data!.proposals!) {
+      const u = p && typeof p.unitId === "string" ? unitById(p.unitId) : undefined;
+      const t = p && typeof p.targetId === "string" ? targetById(p.targetId) : undefined;
+      // Re-check: the world may have changed while the proposer was thinking.
+      if (!u || !t || u.status !== "idle" || u.orderId || !units.includes(u) || used.has(t.id) || taken.has(t.id) || t.status === "resolved") continue;
+      if (!S().teams.some((tm) => tm.autopilot && tm.members.includes(u.id))) continue;
+      used.add(t.id);
+      const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "proposed", source: "autopilot", vetoDeadline: Date.now() + VETO_WINDOW_MS, reply: null };
+      S().orders.push(o);
+      proposals.set(o.id, { proposal: { unitId: u.id, targetId: t.id, reason: String(p.reason ?? "") }, context });
+      u.orderId = o.id;
+      u.status = "waiting_approval";
+      emit("order.proposed", { order: o });
+      emit("unit.updated", { unit: u });
+      emit("unit.status", { unitId: u.id, status: u.status });
+    }
+  } finally {
+    proposing = false;
+  }
+}
+
 // ---------- startup ----------
 
 export async function startGame(): Promise<void> {
   await loadWorld();
   setInterval(tick, Math.round(1000 / TILES_PER_SEC));
+  setInterval(() => void autopilotTick(), AUTOPILOT_EVERY_MS);
   const bridges = new Set<string>([BRIDGE_URL]);
   for (const base of bridges) {
     followBridgeEvents(base, onBridgeEvent, () => {
@@ -579,4 +714,4 @@ export async function startGame(): Promise<void> {
   }
 }
 
-export { fixtureUnits };
+export { fixtureUnits, autopilotTick, tick };

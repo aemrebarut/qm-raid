@@ -13,6 +13,11 @@ export const CLASS_MODELS: Record<string, { name: string; model: string; effort:
   scout: { name: "Scout", model: "gpt-6-luna", effort: "low" },
 };
 
+// Autopilot veto log, read by raid-river (repo data/vetoes.jsonl, gitignored).
+export const VETO_LOG = process.env.VETO_LOG ?? new URL("../../../data/vetoes.jsonl", import.meta.url).pathname;
+export const AUTOPILOT_EVERY_MS = 3000;
+export const VETO_WINDOW_MS = 15000;
+
 export const TILES_PER_SEC = 3;
 export const GRID = 24;
 export const MEMORY_RECENT_MAX = 20;

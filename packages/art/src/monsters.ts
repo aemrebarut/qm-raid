@@ -434,49 +434,136 @@ function campGround(b: Build, r: number, color: string) {
 
 // ---------- bug camps ----------
 
+// Bugs (Emre 16:27): issues read as actual bugs. Spiders and beetles; severity grows the size and the count.
+const BG = {
+  leg: geo(new THREE.CylinderGeometry(0.012, 0.009, 0.17, 4).translate(0, 0.085, 0)),
+  shell: geo(new THREE.SphereGeometry(0.2, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2)),
+  fang: geo(new THREE.ConeGeometry(0.018, 0.07, 4)),
+  web: geo(new THREE.RingGeometry(0.3, 0.315, 8)),
+};
+
+/** One leg: an upper segment rising out of the body and a lower one reaching the ground. */
+function bugLeg(g: THREE.Object3D, m: THREE.Material, ang: number, y: number, reach: number) {
+  const up = part(BG.leg, m, Math.cos(ang) * 0.1, y, Math.sin(ang) * 0.1, false);
+  up.rotation.set(0, -ang, 0);
+  up.rotateZ(-1.0);
+  up.scale.y = reach;
+  const tipX = Math.cos(ang) * (0.1 + 0.145 * reach), tipZ = Math.sin(ang) * (0.1 + 0.145 * reach), tipY = y + 0.093 * reach;
+  const down = part(BG.leg, m, tipX, 0, tipZ, false);
+  down.scale.y = tipY / 0.17;
+  down.rotation.set(0, -ang, 0);
+  down.rotateZ(-0.35);
+  down.position.set(tipX + Math.cos(ang) * 0.02, 0, tipZ + Math.sin(ang) * 0.02);
+  g.add(up, down);
+}
+
+function spider(b: Build, x: number, z: number, size: number, color: string, phase: number) {
+  const skin = skinMat(color), dark = mat("#4a3628"), eyes = mat("#ff3b2f");
+  const g = new THREE.Bone();
+  g.position.set(x, 0, z);
+  const abdomen = part(G.blob, skin, 0, 0.17, -0.13);
+  abdomen.scale.set(1.05, 0.85, 1.2);
+  const head = part(G.blob, skin, 0, 0.13, 0.1);
+  head.scale.setScalar(0.62);
+  g.add(abdomen, head);
+  // a pale hourglass mark on the back
+  const mark = part(G.blob, mat("#f2d25a"), 0, 0.33, -0.14, false);
+  mark.scale.set(0.22, 0.08, 0.3);
+  g.add(mark);
+  for (const [ex, ey] of [[-0.045, 0.19], [0.045, 0.19], [-0.07, 0.16], [0.07, 0.16]] as const) g.add(part(G.pupil, eyes, ex, ey, 0.2, false));
+  for (const fx of [-0.03, 0.03]) { const f = part(BG.fang, dark, fx, 0.07, 0.2, false); f.rotation.x = Math.PI; g.add(f); }
+  for (let i = 0; i < 4; i++) for (const side of [-1, 1]) {
+    const a = side < 0 ? Math.PI - (-0.9 + i * 0.6) : -0.9 + i * 0.6;
+    bugLeg(g, dark, a, 0.14, 1.25);
+  }
+  g.scale.setScalar(size);
+  b.root.add(g);
+  b.actors.push({ obj: g, base: g.position.clone(), kind: "slime", phase, fall: phase * 6, head: abdomen });
+  return g;
+}
+
+function beetle(b: Build, x: number, z: number, size: number, color: string, phase: number, horns: boolean) {
+  const skin = skinMat(color), dark = mat("#4a3628");
+  const g = new THREE.Bone();
+  g.position.set(x, 0, z);
+  const shell = part(BG.shell, skin, 0, 0.08, -0.03);
+  shell.scale.set(0.95, 0.9, 1.25);
+  const belly = part(G.blob, dark, 0, 0.08, -0.03);
+  belly.scale.set(0.9, 0.35, 1.15);
+  const head = part(G.blob, dark, 0, 0.1, 0.22);
+  head.scale.setScalar(0.45);
+  g.add(belly, shell, head);
+  // wing seam and spots
+  const seam = part(G.blob, dark, 0, 0.26, -0.03, false);
+  seam.scale.set(0.04, 0.05, 1.05);
+  g.add(seam);
+  for (const [sx, sz] of [[-0.09, 0.02], [0.09, 0.02], [-0.07, -0.13], [0.07, -0.13]] as const) {
+    const sp = part(G.blob, dark, sx, 0.24, sz, false);
+    sp.scale.set(0.2, 0.08, 0.2);
+    g.add(sp);
+  }
+  const white = mat("#ffffff");
+  for (const ex of [-0.05, 0.05]) g.add(part(G.eye, white, ex, 0.14, 0.29, false), part(G.pupil, dark, ex, 0.14, 0.315, false));
+  for (const ax of [-1, 1]) { const ant = part(BG.leg, dark, ax * 0.04, 0.14, 0.28, false); ant.rotation.set(0.9, 0, -ax * 0.5); g.add(ant); }
+  if (horns) for (const hx of [-1, 1]) { const m = part(G.helmHorn, dark, hx * 0.06, 0.1, 0.33, false); m.scale.set(1.4, 2.6, 1.4); m.rotation.set(Math.PI / 2, 0, hx * 0.6); g.add(m); }
+  for (let i = 0; i < 3; i++) for (const side of [-1, 1]) {
+    const a = side < 0 ? Math.PI - (-0.7 + i * 0.7) : -0.7 + i * 0.7;
+    bugLeg(g, dark, a, 0.09, 0.8);
+  }
+  g.scale.setScalar(size);
+  b.root.add(g);
+  b.actors.push({ obj: g, base: g.position.clone(), kind: "slime", phase, fall: phase * 6, head: shell });
+  return g;
+}
+
+function web(b: Build, r: number) {
+  const m = mat("#eeeae0");
+  for (let i = 1; i <= 3; i++) {
+    const w = part(BG.web, m, 0, 0.012, 0, false);
+    w.rotation.x = -Math.PI / 2;
+    w.scale.setScalar((r / 0.3) * (i / 3));
+    b.root.add(w);
+  }
+}
+
 function buildBug(b: Build, sev: number, rnd: () => number) {
-  // One big readable monster standing up, a saturated tent or two, a campfire as the warm focal point.
-  const war = BUG_WAR[sev];
+  const pick = rnd() < 0.5;
   if (sev <= 1) {
+    // a few small ladybugs
     b.radius = 0.45;
-    b.height = 0.5;
+    b.height = 0.45;
     campGround(b, 0.42, "#8a9a52");
-    slime(b, 1.45, 0, 0.02, BUG_SKIN[1], 0);
-    slime(b, 0.55, -0.26, 0.16, "#a6e05a", 1.7);
-    slime(b, 0.45, 0.24, -0.18, "#a6e05a", 3.1);
+    beetle(b, 0, 0.02, 1.25, "#d8362a", 0, false);
+    beetle(b, -0.25, -0.18, 0.7, "#e0892e", 1.7, false);
+    beetle(b, 0.24, -0.2, 0.6, "#d8362a", 3.1, false);
     return;
   }
   if (sev === 2) {
     b.radius = 0.55;
-    b.height = 0.7;
+    b.height = 0.65;
     campGround(b, 0.52, "#a08560");
-    tent(b, -0.24, -0.24, 0.5, "#e0892e", 1.05);
-    fire(b, 0.22, -0.12, 1.1);
-    goblin(b, 0.0, 0.14, 0.2, "#86c043", { weapon: "club", war, phase: 0, size: 1.9 });
+    if (pick) { web(b, 0.5); spider(b, 0, 0.04, 1.7, "#6b3fa0", 0); }
+    else { beetle(b, 0, 0.04, 1.8, "#2f8a5a", 0, true); beetle(b, -0.3, -0.22, 0.6, "#2f8a5a", 2, false); }
     return;
   }
   if (sev === 3) {
     b.radius = 0.65;
-    b.height = 0.85;
+    b.height = 0.8;
     campGround(b, 0.62, "#9a7e5a");
-    tent(b, -0.3, -0.26, 0.5, "#d0402e", 1.2);
-    tent(b, 0.3, -0.34, -0.3, "#b8352a", 0.95);
-    fire(b, 0.3, 0.08, 1.2);
-    totem(b, -0.44, 0.12, war);
-    goblin(b, -0.04, 0.12, 0.15, "#7cb03c", { chief: true, weapon: "club", war, phase: 0.4, size: 2.2 });
+    web(b, 0.6);
+    if (pick) { spider(b, 0, 0.06, 2.1, "#b8322a", 0.4); spider(b, -0.36, -0.28, 0.8, "#b8322a", 2.2); spider(b, 0.36, -0.3, 0.7, "#b8322a", 3.9); }
+    else { beetle(b, 0, 0.06, 2.3, "#3a3f8f", 0.4, true); spider(b, 0.38, -0.3, 0.8, "#b8322a", 2.2); }
     return;
   }
-  // 4: ogre warcamp
+  // 4: spider queen's nest
   b.radius = 0.75;
-  b.height = 1.05;
-  campGround(b, 0.72, "#8e7458");
-  stakes(b, 0.7, 4, Math.PI * 1.15, Math.PI * 1.85);
-  tent(b, -0.38, -0.3, 0.5, "#8e1c1c", 1.35);
-  tent(b, 0.38, -0.38, -0.4, "#a8281f", 1.05);
-  fire(b, 0.4, 0.12, 1.45);
-  banner(b, -0.58, 0.1, war, 1.3);
-  ogre(b, -0.04, 0.1, 0.1, war);
-  void rnd;
+  b.height = 1.0;
+  campGround(b, 0.72, "#6e5a48");
+  web(b, 0.72);
+  spider(b, 0, 0.08, 2.7, "#2a1d2e", 0.1);
+  spider(b, -0.46, -0.3, 0.8, "#8e1c1c", 1.9);
+  spider(b, 0.46, -0.34, 0.75, "#8e1c1c", 3.3);
+  spider(b, 0.1, -0.52, 0.6, "#8e1c1c", 4.6);
 }
 
 // ---------- feature sites ----------

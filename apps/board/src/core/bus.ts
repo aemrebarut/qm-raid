@@ -22,6 +22,7 @@ export type BusEvents = {
   focusTile: { x: number; y: number }; // ask the camera to centre on a tile (minimap clicks)
   command: Command;
   openPage: string; // open the Library overlay on this brain page slug (panels/ handles it)
+  view: { corners: { x: number; y: number }[] }; // camera ground footprint in tile coords, clockwise from top-left (scene emits, minimap draws)
   toast: { text: string; level: "info" | "error" }; // HUD shows these
 };
 

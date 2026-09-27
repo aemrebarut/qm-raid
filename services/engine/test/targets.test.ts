@@ -173,12 +173,45 @@ test("brain down: 503, nothing created, no event, logged once", async () => {
   expect((await spawnTarget({ title: "Back" })).ok).toBe(true);
 });
 
-test("brain non-2xx (pool exhausted): 503 with the brain's error, nothing created", async () => {
+test("brain 409 with the component given: 409 with the brain's error, nothing created, one call", async () => {
+  mode = "409";
+  const n = store.state.targets.length;
+  const r = await spawnTarget({ component: "billing" });
+  expect(r).toMatchObject({ ok: false, status: 409 });
+  expect((r as any).error).toContain("issue pool exhausted");
+  expect(calls.length).toBe(1);
+  expect(store.state.targets.length).toBe(n);
+});
+
+test("brain 409 on a random spawn: retries the next least busy component with a tile in its zone", async () => {
+  // the fake brain refuses the first two components it is asked for, then allocates
+  let refused = 0;
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    if (refused < 2) {
+      refused++;
+      calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify({ ok: false, error: "no unused pool issue left for x" }), { status: 409 });
+    }
+    return orig(url, init);
+  }) as unknown as typeof fetch;
+  const r = await spawnTarget({});
+  expect(r.ok).toBe(true);
+  const asked = calls.map((c) => c.body.component);
+  expect(new Set(asked).size).toBe(3); // three different components, never the same one twice
+  const t = (r as any).target as Target;
+  expect(t.component).toBe(asked[2]);
+  const z = store.state.components.find((c) => c.id === t.component)!.zone;
+  expect(t.pos.x > z.x && t.pos.x < z.x + z.w - 1 && t.pos.y > z.y && t.pos.y < z.y + z.h - 1).toBe(true);
+});
+
+test("brain 409 on every component: 409 naming them, nothing created", async () => {
   mode = "409";
   const n = store.state.targets.length;
   const r = await spawnTarget({});
-  expect(r).toMatchObject({ ok: false, status: 503 });
-  expect((r as any).error).toContain("issue pool exhausted");
+  expect(r).toMatchObject({ ok: false, status: 409 });
+  expect(calls.length).toBe(store.state.components.length);
+  expect((r as any).error).toContain("no unused pool issue left for any component");
   expect(store.state.targets.length).toBe(n);
 });
 

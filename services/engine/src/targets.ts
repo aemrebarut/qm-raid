@@ -3,7 +3,9 @@
 // POST /issues with that pos. The brain is the only allocator of issue and target ids (LUM-110 is t110), so the
 // engine never sends an issue id and 4610 and 4618 never collide. No title = the brain draws the next pool issue.
 // The brain's {target} is used unchanged: it joins store.state.targets and target.spawned {target} is emitted.
-// Brain down or non-2xx = 503 and nothing is created (no local targets).
+// Brain down or non-2xx = 503 and nothing is created (no local targets). Brain 409 (that component's pool issues are
+// used up): a random spawn with no component given retries with the next least busy component and a tile in its zone;
+// otherwise the 409 and the brain's error are passed on.
 import type { Pos, State, Target } from "../../../contract/types.ts";
 import { BRAIN_URL, GRID } from "./config.ts";
 import { logOnce, sendJson } from "./http.ts";
@@ -31,10 +33,10 @@ const isFree = (s: State, q: Pos) =>
   !blocked(s, q) && !reserved.has(key(q)) && !s.targets.some((t) => t.pos.x === q.x && t.pos.y === q.y) && !s.units.some((u) => u.pos.x === q.x && u.pos.y === q.y);
 
 // Least busy component: fewest open or engaged targets (pending spawns count too); ties keep world order.
-export function leastBusy(s: State): string | null {
+export function leastBusy(s: State, exclude: Set<string> = new Set()): string | null {
   const busy = (c: string) => s.targets.filter((t) => t.component === c && t.status !== "resolved").length + [...reserved.values()].filter((r) => r === c).length;
   let best: string | null = null, n = Infinity;
-  for (const c of s.components) { const b = busy(c.id); if (b < n) { best = c.id; n = b; } }
+  for (const c of s.components) { if (exclude.has(c.id)) continue; const b = busy(c.id); if (b < n) { best = c.id; n = b; } }
   return best;
 }
 
@@ -56,7 +58,8 @@ export function freeTileIn(s: State, component: string): Pos | null {
 }
 
 // POST /api/targets {title?, body?, component?, kind?, severity?, customers?}.
-// Errors: 400 bad input, 409 no free tile or an engine reset during the brain call, 503 brain down or non-2xx.
+// Errors: 400 bad input, 409 no free tile, an engine reset during the brain call or the brain's 409 (pool used up),
+// 503 brain down or other non-2xx.
 export async function spawnTarget(input: unknown): Promise<SpawnResult> {
   if (input !== undefined && input !== null && (typeof input !== "object" || Array.isArray(input))) return bad("body must be a JSON object");
   const b = (input ?? {}) as Record<string, unknown>;
@@ -70,27 +73,40 @@ export async function spawnTarget(input: unknown): Promise<SpawnResult> {
   if (b.customers !== undefined && (!Array.isArray(b.customers) || b.customers.some((c) => typeof c !== "string"))) return bad("customers must be an array of customer ids");
   const title = typeof b.title === "string" ? b.title.trim().slice(0, 140) : "";
 
-  const component = (b.component as string | undefined) ?? leastBusy(s);
-  if (!component) return bad("no components in the world", 409);
-  const pos = freeTileIn(s, component);
-  if (!pos) return bad(`no free tile in the ${component} zone`, 409);
+  const given = b.component as string | undefined;
+  const tried = new Set<string>();
+  let res: { status: number; data: any } = { status: 0, data: null };
+  for (;;) {
+    if (store.state !== s) return bad("engine reset during the spawn; no target added", 409);
+    const component = given ?? leastBusy(s, tried);
+    if (!component) return tried.size ? bad(`brain has no unused pool issue left for any component (${[...tried].join(", ")}): ${res.data?.error ?? ""}`.trim(), 409) : bad("no components in the world", 409);
+    const pos = freeTileIn(s, component);
+    if (!pos) {
+      if (given) return bad(`no free tile in the ${component} zone`, 409);
+      tried.add(component); // a random spawn moves on to the next zone
+      continue;
+    }
 
-  // The component is always sent so the zone and the issue agree (the brain keeps it for pool issues too).
-  const req: Record<string, unknown> = { pos, component };
-  if (title) {
-    req.title = title;
-    if (typeof b.body === "string" && b.body.trim()) req.body = b.body.trim().slice(0, 2000);
-    req.kind = b.kind ?? "bug";
-    req.severity = severity ?? 2;
-    if (b.customers) req.customers = b.customers;
-  }
+    // The component is always sent so the zone and the issue agree (the brain keeps it for pool issues too).
+    const req: Record<string, unknown> = { pos, component };
+    if (title) {
+      req.title = title;
+      if (typeof b.body === "string" && b.body.trim()) req.body = b.body.trim().slice(0, 2000);
+      req.kind = b.kind ?? "bug";
+      req.severity = severity ?? 2;
+      if (b.customers) req.customers = b.customers;
+    }
 
-  reserved.set(key(pos), component);
-  let res: { status: number; data: any };
-  try {
-    res = await sendJson<any>("POST", `${BRAIN_URL}/issues`, req, 5000);
-  } finally {
-    reserved.delete(key(pos));
+    reserved.set(key(pos), component);
+    try {
+      res = await sendJson<any>("POST", `${BRAIN_URL}/issues`, req, 5000);
+    } finally {
+      reserved.delete(key(pos));
+    }
+    // brain 409: this component's pool issues are used up; a random spawn tries the next component
+    if (res.status === 409 && !given && !title) { tried.add(component); continue; }
+    if (res.status === 409) return bad(`${res.data?.error ?? "brain refused the issue (409)"}; no target created`, 409);
+    break;
   }
 
   if (res.status === 0) {

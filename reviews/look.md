@@ -104,3 +104,21 @@ Resource discipline after the Analyst's 15:57 notice: at most one short-lived br
 - a3-loadout.png exposed Formation presets above the Loadout contents. Sent to HUD/UI owners and director. 6498d77 adds a scoped CSS visibility rule for the selected Loadout tab; next combined screenshot check will verify under team updates.
 - a3-workflow.png and a3-rolepick.png now show the named states. Their local team fixture still mixes Red membership with green member portraits and another team's role badges; director notified to align member unit.team with the local fixture before using these for role signoff.
 - Message command P2 is confirmed by its owner; TS fix intentionally queued until W2 rehearsal ends around 16:08. No request to interrupt that rehearsal.
+
+## R9 i4 and early code freeze, 2026-09-27 16:10 PDT
+
+The Analyst advanced code freeze to now. No new work, service restarts or browser checks after that instruction. All reviewer browsers are closed. This records the completed checks and remaining risk for handoff.
+
+**Open P1, raid-ui-hud with raid-look-hud: compact stack hides actionable overflow.** i4-proposals-1280.png shows Proposals 4 but only three rows; source uses display:none for later proposals and later than two runs with no reveal control. Independent isolated HUD-only browser confirms five proposals: LUM-101/102/103 display grid, LUM-104/105 display none. Hidden proposals still have veto deadlines; their Cancel/Adjust/Go controls cannot be reached. The same cap removes access to later run actions. Preserve the requested compact default with reachable overflow (bounded scrolling or expansion). Sent to UI HUD, Look HUD and director before freeze. Evidence: `/tmp/raid-look-rev/r9-hud-isolated-1280.png`. No commands or messages sent to an engine.
+
+Completed dispositions:
+- 7761a89 Message fix passes: click Message while Loadout selected, Activity becomes selected, composer visible and focused. Zero page errors.
+- 6498d77 holds through a store update: Formation computed display remains none while Loadout selected. i4-loadout.png confirms clean separation.
+- 54b37bb proposal identity fix passes in i4: full LUM-101, LUM-102 and LUM-103 visible beside their Go buttons. Earlier target ambiguity is closed; overflow above is separate.
+- i4 team names remain visible at 1280. Workflow fixture roles and team colours now agree. The repeated Activity header is gone.
+- i4 full Forge screenshot now includes endpoint metrics, training statistics and Held-out sample buttons. Previous fixture-only limitation applies to the earlier R6 run, not this newer screenshot.
+- i4 visual nits sent to HUD: proposal chevron points down because the rotation selector targets a child rather than the SVG; sticky Loadout footer shows text through its backing. Owner committed d3e8655 with both CSS fixes; not independently recaptured before freeze.
+
+Evidence limits: i4 full-width overview, unit, units, target, Library, Forge, Barracks, proposals, workflow, rolepick, Loadout and spawn reviewed, plus narrow overview, unit, units, target, proposals and Loadout. The remaining i4 images are not claimed reviewed. i4-proposals-1280 used the fallback FIXTURE backend; director notified to assert mock after setup/settle. The overflow finding is independently reproduced with a controlled local fixture and does not depend on that capture state.
+
+Last complete board smoke before the freeze: TypeScript clean, 20 tests / 119 assertions pass. Later small fixes received focused source or browser checks as recorded; no parallel full suites or watch processes. Reviewer owns only this log; production fixes remain with their named owners.

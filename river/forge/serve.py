@@ -41,7 +41,10 @@ def world() -> dict:
 
 def messages(req: dict) -> list[dict]:
     spec = datagen.TypeSpec(req["typeId"], req["name"], req["description"])
-    msgs = [{"role": "system", "content": datagen.system_prompt(spec)},
+    system = datagen.system_prompt(spec)
+    if (req.get("instructions") or "").strip():  # loadout: the commander's standing orders extend the trained prompt
+        system += "\n\nStanding orders from your commander:\n" + req["instructions"].strip()[:4000]
+    msgs = [{"role": "system", "content": system},
             {"role": "user", "content": datagen.user_message(req["order"], req.get("context") or "")}]
     if req.get("followup"):  # a second turn on the same order, e.g. the reviewer verdict line
         msgs += [{"role": "assistant", "content": req.get("previous", "")}, {"role": "user", "content": req["followup"]}]

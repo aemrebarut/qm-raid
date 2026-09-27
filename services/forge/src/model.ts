@@ -6,6 +6,7 @@ export interface AskRequest {
   order: string; context: string; targetId?: string;
   followup?: string; previous?: string; // second turn on the same order (reviewer verdict)
   warm?: boolean; // only open the River session (sent once at forge start)
+  instructions?: string; // loadout standing orders, appended to the trained system prompt
 }
 
 type Pending = { resolve: (t: string) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };

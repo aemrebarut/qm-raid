@@ -23,6 +23,8 @@ const herald = "Order o3: work on issue LUM-7\n\nRole: herald. Write the custome
 if (roleOf(herald)?.role !== "herald" || /VERDICT/.test(roleOf(herald)!.instructions)) fail(`herald role: ${JSON.stringify(roleOf(herald))}`);
 if (!/VERDICT/.test(roleOf("Order\n\nRole: reviewer. Review it. End with VERDICT: APPROVED or VERDICT: CHANGES: <what>.")?.instructions ?? "")) fail("reviewer role");
 if (roleOf("Order o1: plain order") !== null) fail("plain order has no role");
+const custom = roleOf("Order\n\nRole: checker. Review against rules.\nEnd with VERDICT: APPROVED or VERDICT: CHANGES: <what>.\nPrevious work:\n- implementer (u1): done");
+if (!custom || !/VERDICT/.test(custom.instructions) || /implementer/.test(custom.instructions)) fail(`multi-line role: ${JSON.stringify(custom)}`);
 if (sections("Plan: p\nCustomer update: Hello team\nRemember: r")["customer reply"] !== "Hello team") fail("customer update heading");
 
 const waiters: Array<(t: string) => void> = [];
@@ -64,5 +66,39 @@ await units2.handle(new Request("http://x/units/u7/send", { method: "POST", body
 await Bun.sleep(100);
 const bound = (await (await units2.handle(new Request("http://x/units"), new URL("http://x/units")))!.json())[0];
 if (bound.typeId !== "forge-real" || asked[0] !== "river://ckpt") fail(`rebind: ${JSON.stringify(bound)} asked ${asked}`);
+
+// Its River type deleted and only a smoke type ready: no silent dry substitute, the order errors visibly.
+const store4 = join(mkdtempSync(join(tmpdir(), "forge-units-")), "units.json");
+await Bun.write(store4, JSON.stringify([{ id: "u8", name: "Ada", typeId: "forge-gone", team: null }]));
+const asked4: string[] = [], ev4: any[] = [];
+const units4 = createUnits({
+  types: () => [{ id: "forge-smoke", name: "Smoke", description: "d", status: "ready", model: "dry-run:forge-smoke", baseModel: null }],
+  ask: async (r) => { asked4.push(r.model); return "Decision: d"; }, store: store4, brainUrl: "http://127.0.0.1:9",
+});
+const res4 = (await units4.handle(new Request("http://x/events"), new URL("http://x/events")))!;
+(async () => { const dec = new TextDecoder(); for await (const c of res4.body as any) for (const b of dec.decode(c).split("\n\n")) if (b.startsWith("data: ")) ev4.push(JSON.parse(b.slice(6))); })();
+await units4.handle(new Request("http://x/units/u8/send", { method: "POST", body: JSON.stringify({ text: "o", orderId: "Z" }) }), new URL("http://x/units/u8/send"));
+await Bun.sleep(100);
+const u8 = (await (await units4.handle(new Request("http://x/units"), new URL("http://x/units")))!.json())[0];
+if (asked4.length || u8.typeId !== "forge-gone" || !ev4.some((e) => e.type === "error" && e.orderId === "Z")) fail(`dry substitute: asked ${asked4} bound ${u8.typeId}`);
+
+// Loadout: standing orders reach the model; with GBrain off an order makes no brain calls.
+const cat = await (await units2.handle(new Request("http://x/catalog"), new URL("http://x/catalog")))!.json();
+if (cat.items?.[0]?.id !== "gbrain") fail(`catalog: ${JSON.stringify(cat)}`);
+const reqs: any[] = [];
+const units3 = createUnits({
+  types: () => [{ id: "forge-real", name: "Real", description: "d", status: "ready", model: "river://ckpt", baseModel: "b" }],
+  ask: async (r) => { reqs.push(r); return "Decision: d\nRemember: r"; },
+  store: join(mkdtempSync(join(tmpdir(), "forge-units-")), "units.json"), brainUrl: "http://127.0.0.1:9",
+});
+const u3 = (path: string, method: string, body: unknown) => units3.handle(new Request(`http://x${path}`, { method, body: JSON.stringify(body) }), new URL(`http://x${path}`));
+await u3("/units", "POST", { id: "u9", name: "Nine" });
+const patched = await (await u3("/units/u9", "PATCH", { loadout: { instructions: "Always cite the rule slug.", skills: [], plugins: [] } }))!.json();
+if (!patched.ok || patched.loadout.plugins.length !== 0) fail(`patch: ${JSON.stringify(patched)}`);
+const before = calls.length;
+await u3("/units/u9/send", "POST", { text: "order", orderId: "L1", targetId: "t1", componentId: "billing" });
+await Bun.sleep(100);
+if (reqs[0]?.instructions !== "Always cite the rule slug.") fail(`instructions not passed: ${JSON.stringify(reqs[0])}`);
+if (calls.length !== before) fail(`brain called with GBrain off: ${calls.slice(before)}`);
 console.log("PASS");
 process.exit(0);

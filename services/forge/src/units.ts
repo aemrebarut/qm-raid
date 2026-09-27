@@ -6,7 +6,11 @@ import type { AskRequest } from "./model";
 
 export interface UnitTypeView { id: string; name: string; description: string; status: string; model: string | null; baseModel: string | null }
 // Orders and direct messages have separate generations: a chat never abandons the active order; a new order supersedes the old one.
-interface ForgeUnit { id: string; name: string; typeId: string | null; team: number | null; orderId: string | null; gen: number; chatGen: number }
+export interface Loadout { instructions: string; skills: string[]; plugins: string[] }
+interface ForgeUnit { id: string; name: string; typeId: string | null; team: number | null; orderId: string | null; gen: number; chatGen: number; loadout?: Loadout }
+// Forge units have one plugin (the team brain) and no QM skills.
+export const CATALOG = [{ id: "gbrain", name: "GBrain", kind: "plugin",
+  description: "The team brain (Library): recall house rules and past learnings before an order, remember the learning after." }];
 interface SendBody { text?: string; orderId?: string; targetId?: string; componentId?: string }
 
 // Splits a unit answer into its house-style sections; tolerates "**Plan:**", "## Plan:" and content on the next lines.
@@ -40,7 +44,8 @@ export const lastVerdict = (text: string) => text.split("\n").map(verdictOf).fil
 // previous work does not make an implementer or a herald a reviewer.
 export function roleOf(text: string): { role: string; instructions: string } | null {
   const own = text.split(/\nPrevious work:/)[0];
-  const m = own.match(/^Role:\s*([^.\n]+)\.\s*(.*)$/m);
+  const at = own.search(/^Role:/m);
+  const m = at < 0 ? null : own.slice(at).match(/^Role:\s*([^.\n]+)\.\s*([\s\S]*)$/); // instructions may span several lines
   return m ? { role: m[1].trim().toLowerCase(), instructions: m[2].trim() } : null;
 }
 
@@ -49,7 +54,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
   const units = new Map<string, ForgeUnit>();
   // Persisted so a forge restart keeps each unit bound to its type (the engine spawns a unit only once).
   const persist = () => {
-    try { writeFileSync(opts.store, JSON.stringify([...units.values()].map(({ id, name, typeId, team }) => ({ id, name, typeId, team })))); }
+    try { writeFileSync(opts.store, JSON.stringify([...units.values()].map(({ id, name, typeId, team, loadout }) => ({ id, name, typeId, team, loadout })))); }
     catch (e) { console.error("[forge] units save failed", e); }
   };
   if (existsSync(opts.store)) {
@@ -70,6 +75,10 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     // Fallback: the newest River-trained type; a dry-run (smoke) type only if nothing real is ready.
     const real = ready.filter((t) => t.model && !t.model.startsWith("dry-run:"));
     return ready.find((t) => t.id === typeId) ?? ready.find((t) => t.model === model) ?? real[real.length - 1] ?? ready[ready.length - 1] ?? null;
+  }
+
+  function pickReal(): UnitTypeView | null {
+    return opts.types().filter((t) => t.status === "ready" && t.model && !t.model.startsWith("dry-run:")).pop() ?? null;
   }
 
   function ensure(id: string, b: { name?: string; model?: string; team?: number | null; class?: string; typeId?: string } = {}): ForgeUnit {
@@ -98,17 +107,19 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       if (live()) emit(tool ? { type: "activity", unitId: u.id, ...oid, kind, text, tool, args } : { type: "activity", unitId: u.id, ...oid, kind, text });
     };
     let t = opts.types().find((x) => x.id === u.typeId && x.status === "ready") ?? null;
-    if (!t && (t = pickType())) { // its type was deleted from the Forge: rebind to the best ready type and keep it
+    if (!t && (t = pickReal())) { // its type was deleted from the Forge: rebind to the newest River type, never a dry one
       console.log(`[forge] unit ${u.id}: type ${u.typeId ?? "none"} is gone, rebinding to ${t.id}`);
       u.typeId = t.id;
       persist();
     }
     const text = String(b.text ?? "");
     try {
-      if (!t || !t.model) throw new Error("no trained forge type is ready for this unit");
+      if (!t || !t.model) throw new Error("its forge type is gone and no River-trained type is ready");
+      const brainOn = !u.loadout || u.loadout.plugins.includes("gbrain");
       act("thinking", `Reading the order: ${text.slice(0, 120)}`);
       let context = "";
-      if (isOrder && (b.componentId || b.targetId)) {
+      if (isOrder && !brainOn) act("message", "GBrain is off in this unit's loadout: no recall, no remember.");
+      if (isOrder && brainOn && (b.componentId || b.targetId)) {
         try {
           const rec = await brain("/recall", { componentId: b.componentId, targetId: b.targetId, unitId: u.id });
           context = typeof rec.context === "string" ? rec.context : JSON.stringify(rec.context ?? "");
@@ -122,7 +133,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       if (!live()) return;
       act("thinking", `Thinking with the ${t.name} model (${t.model.startsWith("dry-run:") ? "dry run" : "River"})`);
       const ask = { typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
-        order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId };
+        order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId, instructions: u.loadout?.instructions };
       let answer: string;
       try {
         answer = await opts.ask(ask);
@@ -155,7 +166,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         || answer.replace(/\s+/g, " ").slice(0, 280);
       act("message", plan.slice(0, 400));
       const learning = (sec.remember || sec.decision || "").slice(0, 400);
-      if (isOrder && b.targetId && learning) {
+      if (isOrder && brainOn && b.targetId && learning) {
         try {
           const rem = await brain("/remember", { unitId: u.id, targetId: b.targetId, text: `${u.name} (${t.name}): ${learning}` });
           act("tool", `Remembered: ${learning.slice(0, 120)}`, "gbrain.remember", { slug: rem.slug, text: learning });
@@ -187,6 +198,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       });
       return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" } });
     }
+    if (m === "GET" && url.pathname === "/catalog") return json({ items: CATALOG });
     if (parts[0] !== "units") return null;
     const id = parts[1];
     const body = async () => (await req.json().catch(() => null)) as any;
@@ -205,7 +217,24 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         if (!u) return json({ ok: false, error: "unknown unit" }, 404);
         const b = await body();
         if (b && b.team !== undefined) { u.team = b.team; persist(); }
-        return json({ ok: true });
+        const notes: string[] = [];
+        if (b?.loadout && typeof b.loadout === "object") {
+          // Loadout (docs/CONTRACT.md): instructions extend the agent loop's system prompt; the only plugin is gbrain.
+          const l = b.loadout, list = (x: unknown) => (Array.isArray(x) ? x.filter((v) => typeof v === "string") : []);
+          u.loadout = { instructions: typeof l.instructions === "string" ? l.instructions.slice(0, 4000) : u.loadout?.instructions ?? "",
+            skills: list(l.skills), plugins: l.plugins === undefined ? u.loadout?.plugins ?? ["gbrain"] : list(l.plugins) };
+          if (u.loadout.skills.length) notes.push("forge units have no QM skills; skills are stored but not used");
+          const unknown = u.loadout.plugins.filter((p) => p !== "gbrain");
+          if (unknown.length) notes.push(`only the gbrain plugin exists for forge units (ignored: ${unknown.join(", ")})`);
+          emit({ type: "activity", unitId: u.id, kind: "message", text: `Loadout changed: ${u.loadout.instructions ? "new standing orders" : "no standing orders"}, GBrain ${u.loadout.plugins.includes("gbrain") ? "on" : "off"}.` });
+        }
+        if (typeof b?.model === "string" && b.model) { // a forge unit's model is its trained type: accept a ready type id or model
+          const t = opts.types().find((x) => x.status === "ready" && (x.id === b.model || x.model === b.model));
+          if (t) u.typeId = t.id; else notes.push(`model ${b.model} is not a ready forge type; kept ${u.typeId}`);
+        }
+        if (b?.effort !== undefined) notes.push("effort does not apply to forge units");
+        persist();
+        return json({ ok: true, loadout: u.loadout ?? { instructions: "", skills: [], plugins: ["gbrain"] }, typeId: u.typeId, ...(notes.length ? { notes } : {}) });
       }
       if (m === "DELETE") { const u = units.get(id); if (u) { u.gen++; u.chatGen++; units.delete(id); persist(); } return json({ ok: true }); }
     } else if (parts.length === 3 && parts[2] === "send" && m === "POST") {

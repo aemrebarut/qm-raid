@@ -21,6 +21,9 @@ export const VETO_LOG = process.env.VETO_LOG ?? new URL("../../../data/vetoes.js
 export const AUTOPILOT_EVERY_MS = 3000;
 export const VETO_WINDOW_MS = 15000;
 
+// SSE: a client with more unread events than this is dropped (it reconnects and gets a fresh snapshot).
+export const SSE_MAX_QUEUE = 2000;
+
 export const TILES_PER_SEC = 3;
 export const GRID = 24;
 export const MEMORY_RECENT_MAX = 20;

@@ -1,6 +1,7 @@
 // Engine service: game state, orders, teams and the SSE event stream on 127.0.0.1:4610.
 import { BRAIN_URL, BRIDGE_URL, HOST, PORT } from "./config.ts";
-import { listenerCount, recentEvents, snapshotChunk, store, subscribe } from "./store.ts";
+import { listenerCount, recentEvents, store } from "./store.ts";
+import { sseResponse } from "./sse.ts";
 import { forgeProxy } from "./forge.ts";
 import { adjustOrder, assignTeam, cancelOrder, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit, startGame } from "./game.ts";
 
@@ -24,23 +25,6 @@ async function body(req: Request): Promise<any> {
   try { return JSON.parse(text); } catch { return undefined; }
 }
 
-function events(req: Request): Response {
-  const enc = new TextEncoder();
-  let unsub = () => {};
-  let ping: ReturnType<typeof setInterval> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      const send = (chunk: string) => ctrl.enqueue(enc.encode(chunk));
-      send(snapshotChunk());
-      unsub = subscribe(send);
-      ping = setInterval(() => { try { send(": ping\n\n"); } catch { unsub(); } }, 15000);
-      req.signal.addEventListener("abort", () => { unsub(); clearInterval(ping); try { ctrl.close(); } catch {} });
-    },
-    cancel() { unsub(); clearInterval(ping); },
-  });
-  return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive", ...CORS } });
-}
-
 // Library proxies: pass the brain's answer through unchanged.
 async function brainProxy(path: string, search: string): Promise<Response> {
   try {
@@ -60,7 +44,7 @@ async function route(req: Request): Promise<Response> {
   if (m === "GET") {
     if (p === "/health") return json({ ok: true, service: "engine" });
     if (p === "/api/state") return json(store.state);
-    if (p === "/api/events") return events(req);
+    if (p === "/api/events") return sseResponse(req, CORS);
     if (p === "/api/debug/events") return json({ clients: listenerCount(), events: recentEvents() });
     if (p === "/api/brain/graph") return brainProxy("/graph", "");
     if (p === "/api/brain/stats") return brainProxy("/stats", "");

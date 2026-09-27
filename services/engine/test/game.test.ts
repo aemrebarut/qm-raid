@@ -206,3 +206,26 @@ test("M5: reset returns the exact demo start and leaves the veto log alone", asy
   expect(calls.some((c) => c.url.endsWith("/reset"))).toBe(true); // BRAIN_RESET defaults to on
   expect(calls.filter((c) => /\/units\/u\d+$/.test(c.url)).length).toBeGreaterThanOrEqual(7); // bridge DELETE per old unit
 });
+
+test("SSE: a client that stops reading is dropped instead of buffering forever; a reading client stays", async () => {
+  const { sseResponse } = await import("../src/sse.ts");
+  const { emit, listenerCount } = await import("../src/store.ts");
+  const base = listenerCount();
+  const slow = sseResponse(new Request("http://x/api/events"), {});
+  const fast = sseResponse(new Request("http://x/api/events"), {});
+  const reader = fast.body!.getReader();
+  let got = 0;
+  const pump = (async () => { for (;;) { const r = await reader.read(); if (r.done) break; got++; } })();
+  expect(listenerCount()).toBe(base + 2);
+  for (let i = 0; i < 2100; i++) {
+    emit("unit.moved", { unitId: "u1", pos: { x: i % 24, y: 0 } });
+    if (i % 100 === 0) await Bun.sleep(0);
+  }
+  await Bun.sleep(10);
+  expect(listenerCount()).toBe(base + 1);
+  expect(got).toBeGreaterThan(2000);
+  await reader.cancel();
+  await pump;
+  expect(listenerCount()).toBe(base);
+  void slow;
+});

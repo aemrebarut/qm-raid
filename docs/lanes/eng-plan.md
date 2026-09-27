@@ -8,7 +8,7 @@ Commit after every step that works: `git add -- <your dir> && git commit -m "<ag
 Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, timestamps are epoch ms everywhere, issue ids are strings like `LUM-12`, bridge send carries `orderId`, and bridge `activity` / `reply` / `error` carry `orderId`.
 
 ## Team decisions (binding inside the team; contract questions go to the Analyst via the lead)
-- Event envelope: `{seq, ts: epoch ms, type, ...payload}`; `seq` increments per engine process. SSE: send `state.snapshot` first, then a `: ping` comment every 15 s.
+- Events: emit exactly the `EngineEvent` union from contract/types.ts (commit ca1a93d); type `emit` against it so tsc catches drift. Envelope `{seq, ts: epoch ms, type, ...payload}`; `seq` increments per engine process. `forge.updated` carries `{unitType}`. SSE: send `state.snapshot` first, then a `: ping` comment every 15 s.
 - Times: `order.vetoDeadline`, `MemoryOp.ts` and event `ts` are epoch ms. `target.issue` is a string like `LUM-12`. `target.customers` holds customer ids (brain slug `companies/<id>`).
 - Bridge send body: `{text, orderId, targetId, componentId}` for orders, `{text}` for direct messages. Terminal events (`reply`, `error`) whose `orderId` is not the unit's current order are dropped (stale after cancel). `error` -> order `failed`, unit `idle`.
 - Movement: one tile step every 333 ms (about 3 tiles/s), step `sign(dx), sign(dy)` (diagonal allowed), stop when Chebyshev distance to the target is <= 1. Emit `unit.moved` per step.
@@ -63,7 +63,7 @@ raid-eng-rev
 - R4. M3 end to end: team autopilot on, proposals appear with deadlines, cancel / go / adjust / expiry each produce a correct vetoes.jsonl row.
 
 ## M3/M4: Forge and Barracks
-- E12. `state.unitTypes`: builtins (knight, ranger, scout; ready, progress 1) + `GET $FORGE_URL/types` every 2 s (source forge), emit `forge.updated` {type} on change. `POST /api/forge/types` proxies. Subscribe to `$FORGE_URL/events` too; each unit remembers its bridge URL.
+- E12. `state.unitTypes`: builtins (knight, ranger, scout; ready, progress 1) + `GET $FORGE_URL/types` every 2 s (source forge), emit `forge.updated` {unitType} on change. `POST /api/forge/types` proxies. Subscribe to `$FORGE_URL/events` too; each unit remembers its bridge URL.
 - E13. `POST /api/units` {class, name?, team?}: builtin class -> model/effort from config, forge type only when ready (model = type.model, bridge = FORGE_URL); spawn next to the Barracks (first free tile around 20,20), register with its bridge, emit `unit.spawned`.
 - E14. `POST /api/reset`: brain `/reset`, reload world, DELETE and re-register units, clear orders/teams/memory/stats, emit `state.snapshot`. `PATCH /api/units/:id` {team?, effort?, role?, autonomy?}.
 - K8. mock-bridge `POST /reset` hook not needed (engine re-registers); instead a demo script mode `MOCK_SCRIPT=demo` where wave 1 on billing remembers a rule and wave 2 recalls that slug.

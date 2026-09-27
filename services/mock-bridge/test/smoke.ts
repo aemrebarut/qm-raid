@@ -86,9 +86,9 @@ await setConfig({ speed: saved.speed, fail: saved.fail, noGbrain: saved.noGbrain
 let jSent = false;
 const sendJ = async () => {
   jSent = true;
-  await setConfig({ script: "demo", fail: 0, noGbrain: false });
+  await setConfig({ script: "demo", fail: 0, noGbrain: false, mcpNames: 0 });
   await post(`/units/${J}/send`, { text: demoPrompt("oJ", "LUM-8", `learnings/lum-8-${J.toLowerCase()}-1790546470000`), orderId: "oJ", componentId: demoComp });
-  await setConfig({ fail: saved.fail, noGbrain: saved.noGbrain, script: saved.script });
+  await setConfig({ fail: saved.fail, noGbrain: saved.noGbrain, mcpNames: saved.mcpNames, script: saved.script });
 };
 let cDeletedAt = 0;
 setTimeout(async () => { await fetch(`${URL_}/units/${C}`, { method: "DELETE" }); cDeletedAt = Date.now(); }, 1500 / SPEED);
@@ -134,7 +134,9 @@ check(g.some((x) => x.type === "activity" && x.tool === "mcp__gbrain__search") &
 const hh = of(H);
 check(hh.at(-1)?.type === "error" && (hh.at(-1) as any).orderId === "oH" && !hh.some((x) => x.type === "reply") && hh.some((x) => x.type === "activity" && x.kind === "error"), "fail: activity kind error, then terminal error with orderId, no reply");
 const iEv = of(I), jEv = of(J);
-const tool = (evs: BridgeEvent[], name: string) => evs.find((x) => x.type === "activity" && x.tool === name) as any;
+// accepts the MCP aliases too (mcp__gbrain__search for recall/search, mcp__gbrain__put_page for remember)
+const ALIAS: Record<string, string> = { "gbrain.recall": "mcp__gbrain__search", "gbrain.search": "mcp__gbrain__search", "gbrain.get_page": "mcp__gbrain__get_page", "gbrain.remember": "mcp__gbrain__put_page" };
+const tool = (evs: BridgeEvent[], name: string) => evs.find((x) => x.type === "activity" && (x.tool === name || x.tool === ALIAS[name])) as any;
 check(iEv.some((x) => x.type === "activity" && /First attempt fails/.test(x.text)) && tool(iEv, "gbrain.remember")?.args?.slug === learnI && !tool(iEv, "gbrain.recall")?.args?.slugs?.some((s: string) => s.startsWith("learnings/")), "demo wave 1: no learning recalled, first attempt fails, remembers the rule");
 check(!!tool(jEv, "gbrain.recall")?.args?.slugs?.includes(learnI) && tool(jEv, "gbrain.get_page")?.args?.slug === learnI && (jEv.at(-1) as any)?.text?.includes(learnI), "demo wave 2: recalls wave 1's exact learning slug and quotes it in the reply");
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;

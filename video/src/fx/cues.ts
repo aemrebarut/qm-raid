@@ -12,7 +12,7 @@ import { ForgedBurst } from "./ForgedBurst";
 import { Mascot, Mood } from "./Mascot";
 import { PlusPop } from "./PlusPop";
 import { FocusLines, ImpactFlash, shake } from "./primitives";
-import { ScoreRace, ScoreRaceProps } from "./ScoreRace";
+import { ScoreRace, ScoreRaceProps, ScoreRow } from "./ScoreRace";
 import { SpeedWipe } from "./SpeedWipe";
 import { Stamp } from "./Stamp";
 import { HeroLockup } from "./HeroLockup";
@@ -30,18 +30,18 @@ const PUNCH_SCALE = 1.6;
 const callout = (tone: FxColor, fallback: string): React.FC<CueProps> => ({ text, x = 960, y = 540 }) => {
   const [label, sub] = (text ?? fallback).split("|");
   const side = x > 1280 ? "left" : y > 820 ? "top" : "right";
-  return React.createElement(Callout, { from: 0, duration: 60, x, y, label, sub, side, tone });
+  return React.createElement(Callout, { from: 0, duration: 48, x, y, label, sub, side, tone });
 };
 
 // "7 ORDERS", "12480 TOKENS": first number is the count, the rest is the label.
 const combo = (fallback: string): React.FC<CueProps> => ({ text, x, y }) => {
   const m = /^\s*([\d,]+)\s*(.*)$/.exec(text ?? fallback) ?? [];
   const value = Number((m[1] ?? "0").replace(/,/g, ""));
-  return React.createElement(Combo, { from: 0, duration: 60, value, label: (m[2] || "COMBO").toUpperCase(), x, y });
+  return React.createElement(Combo, { from: 0, duration: 45, value, label: (m[2] || "COMBO").toUpperCase(), x, y });
 };
 
 const mascot = (mood: Mood): React.FC<CueProps> => ({ text, x }) =>
-  React.createElement(Mascot, { from: 0, duration: 60, mood, say: text, corner: x !== undefined && x > 960 ? "br" : "bl" });
+  React.createElement(Mascot, { from: 0, duration: 48, mood, say: text, corner: x !== undefined && x > 960 ? "br" : "bl" });
 
 // Focus lines and a flash over the zoomed video; pairs with punchTransform on the video layer.
 const PunchOverlay: React.FC<CueProps> = ({ x = 960, y = 540 }) => {
@@ -56,37 +56,42 @@ const PunchOverlay: React.FC<CueProps> = ({ x = 960, y = 540 }) => {
 };
 
 // "0.917 vs 0.557|Held-out review orders": trained then base, exactly as written; optional title after "|".
+// Two types in one panel: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders".
 function scoreText(text?: string): Partial<ScoreRaceProps> {
   if (!text) return {};
-  const [nums, title] = text.split("|");
-  const vals = nums.match(/\d*\.?\d+/g) ?? [];
-  if (vals.length < 2) return title ? { title } : {};
-  const digits = Math.max(...vals.map((v) => (v.split(".")[1] ?? "").length));
-  return {
-    digits,
-    rows: [{ label: "Trained", value: Number(vals[0]), tone: "river" }, { label: "Base", value: Number(vals[1]), tone: "danger" }],
-    ...(title ? { title: title.trim() } : {}),
-  };
+  const [body, title] = text.split("|");
+  const rows: ScoreRow[] = [];
+  const dec = (v = "") => (v.split(".")[1] ?? "").length; // each number keeps the decimals it was written with
+  for (const part of body.split(";")) {
+    const vals = part.match(/\d*\.\d+|\d+/g) ?? [];
+    if (vals.length < 2) continue;
+    const group = part.slice(0, part.search(/\d*\.?\d/)).trim() || undefined;
+    rows.push(
+      { label: "Trained", value: Number(vals[0]), tone: "river", group, digits: dec(vals[0]) },
+      { label: "Base", value: Number(vals[1]), tone: "danger", group, digits: dec(vals[1]) },
+    );
+  }
+  return { ...(rows.length ? { rows } : {}), ...(title ? { title: title.trim() } : {}) };
 }
 
 export const CUES: Record<string, Cue> = {
   heroLockup: { frames: 60, C: ({ text, x, y }) => React.createElement(HeroLockup, { sub: text, x, y }), note: "frame 0 thumbnail lockup, fully drawn at frame 0; text = subtitle; x,y top-left" },
   smashCut: { frames: SMASH_FRAMES, C: ({ x, y }) => React.createElement(SmashCut, { x, y }), note: "hard cut lands at local frame 2" },
   punchIn: { frames: PUNCH_FRAMES, C: PunchOverlay, note: "x,y focus; also drives punchTransform" },
-  callout: { frames: 60, C: callout("gold", "LOOK!"), note: "gold ring+arrow; text 'LABEL|small line'" },
-  calloutRecall: { frames: 60, C: callout("recall", "RECALL"), note: "blue, for the recall beam" },
-  calloutRiver: { frames: 60, C: callout("river", "THE FORGE"), note: "River blue, Forge card" },
-  pagePop: { frames: 40, C: ({ text, x = 960, y = 540 }) => React.createElement(PlusPop, { from: 0, x, y, text: text ?? "+1 page" }), note: "memory landed" },
-  approvedStamp: { frames: 60, C: ({ text, x, y }) => React.createElement(Stamp, { from: 0, text: text ?? "APPROVED!", x, y }), note: "reviewer verdict" },
-  forgedBurst: { frames: 75, C: ({ text, x, y }) => React.createElement(ForgedBurst, { from: 0, name: text, x, y }), note: "text = unit name" },
-  scoreRace: { frames: 90, C: ({ text, x, y }) => React.createElement(ScoreRace, { from: 0, x, y, ...scoreText(text) }), note: "text '0.917 vs 0.557|Held-out review orders' (trained first); x,y top-left" },
-  comboOrders: { frames: 60, C: combo("3 ORDERS"), note: "text '7 ORDERS'; x,y right edge/top" },
-  comboTokens: { frames: 60, C: combo("12480 TOKENS"), note: "text '12480 TOKENS'" },
-  mascot: { frames: 60, C: mascot("cheer"), note: "cheer; text = bubble; x>960 puts it bottom right" },
-  mascotCheer: { frames: 60, C: mascot("cheer"), note: "" },
-  mascotShock: { frames: 60, C: mascot("shock"), note: "" },
-  mascotSmug: { frames: 60, C: mascot("smug"), note: "" },
-  mascotThink: { frames: 60, C: mascot("think"), note: "" },
+  callout: { frames: 48, C: callout("gold", "LOOK!"), note: "gold ring+arrow; text 'LABEL|small line'" },
+  calloutRecall: { frames: 48, C: callout("recall", "RECALL"), note: "blue, for the recall beam" },
+  calloutRiver: { frames: 48, C: callout("river", "THE FORGE"), note: "River blue, Forge card" },
+  pagePop: { frames: 36, C: ({ text, x = 960, y = 540 }) => React.createElement(PlusPop, { from: 0, x, y, text: text ?? "+1 page", duration: 36 }), note: "memory landed" },
+  approvedStamp: { frames: 48, C: ({ text, x, y }) => React.createElement(Stamp, { from: 0, text: text ?? "APPROVED!", x, y, duration: 48 }), note: "reviewer verdict" },
+  forgedBurst: { frames: 60, C: ({ text, x, y }) => React.createElement(ForgedBurst, { from: 0, name: text, x, y, duration: 60 }), note: "text = unit name" },
+  scoreRace: { frames: 84, C: ({ text, x, y }) => React.createElement(ScoreRace, { from: 0, x, y, duration: 84, ...scoreText(text) }), note: "text '0.917 vs 0.557|Held-out review orders' (trained first); x,y top-left" },
+  comboOrders: { frames: 45, C: combo("3 ORDERS"), note: "text '7 ORDERS'; x,y right edge/top" },
+  comboTokens: { frames: 45, C: combo("12480 TOKENS"), note: "text '12480 TOKENS'" },
+  mascot: { frames: 48, C: mascot("cheer"), note: "cheer; text = bubble; x>960 puts it bottom right" },
+  mascotCheer: { frames: 48, C: mascot("cheer"), note: "" },
+  mascotShock: { frames: 48, C: mascot("shock"), note: "" },
+  mascotSmug: { frames: 48, C: mascot("smug"), note: "" },
+  mascotThink: { frames: 48, C: mascot("think"), note: "" },
   speedWipe: { frames: 16, C: ({ text }) => React.createElement(SpeedWipe, { from: 0, label: text }), note: "fully covers at frame 8: cut there" },
 };
 

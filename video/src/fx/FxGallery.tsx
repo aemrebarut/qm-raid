@@ -17,7 +17,7 @@ const DEMOS: Demo[] = [
   { kind: "pagePop", x: 560, y: 380 },
   { kind: "approvedStamp" },
   { kind: "forgedBurst", text: "Rule Warden" },
-  { kind: "scoreRace", text: "0.917 vs 0.557|Held-out review orders", x: 1000, y: 620 },
+  { kind: "scoreRace", text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders", x: 1000, y: 470 },
   { kind: "comboOrders", text: "7 ORDERS" },
   { kind: "comboTokens", text: "12480 TOKENS" },
   { kind: "mascotCheer", text: "VICTORY!" },

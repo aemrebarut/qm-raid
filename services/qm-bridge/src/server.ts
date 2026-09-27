@@ -90,6 +90,22 @@ const CODEX_EFFORTS = ["auto", "low", "medium", "high", "xhigh"];
 
 // ---------- SSE fan-out ----------
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
+// Observers (GET /events?observe=1: watch scripts, reviewers) see every event but never count as delivery and get no replay,
+// so a watcher left running cannot swallow terminals the engine would otherwise get from the backlog.
+const observers = new Set<ReadableStreamDefaultController<Uint8Array>>();
+
+function send(set: Set<ReadableStreamDefaultController<Uint8Array>>, line: Uint8Array): boolean {
+  let ok = false;
+  for (const c of set) {
+    try {
+      c.enqueue(line);
+      ok = true;
+    } catch {
+      set.delete(c);
+    }
+  }
+  return ok;
+}
 const enc = new TextEncoder();
 
 // Events emitted while no client is connected (engine restarting, bridge just restarted) are replayed to the next client.
@@ -100,16 +116,8 @@ const sse = (ev: BridgeEvent): Uint8Array => enc.encode(`data: ${JSON.stringify(
 
 function emit(ev: BridgeEvent): void {
   const line = sse(ev);
-  let delivered = false;
-  for (const c of clients) {
-    try {
-      c.enqueue(line);
-      delivered = true;
-    } catch {
-      clients.delete(c);
-    }
-  }
-  if (delivered) return;
+  send(observers, line);
+  if (send(clients, line)) return;
   backlog.push(ev);
   if (backlog.length > 500) {
     const drop = backlog.findIndex((e) => !isTerminal(e)); // drop chatter before terminals
@@ -119,13 +127,8 @@ function emit(ev: BridgeEvent): void {
 }
 setInterval(() => {
   const ping = enc.encode(": ping\n\n");
-  for (const c of clients) {
-    try {
-      c.enqueue(ping);
-    } catch {
-      clients.delete(c);
-    }
-  }
+  send(clients, ping);
+  send(observers, ping);
 }, 15_000);
 
 function activity(u: Unit, send: Send, kind: "message" | "tool" | "thinking" | "error", text: string, extra: { tool?: string; args?: unknown } = {}): void {
@@ -515,11 +518,13 @@ const server = Bun.serve({
     }
     if (m === "GET" && url.pathname === "/events") {
       let ctl: ReadableStreamDefaultController<Uint8Array>;
+      const set = url.searchParams.get("observe") === "1" ? observers : clients;
       const stream = new ReadableStream<Uint8Array>({
         start(c) {
           ctl = c;
-          clients.add(c);
+          set.add(c);
           c.enqueue(enc.encode(": open\n\n"));
+          if (set === observers) return;
           const replay = backlog.splice(0);
           for (const ev of replay) c.enqueue(sse(ev));
           if (replay.length) {
@@ -528,7 +533,7 @@ const server = Bun.serve({
           }
         },
         cancel() {
-          clients.delete(ctl);
+          set.delete(ctl);
         },
       });
       return new Response(stream, {

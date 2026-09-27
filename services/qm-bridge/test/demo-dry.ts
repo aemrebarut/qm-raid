@@ -28,7 +28,7 @@ function orderText(unitId: string, orderId: string, slug: string): string {
 }
 
 async function listen(signal: AbortSignal): Promise<void> {
-  const res = await fetch(`${BRIDGE}/events`, { signal });
+  const res = await fetch(`${BRIDGE}/events?observe=1`, { signal }); // observer: never takes the engine's backlog
   const reader = res.body!.getReader();
   const dec = new TextDecoder();
   let buf = "";

@@ -56,7 +56,7 @@ export class LibraryPanel {
 
     this.root = h("div", { class: "pnl-body pnl-library" },
       h("div", { class: "pnl-col pnl-col-graph" },
-        h("div", { class: "pnl-graph-wrap" }, this.graph.canvas, this.loading),
+        h("div", { class: "pnl-graph-wrap" }, this.graph.canvas, this.graph.tip, this.loading),
         this.legendEl),
       h("div", { class: "pnl-col pnl-col-side" },
         form, this.results, this.pageBox,
@@ -133,6 +133,8 @@ export class LibraryPanel {
     if (m) return m[1] ? `${m[1]} learning, ${name(m[2]!)}` : `Learning, ${name(m[2]!)}`;
     const u = /^Unit (u\d+)$/.exec(title || "");
     if (u) return name(u[1]!);
+    const r = /^Rule:\s*(.+)$/.exec(title || ""); // the type tag already says Rule
+    if (r) return r[1]![0]!.toUpperCase() + r[1]!.slice(1);
     return title || slugTitle(id);
   }
 
@@ -196,9 +198,12 @@ export class LibraryPanel {
       // A remembered learning reads "Cato learned from LUM-101"; other pages by their title.
       const learned = m.op === "remember" && !!slug?.startsWith("learnings/");
       const issue = learned ? /^learnings\/([a-z]+-\d+)-/.exec(slug!)?.[1]?.toUpperCase() : undefined;
-      const obj = learned ? issue ?? "a lesson" : slug ? this.titleOf(slug) : m.summary || "";
+      // Feed titles never name the author again ("LUM-108 learning", not "LUM-108 learning, Bram").
+      const ft = (sl: string) => (sl.startsWith("learnings/") ? slugTitle(sl) : this.titleOf(sl));
+      const link = m.op === "link" && m.slugs.length >= 2;
+      const obj = learned ? issue ?? "a lesson" : link ? `${ft(m.slugs[0]!)} to ${ft(m.slugs[1]!)}` : slug ? ft(slug) : m.summary || "";
       const verb = m.op === "recall" ? "recalled" : learned ? (issue ? "learned from" : "learned") : m.op === "remember" ? "remembered" : "linked";
-      const more = m.slugs.length > 1 ? ` +${m.slugs.length - 1}` : "";
+      const more = m.slugs.length > (link ? 2 : 1) ? ` +${m.slugs.length - (link ? 2 : 1)}` : "";
       this.feed.append(h("button", {
         class: `pnl-mem pnl-mem-${m.op}`, title: m.summary || "", disabled: !slug,
         onclick: () => { if (slug) this.openPage(slug); },

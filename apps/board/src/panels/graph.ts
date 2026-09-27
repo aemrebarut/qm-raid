@@ -12,7 +12,7 @@ export const TYPE_LABELS: Record<string, string> = {
   product: "Product", component: "Component", rule: "Rule", issue: "Issue", company: "Customer",
   person: "Person", learning: "Learning", unit: "Agent",
 };
-const ALWAYS_LABEL = new Set(["product", "component", "rule"]);
+const ALWAYS_LABEL = new Set(["product", "component", "rule", "issue"]);
 const FONT = '600 11px "Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif';
 
 interface N extends GraphNode { x: number; y: number; vx: number; vy: number; glow: number; glowColor: string; deg: number }
@@ -26,19 +26,63 @@ export class GraphView {
   private selected: string | null = null;
   private raf = 0;
   private heat = 1;
-  /** Optional label rewrite (e.g. unit ids to names); falls back to the node title. */
+  // View on top of the fit-to-box transform: wheel zooms around the cursor, drag pans, double-click resets.
+  private zoom = 1;
+  private panX = 0;
+  private panY = 0;
+  private drag: { x: number; y: number; moved: boolean } | null = null;
+  /** Hover card, positioned inside the canvas's parent (which must be position: relative). */
+  readonly tip: HTMLElement;
+  /** Full title for the hover card and page lookups (e.g. unit ids to names); falls back to the node title. */
   label: (n: GraphNode) => string = (n) => n.title || n.id;
+  /** Short on-canvas label: "LUM-101" for issues, the title without its "Rule:" prefix for rules. */
+  short: (n: GraphNode) => string = (n) => {
+    const t = this.label(n);
+    if (n.type === "issue") return /^([A-Z]+-\d+)/.exec(t)?.[1] ?? t;
+    return t;
+  };
 
   constructor(private onPick: (slug: string) => void) {
     this.canvas = document.createElement("canvas");
     this.canvas.className = "pnl-graph";
+    this.tip = document.createElement("div");
+    this.tip.className = "pnl-gtip";
+    this.tip.hidden = true;
+    this.canvas.addEventListener("mousedown", (e) => { if (e.button === 0) this.drag = { x: e.clientX, y: e.clientY, moved: false }; });
+    window.addEventListener("mouseup", () => { if (this.drag) { this.canvas.style.cursor = ""; setTimeout(() => { this.drag = null; }, 0); } });
     this.canvas.addEventListener("mousemove", (e) => {
+      if (this.drag && (e.buttons & 1)) {
+        const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
+        if (this.drag.moved || Math.abs(dx) + Math.abs(dy) > 3) {
+          this.drag.moved = true; this.panX += dx; this.panY += dy; this.drag.x = e.clientX; this.drag.y = e.clientY;
+          this.canvas.style.cursor = "grabbing"; this.setHover(null); this.start(); return;
+        }
+      }
       const n = this.pick(e);
-      this.canvas.style.cursor = n ? "pointer" : "default";
-      if (n !== this.hover) { this.hover = n; this.canvas.title = n ? this.label(n) : ""; this.start(); }
+      this.canvas.style.cursor = n ? "pointer" : "grab";
+      this.setHover(n);
     });
-    this.canvas.addEventListener("mouseleave", () => { if (this.hover) { this.hover = null; this.start(); } });
-    this.canvas.addEventListener("click", (e) => { const n = this.pick(e); if (n) { this.selected = n.id; this.onPick(n.id); } });
+    this.canvas.addEventListener("mouseleave", () => this.setHover(null));
+    this.canvas.addEventListener("click", (e) => {
+      if (this.drag?.moved) return;
+      const n = this.pick(e);
+      if (n) { this.selected = n.id; this.onPick(n.id); }
+    });
+    this.canvas.addEventListener("dblclick", () => { this.zoom = 1; this.panX = this.panY = 0; this.start(); });
+    this.canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const r = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - r.left, my = e.clientY - r.top;
+      const k = Math.min(5, Math.max(0.6, this.zoom * Math.exp(-e.deltaY * 0.0015)));
+      const f = k / this.zoom;
+      // Keep the point under the cursor still: screen = fit * zoom + pan (around the canvas centre).
+      const cx = r.width / 2, cy = r.height / 2;
+      this.panX = (mx - cx) - ((mx - cx) - this.panX) * f;
+      this.panY = (my - cy) - ((my - cy) - this.panY) * f;
+      this.zoom = k;
+      this.setHover(null);
+      this.start();
+    }, { passive: false });
     if (typeof ResizeObserver !== "undefined") new ResizeObserver(() => this.start()).observe(this.canvas);
   }
 
@@ -84,6 +128,34 @@ export class GraphView {
   }
 
   select(slug: string | null): void { this.selected = slug; this.start(); }
+
+  private setHover(n: N | null): void {
+    if (n === this.hover) return;
+    this.hover = n;
+    this.start();
+  }
+
+  /** Hover card: type, full title, link count; placed beside the node and kept inside the field. */
+  private placeTip(n: N | null, x = 0, y = 0, w = 0): void {
+    if (!n) { this.tip.hidden = true; this.tipFor = null; return; }
+    if (this.tipFor !== n) this.fillTip(n);
+    const tw = this.tip.offsetWidth || 200;
+    const left = x + 14 + tw > w ? x - 14 - tw : x + 14;
+    this.tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(y - 12)}px)`;
+  }
+
+  private tipFor: N | null = null;
+  private fillTip(n: N): void {
+    this.tipFor = n;
+    const color = TYPE_COLORS[n.type] ?? "#8b8f96";
+    this.tip.replaceChildren();
+    const tag = document.createElement("span");
+    tag.className = "pnl-gtip-type"; tag.style.color = color; tag.textContent = TYPE_LABELS[n.type] ?? n.type;
+    const title = document.createElement("b"); title.textContent = this.label(n);
+    const meta = document.createElement("small"); meta.textContent = `${n.deg} ${n.deg === 1 ? "link" : "links"}`;
+    this.tip.append(tag, title, meta);
+    this.tip.hidden = false;
+  }
 
   start(): void { if (!this.raf) this.raf = requestAnimationFrame(this.tick); }
   stop(): void { cancelAnimationFrame(this.raf); this.raf = 0; }
@@ -133,8 +205,9 @@ export class GraphView {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const n of this.nodes) { minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x); minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y); }
     if (!this.nodes.length) { minX = minY = -1; maxX = maxY = 1; }
-    const s = Math.min((w - 120) / Math.max(1, maxX - minX), (hgt - 64) / Math.max(1, maxY - minY), 2.6);
-    const ox = w / 2 - ((minX + maxX) / 2) * s, oy = hgt / 2 - ((minY + maxY) / 2) * s;
+    const fit = Math.min((w - 120) / Math.max(1, maxX - minX), (hgt - 64) / Math.max(1, maxY - minY), 2.6);
+    const s = fit * this.zoom;
+    const ox = w / 2 - ((minX + maxX) / 2) * s + this.panX, oy = hgt / 2 - ((minY + maxY) / 2) * s + this.panY;
     return { s, ox, oy, w, hgt };
   }
 
@@ -225,24 +298,30 @@ export class GraphView {
       g.globalAlpha = 1;
     }
 
-    // Labels: key pages always, the focused node and its neighbours on hover. Dark halo for legibility.
+    // Labels in priority order (focus, selection, key pages, neighbours); a label that would overlap one
+    // already drawn is skipped, so the field never turns into a pile of text. Dark halo for legibility.
     g.font = FONT;
     g.textAlign = "center";
     g.textBaseline = "bottom";
     g.lineJoin = "round";
-    for (const n of this.nodes) {
-      const always = ALWAYS_LABEL.has(n.type);
-      if (!(always || near.has(n) || n.id === this.selected)) continue;
-      if (focus && always && !near.has(n)) g.globalAlpha = 0.35;
+    const rank = (n: N) => n === focus ? 0 : n.id === this.selected ? 1 : n.type === "product" ? 2 : n.type === "component" ? 3 : near.has(n) ? 4 : n.type === "rule" ? 5 : 6;
+    const cands = this.nodes.filter((n) => ALWAYS_LABEL.has(n.type) || near.has(n) || n.id === this.selected).sort((a, b) => rank(a) - rank(b));
+    const taken: [number, number, number, number][] = [];
+    for (const n of cands) {
       const [x, y] = P(n);
-      const t = this.label(n).toUpperCase();
-      const ty = y - this.radius(n) - 4;
+      const t = (n.type === "product" || n.type === "component" ? this.short(n).toUpperCase() : this.short(n));
+      const tw = g.measureText(t).width, ty = y - this.radius(n) - 4;
+      const box: [number, number, number, number] = [x - tw / 2 - 3, ty - 13, x + tw / 2 + 3, ty + 1];
+      if (rank(n) > 1 && taken.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) continue;
+      taken.push(box);
+      g.globalAlpha = focus && !near.has(n) ? 0.35 : 1;
       g.lineWidth = 3.5;
       g.strokeStyle = "rgba(8,10,14,.92)";
       g.strokeText(t, x, ty);
-      g.fillStyle = n === focus ? "#ffffff" : n.type === "product" ? "#e9cf8f" : "#e8e2d4";
+      g.fillStyle = n === focus ? "#ffffff" : n.type === "product" ? "#e9cf8f" : n.type === "component" ? "#e8e2d4" : "#c9c4b8";
       g.fillText(t, x, ty);
       g.globalAlpha = 1;
     }
+    if (this.hover) { const [x, y] = P(this.hover); this.placeTip(this.hover, x, y, w); } else this.placeTip(null);
   }
 }

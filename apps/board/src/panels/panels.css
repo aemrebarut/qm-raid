@@ -59,7 +59,11 @@
     rgba(6,8,11,.6);
   box-shadow: inset 0 0 48px rgba(0,0,0,.55);
 }
-.pnl-graph { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pnl-graph { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; }
+.pnl-gtip { position: absolute; left: 0; top: 0; z-index: 1; display: flex; flex-direction: column; gap: 2px; max-width: 260px; padding: 6px 10px; pointer-events: none; background: rgba(12,14,18,.94); border: 1px solid var(--line, rgba(200,164,98,.42)); border-radius: 2px; box-shadow: 0 4px 12px rgba(0,0,0,.5); }
+.pnl-gtip-type { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; }
+.pnl-gtip b { font-weight: 600; font-size: 13px; line-height: 1.3; color: var(--ink, #ece6d8); }
+.pnl-gtip small { font-size: 11px; color: var(--ink-3, #6e757d); }
 .pnl-loading { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; pointer-events: none; font: 600 11px var(--font-head, sans-serif); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3, #6e757d); }
 .pnl-loading i { width: 96px; height: 2px; background: linear-gradient(90deg, transparent, var(--gold, #d9a441), transparent) 0 0 / 50% 100% no-repeat; background-color: rgba(255,255,255,.06); animation: pnl-scan 1.1s linear infinite; }
 .pnl-loading.pnl-err i { animation: none; background: var(--danger, #d65a45); opacity: .5; }

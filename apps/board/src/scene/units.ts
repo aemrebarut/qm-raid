@@ -2,6 +2,11 @@
 import * as THREE from "three";
 import type { Unit } from "../core";
 import { hash, makeBubble, makeLabel, mat, mesh, tileToWorld } from "./util";
+import type { Router } from "./terrain";
+
+let router: Router | null = null;
+/** Set by the scene when the layout changes: units then walk through zone gates. */
+export function setRouter(r: Router | null) { router = r; }
 
 const NEUTRAL = "#8d8f96";
 const UNIT_SCALE = 1.5; // readable at whole-map zoom
@@ -59,6 +64,8 @@ export class UnitView {
   private nameTagText = "";
   private readonly jitter: THREE.Vector3;
   readonly dest = new THREE.Vector3();
+  /** Gate waypoints before dest (visual routing only; the engine position is dest). */
+  private waypoints: THREE.Vector3[] = [];
   private facing = 0;
   private walkPhase = 0;
   private moving = false;
@@ -182,7 +189,10 @@ export class UnitView {
     }
     for (const m of this.tinted) (m.material as THREE.MeshLambertMaterial).color.set(teamColor ?? NEUTRAL);
     const d = this.worldOf(unit);
-    if (d.distanceToSquared(this.dest) > 1e-6) this.dest.copy(d);
+    if (d.distanceToSquared(this.dest) > 1e-6) {
+      this.dest.copy(d);
+      this.waypoints = router ? router(this.group.position, this.dest) : [];
+    }
     this.setBubble(unit.status);
     this.syncDecor();
   }
@@ -238,14 +248,20 @@ export class UnitView {
 
   tick(t: number, dt: number) {
     const pos = this.group.position;
-    const to = this.dest.clone().sub(pos);
+    while (this.waypoints.length && this.waypoints[0].distanceTo(pos) < 0.08) this.waypoints.shift();
+    const next = this.waypoints[0] ?? this.dest;
+    const to = next.clone().sub(pos);
     to.y = 0;
     const dist = to.length();
-    if (dist > 12) {
+    // Remaining path length drives the catch-up speed.
+    let remaining = dist;
+    for (let i = 0; i < this.waypoints.length; i++) remaining += (this.waypoints[i + 1] ?? this.dest).distanceTo(this.waypoints[i]);
+    if (remaining > 14) {
       pos.copy(this.dest); // teleport (reset, respawn)
+      this.waypoints = [];
       this.moving = false;
     } else if (dist > 0.01) {
-      const speed = Math.max(3.0, dist * 2.2); // engine steps 3 tiles/s (diagonals too); catch up without stutter
+      const speed = Math.max(3.0, remaining * 2.2); // engine steps 3 tiles/s (diagonals too); catch up without stutter
       const step = Math.min(dist, speed * dt);
       pos.addScaledVector(to.normalize(), step);
       this.facing = turn(this.facing, Math.atan2(to.x, to.z), dt * 10);

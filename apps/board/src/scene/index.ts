@@ -3,10 +3,10 @@
 import * as THREE from "three";
 import { commandTarget, commandUnit, type Bus, type Store, type State, type HoverRef } from "../core";
 import { IsoCamera, MAP_SIZE } from "./camera";
-import { buildTerrain, layoutKey } from "./terrain";
+import { buildTerrain, layoutKey, makeRouter } from "./terrain";
 import { buildZones } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
-import { UnitView } from "./units";
+import { UnitView, setRouter } from "./units";
 import { TargetView } from "./targets";
 import { Fx } from "./fx";
 import { ArrowLayer } from "./arrows";
@@ -64,6 +64,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       layout = key;
       for (const c of [...world.children]) { world.remove(c); disposeTree(c); }
       world.add(buildTerrain(s.components, s.buildings, s.targets), buildZones(s.components, s.buildings));
+      setRouter(makeRouter(s.components, s.buildings));
       for (const b of buildings.values()) { buildingsG.remove(b.group); disposeTree(b.group); }
       buildings.clear();
       for (const b of s.buildings) {

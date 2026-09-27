@@ -193,3 +193,38 @@ function buildTrees(trees: { x: number; z: number; s: number; pine: boolean }[],
   }
   return g;
 }
+
+export type Router = (from: THREE.Vector3, to: THREE.Vector3) => THREE.Vector3[];
+
+/**
+ * Visual routing through zone gates: units leave and enter walled zones through their gate instead of
+ * walking through walls. Returns waypoints (world space) before `to`; empty when the straight line is fine.
+ */
+export function makeRouter(components: Component[], buildings: Building[]): Router {
+  const lib = libraryOf(buildings);
+  const zones = components.map((c) => {
+    const g = zoneGate(c, lib);
+    const { x, y, w, h } = c.zone;
+    const gx = g.x + 0.5, gz = g.y + 0.5;
+    // Outside point = in front of the gap; inside point = one tile in.
+    const d = { n: [0, 1], s: [0, -1], e: [-1, 0], w: [1, 0] }[g.side];
+    return {
+      inside: (p: THREE.Vector3) => p.x > x && p.x < x + w && p.z > y && p.z < y + h,
+      out: new THREE.Vector3(gx, 0, gz),
+      in: new THREE.Vector3(gx + d[0] * 1.2, 0, gz + d[1] * 1.2),
+    };
+  });
+  return (from, to) => {
+    const exits: THREE.Vector3[] = [], entries: THREE.Vector3[] = [];
+    for (const z of zones) {
+      const a = z.inside(from), b = z.inside(to);
+      if (a === b) continue;
+      if (a) exits.push(z.in, z.out);
+      else entries.push(z.out, z.in);
+    }
+    const pts = [...exits, ...entries].map((p) => p.clone());
+    // Skip leading waypoints we are already at or past (standing in the gate gap).
+    while (pts.length && pts[0].distanceTo(from) < 0.6) pts.shift();
+    return pts;
+  };
+}

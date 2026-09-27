@@ -19,6 +19,8 @@ export class Minimap {
   private canvas = h("canvas", { class: "hud-minimap-canvas", width: W, height: H, title: "Click to move the camera" });
   readonly root = h("div", { class: "hud-minimap" }, this.canvas);
   private ctx = this.canvas.getContext("2d");
+  private last: State | null = null;
+  private view: { x: number; y: number }[] = []; // camera footprint in tile coords (scene emits 'view')
 
   constructor(private bus: Bus) {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -26,6 +28,10 @@ export class Minimap {
     this.canvas.height = H * dpr;
     // CSS sizes the canvas to the bottom panel height (aspect ratio kept); clicks scale by its rect.
     this.ctx?.scale(dpr, dpr);
+    bus.on("view", (v) => {
+      this.view = Array.isArray(v?.corners) ? v.corners.filter((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y)) : [];
+      if (this.last) this.draw(this.last);
+    });
     this.canvas.addEventListener("click", (e) => {
       const r = this.canvas.getBoundingClientRect();
       const sx = ((e.clientX - r.left) / r.width) * W;
@@ -40,6 +46,7 @@ export class Minimap {
   }
 
   draw(s: State): void {
+    this.last = s;
     const c = this.ctx;
     if (!c) return;
     c.clearRect(0, 0, W, H);
@@ -88,6 +95,20 @@ export class Minimap {
         c.lineWidth = 1.2;
         c.stroke();
       }
+    }
+
+    // AoE view frame: the camera's ground footprint, clipped to the map.
+    if (this.view.length >= 3) {
+      c.save();
+      quad(c, 0, 0, MAP, MAP);
+      c.clip();
+      c.beginPath();
+      this.view.forEach((p, i) => (i ? c.lineTo(...toScreen(p.x, p.y)) : c.moveTo(...toScreen(p.x, p.y))));
+      c.closePath();
+      c.strokeStyle = "rgba(255,255,255,.95)";
+      c.lineWidth = 1.2;
+      c.stroke();
+      c.restore();
     }
   }
 }

@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { commanderModel, propose } from "./commander";
 import { createModelServer } from "./model";
+import { followProgress } from "./progress";
 import { createUnits } from "./units";
 
 type Status = "generating" | "training" | "evaluating" | "ready" | "failed";
@@ -42,8 +43,10 @@ function load() {
     for (const t of JSON.parse(readFileSync(STORE, "utf8")) as ForgeType[]) {
       types.set(t.id, t);
       if (t.status !== "ready" && t.status !== "failed") {
-        if (t.pid && alive(t.pid)) { console.log(`[forge] re-attaching to ${t.id} (pid ${t.pid})`); follow(t).catch((e) => console.error("[forge] follow", e)); }
-        else { t.status = "failed"; t.stage = "interrupted by a forge restart"; }
+        // Replay progress first: a pipeline that finished while the forge was down is ready (or failed), not interrupted.
+        // follow() reads the whole file, then keeps tailing only while the child is alive.
+        console.log(`[forge] re-attaching to ${t.id} (pid ${t.pid ?? "none"}${alive(t.pid) ? "" : ", exited"})`);
+        follow(t).catch((e) => console.error("[forge] follow", e));
       }
     }
   } catch (e) { console.error("[forge] load failed", e); }
@@ -66,40 +69,7 @@ const alive = (pid?: number | null) => { if (!pid) return false; try { process.k
 
 // The pipeline child writes JSON progress lines to runs/<id>/progress.jsonl (a file, not a pipe), so it keeps
 // running across a forge restart; the forge tails the file and re-attaches by PID on start.
-async function follow(t: ForgeType) {
-  const file = join(RUNS_DIR, t.id, "progress.jsonl");
-  let offset = 0, buf = "";
-  const decoder = new TextDecoder();
-  while (true) {
-    const done = !alive(t.pid);
-    try {
-      const f = Bun.file(file);
-      if (f.size > offset) {
-        buf += decoder.decode(new Uint8Array(await f.slice(offset).arrayBuffer()), { stream: true });
-        offset = f.size;
-        let i;
-        while ((i = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, i).trim();
-          buf = buf.slice(i + 1);
-          if (!line) continue;
-          try {
-            const u = JSON.parse(line);
-            for (const k of ["status", "progress", "stage", "examples", "evalScore", "model", "baseModel"] as const) {
-              if (k in u) (t as any)[k] = u[k];
-            }
-          } catch { console.error("[forge] bad pipeline line", line.slice(0, 200)); }
-        }
-        save();
-      }
-    } catch {}
-    if (t.status === "ready" || t.status === "failed") break;
-    if (done) { Object.assign(t, { status: "failed", stage: "pipeline exited without finishing" }); break; }
-    await Bun.sleep(700);
-  }
-  t.pid = null;
-  save();
-  console.log(`[forge] type ${t.id} finished: ${t.status} (${t.stage})`);
-}
+const follow = (t: ForgeType) => followProgress(t, join(RUNS_DIR, t.id, "progress.jsonl"), { alive, save });
 
 function runPipeline(t: ForgeType) {
   const out = join(RUNS_DIR, t.id);

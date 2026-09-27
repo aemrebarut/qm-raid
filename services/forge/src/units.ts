@@ -5,7 +5,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { AskRequest } from "./model";
 
 export interface UnitTypeView { id: string; name: string; description: string; status: string; model: string | null; baseModel: string | null }
-interface ForgeUnit { id: string; name: string; typeId: string | null; team: number | null; orderId: string | null; gen: number }
+// Orders and direct messages have separate generations: a chat never abandons the active order; a new order supersedes the old one.
+interface ForgeUnit { id: string; name: string; typeId: string | null; team: number | null; orderId: string | null; gen: number; chatGen: number }
 interface SendBody { text?: string; orderId?: string; targetId?: string; componentId?: string }
 
 const BRAIN_URL = process.env.BRAIN_URL ?? "http://127.0.0.1:4616";
@@ -38,7 +39,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     catch (e) { console.error("[forge] units save failed", e); }
   };
   if (existsSync(opts.store)) {
-    try { for (const u of JSON.parse(readFileSync(opts.store, "utf8"))) units.set(u.id, { ...u, orderId: null, gen: 0 }); }
+    try { for (const u of JSON.parse(readFileSync(opts.store, "utf8"))) units.set(u.id, { ...u, orderId: null, gen: 0, chatGen: 0 }); }
     catch (e) { console.error("[forge] units load failed", e); }
   }
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -58,7 +59,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
   function ensure(id: string, b: { name?: string; model?: string; team?: number | null; class?: string; typeId?: string } = {}): ForgeUnit {
     let u = units.get(id);
     if (!u) {
-      u = { id, name: b.name ?? id, typeId: pickType(b.model, b.typeId ?? b.class)?.id ?? null, team: b.team ?? null, orderId: null, gen: 0 };
+      u = { id, name: b.name ?? id, typeId: pickType(b.model, b.typeId ?? b.class)?.id ?? null, team: b.team ?? null, orderId: null, gen: 0, chatGen: 0 };
       units.set(id, u);
       persist();
     }
@@ -72,11 +73,11 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
   }
 
   async function run(u: ForgeUnit, b: SendBody) {
-    const gen = ++u.gen;
     const isOrder = !!b.orderId;
+    const gen = isOrder ? ++u.gen : ++u.chatGen;
     if (isOrder) u.orderId = b.orderId!;
     const oid = b.orderId ? { orderId: b.orderId } : {};
-    const live = () => u.gen === gen && units.has(u.id);
+    const live = () => (isOrder ? u.gen : u.chatGen) === gen && units.has(u.id);
     const act = (kind: string, text: string, tool?: string, args?: unknown) => {
       if (live()) emit(tool ? { type: "activity", unitId: u.id, ...oid, kind, text, tool, args } : { type: "activity", unitId: u.id, ...oid, kind, text });
     };
@@ -140,7 +141,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       if (live()) emit(isOrder ? { type: "error", unitId: u.id, ...oid, text: `${u.name}: ${(e as Error).message}` }
                                : { type: "activity", unitId: u.id, kind: "error", text: `${u.name}: ${(e as Error).message}` });
     } finally {
-      if (u.gen === gen && isOrder) u.orderId = null;
+      if (isOrder && u.gen === gen) u.orderId = null;
     }
   }
 
@@ -162,7 +163,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     const id = parts[1];
     const body = async () => (await req.json().catch(() => null)) as any;
     if (!id) {
-      if (m === "GET") return json([...units.values()].map(({ gen, ...u }) => u));
+      if (m === "GET") return json([...units.values()].map(({ gen, chatGen, ...u }) => u));
       if (m === "POST") {
         const b = await body();
         if (!b || typeof b.id !== "string" || !b.id) return json({ ok: false, error: "id required" }, 400);
@@ -178,7 +179,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         if (b && b.team !== undefined) { u.team = b.team; persist(); }
         return json({ ok: true });
       }
-      if (m === "DELETE") { const u = units.get(id); if (u) { u.gen++; units.delete(id); persist(); } return json({ ok: true }); }
+      if (m === "DELETE") { const u = units.get(id); if (u) { u.gen++; u.chatGen++; units.delete(id); persist(); } return json({ ok: true }); }
     } else if (parts.length === 3 && parts[2] === "send" && m === "POST") {
       const b = (await body()) as SendBody | null;
       if (!b || typeof b.text !== "string" || !b.text.trim()) return json({ ok: false, error: "text required" }, 400);

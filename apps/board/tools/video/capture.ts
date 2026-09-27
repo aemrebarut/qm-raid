@@ -554,14 +554,16 @@ const clips: Record<string, Script> = {
     await wait(2500);
     const more = proposals.length;
     await wait(4000); // veto rings count down
-    if (more > 1 || proposals.length > 1) {
-      const cancelled = await clickHud(c, ".hud-orders button.hud-btn-cancel", "Cancel");
-      if (!cancelled) await js(c.page, `raid.api.cancelOrder(${JSON.stringify(p1.order.id)})`);
-      c.mark("veto", { orderId: p1.order.id });
-    } else {
-      const cancelled = await clickHud(c, "button.hud-btn-cancel", "Cancel");
-      c.mark(cancelled ? "veto" : "veto-missing");
+    // Veto the first proposal with its card's Cancel button, then confirm the engine cancelled it.
+    const vetoed = c.waitFor((e) => e.type === "order.updated" && e.order?.source === "autopilot" && e.order?.status === "cancelled", 4000);
+    const clicked = await clickHud(c, "button.hud-btn-cancel", "Cancel");
+    let ev = await vetoed;
+    if (!ev) {
+      c.note_(`veto click ${clicked ? "made no cancellation" : "found no Cancel button"}; cancelled ${p1.order.id} through the API`);
+      await js(c.page, `raid.api.cancelOrder(${JSON.stringify(p1.order.id)})`);
+      ev = await c.waitFor((e) => e.type === "order.updated" && e.order?.id === p1.order.id && e.order?.status === "cancelled", 4000, "veto cancel");
     }
+    c.mark(ev ? "veto" : "veto-missing", { orderId: ev?.order?.id ?? p1.order.id, unitId: ev?.order?.unitId, confirmed: !!ev, proposals: proposals.length + (more ? 0 : 0) });
     // The other proposal runs out its ring and goes by itself.
     const went = await c.waitFor((e) => e.type === "order.updated" && e.order?.source === "autopilot" && e.order?.status === "active", 20000, "autopilot go");
     if (went) c.mark("autopilot-go", { orderId: went.order.id, unitId: went.order.unitId });

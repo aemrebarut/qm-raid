@@ -1,5 +1,5 @@
 // Look team screenshot loop: captures fixed board states at two viewports into docs/shots/look/.
-// Usage: bun apps/board/tools/shoot.ts <iteration> [--url http://127.0.0.1:4619] [--only overview,library] [--sizes 1512x790,1280x720]
+// Usage: bun apps/board/tools/shoot.ts <iteration> [--url 'http://127.0.0.1:4619/?art=on'] [--only overview,library] [--sizes 1512x790,1280x720] [--live]
 // Test board only (mock engine 4618 behind 4619). Never point this at 4611: it only reads state and
 // injects local dev events (window.raid.dev), but the live board talks to real QM agents.
 // Playwright is not a board dependency: set PLAYWRIGHT_DIR to a playwright package dir, or it is found in the npx cache.
@@ -20,6 +20,7 @@ if (/:4611\b/.test(url)) {
   process.exit(2);
 }
 const only = flag("only", "").split(",").filter(Boolean);
+const live = argv.includes("--live"); // also send real orders and train a forged unit on the mock engine (never 4611)
 const sizes = flag("sizes", "1512x790,1280x720").split(",").map((s) => s.split("x").map(Number) as [number, number]);
 const outDir = resolve(import.meta.dir, "../../../docs/shots/look");
 mkdirSync(outDir, { recursive: true });
@@ -46,7 +47,7 @@ const js = (page: Page, code: string) => page.evaluate(code);
 // Each state starts from a clean selection. Steps run in the page through window.raid (see src/main.ts).
 const RESET = `(() => { raid.bus.clear(); raid.bus.selectBuilding(null); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); })()`;
 const firstIds = (n: number) => `raid.store.getState().units.slice(0, ${n}).map(u => u.id)`;
-const states: { name: string; setup: string; settle?: number; keys?: string[]; click?: string }[] = [
+const states: { name: string; setup: string; settle?: number; keys?: string[]; click?: string; live?: boolean }[] = [
   { name: "overview", setup: `1` },
   { name: "unit", setup: `raid.bus.select(${firstIds(1)})` },
   { name: "units", setup: `raid.bus.select(${firstIds(4)})` },
@@ -63,6 +64,9 @@ const states: { name: string; setup: string; settle?: number; keys?: string[]; c
   { name: "rolepick", setup: `raid.bus.select(raid.store.team(1).members)`, click: "Planner", settle: 900 },
   // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
   { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500 },
+  // --live only: real orders and a forged unit on the mock test engine 4618 (art gate: units selectable and movable).
+  { name: "order", live: true, setup: `(async () => { const s = raid.store.getState(); const u = s.units.find(x => x.status === 'idle') ?? s.units[0]; const t = s.targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000 },
+  { name: "forged", live: true, setup: `(async () => { const s = raid.store.getState(); const base = ['knight','ranger','scout','oracle']; let u = s.units.find(x => !base.includes(x.class)); if (!u) { const ty = s.unitTypes.find(x => !base.includes(x.id) && x.status === 'ready'); if (ty) { const r = await raid.api.spawn({ class: ty.id }); u = r.unit; } } await new Promise(r => setTimeout(r, 1500)); u = u && raid.store.unit(u.id); if (!u) return; const t = raid.store.getState().targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000 },
   { name: "feed", setup: `(() => { const d = raid.dev; d.recall('u1'); d.remember('u2'); d.handoff('u1', 'u2'); d.recall('u3'); d.remember('u1'); raid.bus.select(['u1']); })()`, settle: 1200 },
 ];
 
@@ -78,6 +82,7 @@ try {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
     for (const st of states) {
       if (only.length && !only.includes(st.name)) continue;
+      if (st.live && !live) continue;
       // Fresh page per state so injected dev events do not leak between shots.
       const page = await ctx.newPage();
       page.on("pageerror", (e: Error) => console.warn(`  [${st.name}] pageerror: ${e.message}`));

@@ -15,6 +15,21 @@ Status: findings sent to `analyst` using Herdr, session `default`. Relevant inte
 5. **P2: align wire values with shared types.** `docs/CONTRACT.md:13` uses numeric `target.issue` but `contract/types.ts:15` requires a string. `docs/CONTRACT.md:18` uses ISO `memory.recent[].ts` but `contract/types.ts:23` requires a number. Pick canonical representations and update examples/types together; explicitly document epoch milliseconds if numbers are chosen. Event envelope timestamps can remain ISO if deliberately distinct.
 6. **P2: specify the World and Customer shapes and page identity.** `docs/CONTRACT.md:72` includes `customers`, but `State` has no customer field and no shared `World` or `Customer` type exists. Add those schemas and define how `targetId`, `target.issue`, and the issue page slug relate. This is needed for engine loading and Forge training/recall without independent ad hoc models.
 
+## 2026-09-27: contract follow-up `95dfb02`, `75dc182`
+
+Reviewed `git show HEAD` at `75dc182b95235d1c769fa4ac305e28ca68dc864e`, `git show 95dfb02`, and both complete contract files. All six initial gaps are addressed at the specification level:
+
+- Send requests carry `orderId`, `targetId`, and `componentId` for orders; shared `SendRequest` added.
+- Activity and terminal reply/error events carry `orderId`; stale terminal events are ignored by the engine.
+- Engine Library proxy routes are defined; pages use the query parameter `?slug=` to preserve nested slugs.
+- Brain is designated the only DB owner, with the MCP design to be agreed with the QM lead before M2. Runtime serialization/ownership remains an implementation acceptance check.
+- Issue ids are strings and timestamps are epoch milliseconds throughout.
+- Shared `World`/`Customer` types and page slug conventions are defined; `Target.customers` contains customer ids.
+
+**P2 follow-up sent to Analyst:** the state example still uses `customers/acme-robotics` instead of the v3 customer id `acme-robotics` and omits required `unitTypes`. Align those examples so fixtures copied from the contract match the actual schema. This does not reopen the settled schema decisions.
+
+Validation: documentation/type diff inspection only. No submitted service revision or runnable service smoke exists at this point.
+
 ## Lane review queue
 
 - `raid-gbrain`: awaiting first submitted commit SHA.

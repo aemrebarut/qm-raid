@@ -38,8 +38,9 @@ function load() {
   } catch (e) { console.error("[forge] load failed", e); }
 }
 
+// Always prefixed so a forged type can never collide with builtin classes (knight, ranger, scout, oracle).
 function slugify(name: string): string {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "type";
+  const base = "forge-" + (name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "type");
   let id = base, n = 2;
   while (types.has(id)) id = `${base}-${n++}`;
   return id;

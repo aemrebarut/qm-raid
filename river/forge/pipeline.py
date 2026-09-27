@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import random
 import sys
 import time
 from pathlib import Path
@@ -35,7 +34,9 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
     world = datagen.load_world(args.brain_url)
     emit(status="generating", progress=0.05, stage=f"world: {len(world['targets'])} issues, {len(world['components'])} components")
     spec = datagen.TypeSpec(args.type_id, args.name, args.description)
-    prompts = datagen.build_prompts(spec, world, n=args.examples, seed=args.seed)
+    n_eval = max(12, args.examples // 5)
+    train_p, eval_p = datagen.build_split(spec, world, args.examples - n_eval, n_eval, seed=args.seed)
+    prompts = train_p + eval_p
     rows: list[dict] = []
     teacher = None if dry else datagen.RiverTeacher.from_env(args.teacher_model)
     for i, p in enumerate(prompts):
@@ -53,9 +54,7 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
         if i % 5 == 0 or i == len(prompts) - 1:
             emit(status="generating", progress=0.05 + 0.25 * (i + 1) / len(prompts),
                  stage=f"writing examples ({'template' if teacher is None else 'teacher'})", examples=i + 1)
-    random.Random(args.seed).shuffle(rows)
-    n_eval = max(8, len(rows) // 5)
-    evalset, train = rows[:n_eval], rows[n_eval:]
+    train, evalset = rows[:len(train_p)], rows[len(train_p):]
     out.mkdir(parents=True, exist_ok=True)
     for name, data in (("train.jsonl", train), ("eval.jsonl", evalset)):
         with open(out / name, "w") as f:

@@ -30,13 +30,26 @@ FALLBACK_WORLD = {
     "customers": [],
 }
 
-ORDER_TEMPLATES = [
+# Train and eval use disjoint phrasings, so no held-out prompt is ever seen in training.
+TRAIN_TEMPLATES = [
     "Work issue {issue} ({kind}, severity {severity}) in {component}: {title}. Reported by {customers}. Recall what GBrain knows first, then fix or triage it, and remember what you learned.",
     "New order: {issue} \"{title}\" in the {component} component. Customers affected: {customers}. Investigate and report back.",
     "{customers} report: {title}. This is {issue}, a severity {severity} {kind} in {component}. Handle it.",
     "Take {issue}. {title}. Component: {component}. What is your plan and what do you tell the customer?",
     "Triage {issue} ({component}, sev {severity}): {title}",
+    "Order from the board: go to {component} and deal with {issue}, \"{title}\". {customers} is waiting.",
+    "{issue} needs an owner. {title} ({kind}, {component}). Customers: {customers}.",
+    "Please look at {issue} in {component}. Summary: {title}. Severity {severity}.",
+    "You are assigned {issue}: {title}. It affects {customers}. Recall, act, remember.",
+    "Incoming {kind} in {component}: {title} ({issue}). Reporter: {customers}.",
 ]
+EVAL_TEMPLATES = [
+    "Heads up, {customers} just escalated {issue} ({component}): {title}. What do you do?",
+    "Assignment: {issue}. Area {component}. Problem: {title}. Priority {severity} of 3.",
+    "Can you own {issue} for {customers}? It is a {component} {kind}: {title}.",
+]
+EXTRAS = ["", " The customer is upset.", " It is blocking their month-end close.", " Keep the reply short.",
+          " This is the second report this week.", " Support already asked twice."]
 
 
 @dataclass
@@ -67,27 +80,36 @@ def _words(text: str) -> set[str]:
     return set(re.findall(r"[a-z]+", text.lower()))
 
 
-def build_prompts(spec: TypeSpec, world: dict, n: int, seed: int) -> list[dict]:
-    """Orders on Lumen issues, biased toward the issues matching the type's job."""
+def _order(tpl: str, extra: str, t: dict, world: dict, comps: dict) -> dict:
+    order = tpl.format(issue=t["issue"], kind=t["kind"], severity=t["severity"],
+                       component=comps.get(t["component"], t["component"]), title=t["title"],
+                       customers=_customers(t, world)) + extra
+    return {"order": order, "meta": {"targetId": t["id"], "issue": t["issue"], "component": t["component"], "extra": extra.strip()}}
+
+
+def build_split(spec: TypeSpec, world: dict, n_train: int, n_eval: int, seed: int) -> tuple[list[dict], list[dict]]:
+    """Unique train and eval orders on Lumen issues, weighted toward issues matching the type's job.
+
+    Train uses TRAIN_TEMPLATES and eval uses EVAL_TEMPLATES, so there is no prompt overlap by construction
+    (asserted anyway). Sampling is without replacement (weighted keys), so every prompt is unique.
+    """
     rng = random.Random(seed)
     comps = {c["id"]: c.get("name", c["id"]) for c in world["components"]}
     job = _words(spec.description + " " + spec.name)
-    targets = world["targets"]
 
     def weight(t: dict) -> float:
-        w = 1.0 + 3.0 * len(job & _words(t["title"] + " " + t["component"] + " " + t["kind"]))
-        return w
+        return 1.0 + 3.0 * len(job & _words(t["title"] + " " + t["component"] + " " + t["kind"]))
 
-    weights = [weight(t) for t in targets]
-    prompts = []
-    for i in range(n):
-        t = rng.choices(targets, weights=weights)[0]
-        tpl = ORDER_TEMPLATES[i % len(ORDER_TEMPLATES)]
-        order = tpl.format(issue=t["issue"], kind=t["kind"], severity=t["severity"],
-                           component=comps.get(t["component"], t["component"]), title=t["title"],
-                           customers=_customers(t, world))
-        prompts.append({"order": order, "meta": {"targetId": t["id"], "issue": t["issue"], "component": t["component"]}})
-    return prompts
+    def pick(templates: list[str], k: int) -> list[dict]:
+        pool = [(t, tpl, ex) for t in world["targets"] for tpl in templates for ex in EXTRAS]
+        keyed = sorted(pool, key=lambda c: rng.random() ** (1.0 / weight(c[0])), reverse=True)
+        return [_order(tpl, ex, t, world, comps) for t, tpl, ex in keyed[:k]]
+
+    train, evalset = pick(TRAIN_TEMPLATES, n_train), pick(EVAL_TEMPLATES, n_eval)
+    overlap = {p["order"] for p in train} & {p["order"] for p in evalset}
+    assert not overlap, f"train/eval prompt overlap: {len(overlap)}"
+    assert len({p["order"] for p in train}) == len(train), "duplicate train prompts"
+    return train, evalset
 
 
 def system_prompt(spec: TypeSpec) -> str:

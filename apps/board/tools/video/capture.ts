@@ -609,8 +609,18 @@ clips.hero = async (c) => {
   await js(c.page, "document.getElementById('cap-cursor')?.style.setProperty('display', 'none')"); // clean thumbnail
   await js(c.page, "raid.bus.clear()");
   await wait(1500);
-  const s = await state(c.page);
-  const us = idleUnits(s).slice(0, Number(flag("hero-units", "3")));
+  let s = await state(c.page);
+  const want = Number(flag("hero-units", "3"));
+  // Few idle units left after the other clips: train knights at the Barracks so the map fills with marching units.
+  const short = want - idleUnits(s).length;
+  for (let i = 0; i < short && i < 2; i++) {
+    const sp = c.waitFor((e) => e.type === "unit.spawned" && !claimed.has(e.unit?.id) && !c.focus.has(e.unit?.id), 20000, "hero knight");
+    await js(c.page, "raid.api.spawn({ class: 'knight' })");
+    const e = await sp;
+    if (e) { c.focus.add(e.unit.id); c.mark("hero-spawn", { unitId: e.unit.id, unitName: e.unit.name }, null); }
+  }
+  if (short > 0) { await wait(2000); s = await state(c.page); }
+  const us = idleUnits(s).slice(0, want);
   const used = new Set<string>();
   for (const u of us) {
     const t = openTargets(s, u.pos).find((x: any) => !used.has(x.id));

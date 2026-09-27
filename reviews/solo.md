@@ -59,9 +59,41 @@ Reviewed `4585f77d76cd84a2ca01510b197a64dd8f2f83b1` with no working-tree differe
 
 No new actionable findings in this fix commit. The earlier push of review commit `84aaa1d` raced another agent's push; a subsequent `git ls-remote` confirmed remote main had advanced to descendant `2288e94`, including that review. No pull, force push, or history rewrite was used.
 
+## 2026-09-27: Lumen world `eedbb1a` and Brain service `b603566`
+
+Reviewed both commit diffs and all new files. Initial service PID reported as 68228. No game-brain CLI command was run; all runtime access used the service HTTP/MCP routes. `scripts/devbrain get code/brain` initially returned `page_not_found`.
+
+- `eedbb1a`: no actionable findings. Validated all 27 seed pages have resolvable wikilinks, all 9 target tiles fall inside their component zones, all buildings fit the 24x24 grid, all 5 customers reference existing contact pages, and target customer ids resolve.
+- `b603566`: `cd services/brain && bun run test` PASS (7 checks). Additional MCP initialize, tools/list, recall, remember, and t101 learning recalled for t102 all passed.
+
+**P1: new learning links do not appear during active use.** In `b603566`, `services/brain/src/server.ts:89-108` writes wikilinks and relies on the GBrain sweep; `graph():38-48` caches extracted links indefinitely. Reproduced a new learning node with zero outgoing edges immediately, after 3 seconds, and after another write forced a graph rebuild. The installed dependency source `gbrain/src/commands/serve.ts:53-59` sets a 10-minute idle-check interval and documents extraction after 10-20 minutes of inactivity, contradicting the README's approximately one-second expectation. Active requests postpone the sweep. Fix by deriving graph/recall links from persisted page bodies immediately or explicitly extracting through the owner process; expire graph cache as well. Sent to `raid-gbrain`, copied `analyst`. **Resolved in `7c65a17`, verified below.**
+
+**P2: concurrent add_link loses an acknowledged update.** In `b603566`, `services/brain/src/server.ts:120-126` performs a read-modify-write across separately queued RPCs. Two concurrent MCP add_link requests from the same synthetic review learning to Orchard and Brightpath both returned `ok: true`; a subsequent get_page retained only Brightpath. Serialize the complete mutation per source or globally. Sent to `raid-gbrain`; the test page's lost link was repaired sequentially. **Resolved in `8532e4f`, verified below.**
+
+## 2026-09-27: Brain follow-ups `ae84989`, `4148aea`, `8532e4f`, `6e581d2`, `29fddaf`, `7c65a17`
+
+Inspected each commit diff. Runtime checks used the evolving shared service, with final acceptance on the stable service reported as PID 26357 at `7c65a17`.
+
+- `ae84989`: write smoke passed. Two sequential `POST /reset` calls both restored 27 seed pages; first deleted 6 synthetic learning/unit pages, second deleted 0. Both graphs had 27 nodes, 72 edges, and no learning/unit nodes. No actionable findings in the reset/forget changes. Review-created pages were removed by these resets.
+- `4148aea`: graph taxonomy verified through HTTP: product, component, rule, issue, company, and person match the seed slug prefixes. No actionable findings.
+- `8532e4f`: the service-level mutation lock covers HTTP and MCP writes. Initial write smoke was interrupted by an owner service restart (socket closed); rerun passed. The concurrent add_link regression confirms both acknowledged links persist. Closes the P2 lost-update finding.
+- `6e581d2`: expanded smoke passed for caller-assigned learning slugs. A separate HTTP check wrote twice to the same new learning slug and verified the second body replaced the first; cleanup via /forget passed. No actionable findings for valid engine-generated slugs.
+- `29fddaf`: t101 recall includes `people/maya-chen`; verified via HTTP. No actionable findings.
+- `7c65a17`: `SMOKE_WRITE=1 bun run test` PASS, including immediate edges from a new learning to its issue/component/unit, parallel add_link persistence, assigned slug, and cleanup. The implementation now scans persisted learning page bodies for recall and unions wikilinks into graph edges; graph cache has a 10-second TTL and write invalidation. Closes the P1 delayed-link finding. Restart survival was inspected in code (no process-local learning index remains); reviewer did not restart the owner's service.
+
+## 2026-09-27: River training `8e2f786`, teacher context `dcce227`, Forge bridge `c8ba93a`
+
+Reviewed all three commit diffs and the installed `river-client` method signatures for training, checkpoint save, sampling, and chat completion. Renderer tokenization checked offline with `HF_HUB_OFFLINE=1`: returned model_input/weights, masked system/user tokens, positive assistant weights, and a sample prompt with stop strings. An initial inspection expected the old input_ids/labels shape and was corrected after checking the renderer and installed SDK; this was a reviewer probe error, not a service defect.
+
+- `8e2f786`: no concrete API-shape finding in LoRA SFT, checkpoint save, paired evaluation, or environment loader. Both models receive identical eval prompts and settings. The rubric measures formatting and identifier coverage; it does not measure issue-resolution quality. Full paid training/evaluation is being run by the lane owner, not validated by this offline check. No credential file was read or printed by the reviewer.
+- `dcce227`: offline stage_generate with a fake teacher and synthetic recall context passed: 128 train rows, 32 evaluation rows, zero prompt overlap, all rows have context and nonempty answers, 11 deliberately failed teacher rows fell back to templates. Disabled env loading in this probe; no provider API calls. No actionable finding in this commit.
+- `c8ba93a`: `bun run smoke && bun run smoke:bridge` PASS. The bridge smoke used an existing dry-run type. The service changed from dry to river between the reviewer's health check and the requested types smoke, which created `forge-smoke-ranger-3` and reached teacher generation. The lane owner was notified immediately; no further POST /types calls were made. This smoke proves startup/progress only, not completion of real training.
+
+**P1: a direct message silently abandons an active Forge order.** `services/forge/src/units.ts:43-48` increments the unit generation for every send, including direct messages; `:73,86,92` discards an earlier order's completion and skips clearing its orderId. Reproduced in-process with createUnits and a deferred fake model: spawn unit, send order A with valid target/component/order ids, send a direct status message before A's model resolves, then resolve both. Only the direct reply is emitted; GET /units still reports `orderId: review-order-A`, with no terminal reply/error for A. The engine can remain active forever. Serialize or reject direct messages while an order is active, or preserve independent request completion identities. Sent to `raid-river`, copied `analyst`. No River calls were needed to reproduce it.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewing `eedbb1a` and `b603566`.
-- `raid-river`: `5715cca` reviewed; both P2 findings resolved in `4585f77`.
+- `raid-gbrain`: reviewed through `7c65a17`; P1 delayed links and P2 lost update resolved.
+- `raid-river`: reviewed through `dcce227`; P1 direct-message interruption in `c8ba93a` awaiting fix. Earlier type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

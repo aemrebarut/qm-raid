@@ -12,6 +12,10 @@ export class LibraryPanel {
   private status: HTMLElement;
   private loadedAt = 0;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  // Request generations: a response is applied only if no newer request of the same kind started since.
+  private pageGen = 0;
+  private searchGen = 0;
+  private graphGen = 0;
 
   constructor(private store: Store, private bus: Bus) {
     this.graph = new GraphView((slug) => this.openPage(slug));
@@ -61,16 +65,20 @@ export class LibraryPanel {
 
   private async loadGraph(): Promise<void> {
     this.loadedAt = Date.now();
+    const gen = ++this.graphGen;
     const r = await api.graph();
+    if (gen !== this.graphGen) return;
     if (!r.ok) { this.status.textContent = `Graph unavailable: ${r.error}`; return; }
     this.graph.setData(r.nodes ?? [], r.edges ?? []);
     this.status.textContent = `${r.nodes?.length ?? 0} pages, ${r.edges?.length ?? 0} links`;
   }
 
   private async search(q: string): Promise<void> {
+    const gen = ++this.searchGen;
     this.results.replaceChildren();
     if (!q.trim()) return;
     const r = await api.search(q.trim());
+    if (gen !== this.searchGen) return;
     if (!r.ok) { this.results.append(h("p", { class: "pnl-err" }, r.error)); return; }
     const hits = Array.isArray(r.data) ? r.data : [];
     if (!hits.length) { this.results.append(h("p", { class: "pnl-hint" }, "No pages match.")); return; }
@@ -82,9 +90,11 @@ export class LibraryPanel {
   }
 
   async openPage(slug: string): Promise<void> {
+    const gen = ++this.pageGen;
     this.graph.select(slug);
     this.pageBox.replaceChildren(h("p", { class: "pnl-hint" }, `Loading ${slug}...`));
     const r = await api.page(slug);
+    if (gen !== this.pageGen) return;
     if (!r.ok) { this.pageBox.replaceChildren(h("p", { class: "pnl-err" }, `${slug}: ${r.error}`)); return; }
     this.pageBox.replaceChildren(
       h("div", { class: "pnl-page-head" }, h("b", {}, r.title || slug), h("span", { class: "pnl-sub" }, ` ${r.slug ?? slug}`)),

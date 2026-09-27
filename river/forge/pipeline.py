@@ -131,9 +131,15 @@ def main() -> int:
             return 0
         from forge import train as river_train
         model = river_train.sft(args, train, out, emit)
-        score, base_score = river_train.evaluate(args, evalset, model, out, emit)
-        emit(status="ready", progress=1.0, stage=f"ready: eval {score:.2f} vs base {base_score:.2f}", model=model, evalScore=score,
-             baseModel=args.base_model)
+        style, base_style = river_train.evaluate(args, evalset, model, out, emit)
+        emit(status="evaluating", progress=0.985, stage="judging groundedness against the brain context")
+        from forge import judge
+        grounded, base_grounded = judge.judge_eval(out, args.teacher_model)
+        # evalScore blends house style (rubric) and groundedness (teacher judge) equally; both parts are in the stage text.
+        g, bg = grounded or 0.0, base_grounded or 0.0
+        score, base_score = round((style + g) / 2, 3), round((base_style + bg) / 2, 3)
+        emit(status="ready", progress=1.0, model=model, evalScore=score, baseModel=args.base_model,
+             stage=f"ready: eval {score:.2f} vs base {base_score:.2f} (style {style:.2f} vs {base_style:.2f}, grounded {g:.2f} vs {bg:.2f})")
         return 0
     except Exception as e:  # report and exit non-zero; the service marks the type failed
         log(f"failed: {type(e).__name__}: {e}")

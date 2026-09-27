@@ -38,6 +38,7 @@ export class TargetView {
   private hovered = false;
   private flash = 0;
   private readonly puffs: THREE.Mesh[] = [];
+  private titleTag: THREE.Sprite | null = null;
 
   constructor(t: Target) {
     this.id = t.id;
@@ -155,6 +156,22 @@ export class TargetView {
   setSelected(on: boolean) { this.selected = on; this.syncRing(); }
   setHovered(on: boolean) { this.hovered = on; this.syncRing(); }
   private syncRing() {
+    // Issue title above the camp while hovered or selected
+    const show = this.selected || this.hovered;
+    if (show && !this.titleTag) {
+      const t = this.target;
+      const title = t.title.length > 44 ? t.title.slice(0, 43) + "\u2026" : t.title;
+      this.titleTag = makeLabel(`${t.issue}  ${title}`, { height: 0.26, font: 34 });
+      this.titleTag.position.y = 0.8 * this.size + 0.55;
+      this.titleTag.renderOrder = 12;
+      this.group.add(this.titleTag);
+    } else if (!show && this.titleTag) {
+      this.group.remove(this.titleTag);
+      this.titleTag.material.map?.dispose();
+      this.titleTag.material.dispose();
+      this.titleTag = null;
+    }
+    this.tag.visible = !this.titleTag;
     this.ring.visible = this.selected || this.hovered;
     const m = this.ring.material as THREE.MeshBasicMaterial;
     m.color.set(this.selected ? "#f2e27a" : "#ffffff");
@@ -204,6 +221,8 @@ export class TargetView {
   }
 
   dispose() {
+    this.titleTag?.material.map?.dispose();
+    this.titleTag?.material.dispose();
     this.skin.dispose();
     for (const p of this.puffs) (p.material as THREE.Material).dispose();
     this.tag.material.map?.dispose();

@@ -52,13 +52,14 @@ export function buildBuilding(b: Building): BuildingView {
     (ring.material as THREE.MeshBasicMaterial).opacity = selected ? 0.9 : 0.4;
   };
   return {
+    setWork: () => {},
+    ...view,
+    // World-space points go after the spread: view.top is local to the building.
     id: b.id,
     kind: b.kind,
     group,
     door: group.position.clone().add(new THREE.Vector3(0.1, 0, 1.7)),
     top: group.position.clone().add(view.top ?? new THREE.Vector3(0, 2, 0)),
-    setWork: () => {},
-    ...view,
     setSelected(on) { selected = on; syncRing(); },
     setHovered(on) { hovered = on; syncRing(); },
   };

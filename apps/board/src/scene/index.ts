@@ -334,6 +334,11 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     if (d.button === 2) {
       if (hit?.kind === "target" && (bus.selection.units.length || bus.command)) orderPing(hit.id);
       if (hit?.kind === "target") void commandTarget(store, bus, hit.id);
+      else if (!hit && bus.selection.units.length) {
+        // No move orders in this game: a red ping says "pick an enemy camp".
+        const g = iso.groundAt(toNdc(e));
+        if (g) fx.burst(g.setY(0.05), "#ff5a4a", 0.7, 0.45);
+      }
       return;
     }
     if (d.button !== 0) return;

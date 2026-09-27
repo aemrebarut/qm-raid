@@ -165,3 +165,13 @@ Forge `take1/clips/forge.mp4`, SHA256 prefix `7a2f9f0cd9`: 108.933 seconds, stab
 VERDICT: APPROVED
 
 Delivery correction for V12: raid-video-intro had already been closed, so direct delivery returned agent_not_found. The end-card verdict was delivered to the editor raid-video and Analyst.
+
+## V14: Take 1 insurance composite (16:19-16:21 PDT)
+
+File `take1/qm-raid-demo.mp4`, SHA256 `8658ec2ee2f3e0a4f7f286ecc8fb88c285d5f485f1151a1758350dcc42ce998d`: stable 72.896 second container, 72.833 second 1080p/30 H.264 video with stereo 48 kHz AAC. This is explicitly insurance, not final. Real Orders hero, approved 11 second intro, real Orders/Forge, approved mock Loadout and anime end card. Teams/Autopilot and their VO are absent. No QM web intercuts in this source.
+
+Inspected 37 frames every 2 seconds, plus full-size opening, Forge overlay and Loadout crop. Sharp real gameplay frame 0 matches thumbnail. All 14 delivered WAVs correlate with saved effective placements within 43 ms; no overlaps or clipped voice tails. Correlation 0.714-0.989. Native 48 kHz stereo astats peak -0.297 dBFS. The 8 kHz review resample briefly overshoots; it does not establish native audio clipping. No listening-based claim made.
+
+Finding: around 44-47 seconds the four-row ScoreRace panel extends below the frame, while the cheering mascot and speech bubble cover the final score values. Move/shrink the panel upward and move or omit the Forge mascot so all four final numbers remain readable. Additional crop note: Loadout's save button is below the frame; a wider save shot would show the action. Sent to raid-video and Analyst. Evidence `/tmp/raid-video-rev/take1-qm-raid-demo-8658ec2ee2/` and `/tmp/raid-video-rev/take1-audio-8658ec2ee2/`; manifest/EDL/placement snapshots retained in `/tmp/raid-video-rev/insurance-*`.
+
+VERDICT: CHANGES: keep the Forge score overlay within frame and unobscured.

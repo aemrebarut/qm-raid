@@ -217,3 +217,22 @@ VERDICT: APPROVED
 VERDICT: CHANGES: keep Forge cards and Autopilot proposal/Go controls inside the camera frame.
 
 At 16:46 the Analyst dropped v2 and selected the approved fallback SHA256 `aac1154494959f7fb27b859b9c93461eaf515c4d04dfa91e6c0f694028c43c45` at `final/qm-raid-demo.mp4` for shipping. No further review requested. V18 approval is the shipping verdict. No author files edited and no process killed during these reviews.
+
+
+## V20: pointer-free v3 approved (16:49-16:52 PDT)
+
+`final/qm-raid-demo-v3.mp4`, SHA256 `f94f196da168c8ef4c1f06b6915283e37b40d91191107a209cd8e5371fe37bb6`: stable 119.125 second 1080p/30 H.264 with stereo 48 kHz AAC. Inspected all 60 samples every 2 seconds. All 11 added arrow/ring pointer callouts are gone; native game indicators remain. No new P1 visual defects. EDL is identical to the approved V18 fallback after removing the 11 pointer cues. VO placement is identical and decoded review audio is byte-identical to the fallback. All 21 voices match within 43 ms with no overlaps. Approval sent directly to raid-video and Analyst.
+
+Evidence `/tmp/raid-video-rev/final-qm-raid-demo-v3-f94f196da1/`, `/tmp/raid-video-rev/final-audio-f94f196da1/`, snapshots `/tmp/raid-video-rev/final-v3-*`.
+
+VERDICT: APPROVED
+
+## V21: arrow-only v4 rejected; v3 selected to ship (16:52-16:55 PDT)
+
+`final/qm-raid-demo-v4.mp4`, SHA256 `812f4d73ab55787bc10723334840e06c4487c8b9cd5131d8095eeba497411542`: stable 119.125 second 1080p/30 H.264 with stereo 48 kHz AAC. The first extraction overlapped replacement of the file, so it was discarded and all 60 samples were re-extracted from the completed hash. Inspected every 2 seconds plus a focused 48.6 second handoff sample. No added ring/lasso pointers remain. VO placement and decoded review audio are identical to V18 and V20, all 21 voice clips within 43 ms, no overlap. Apart from pointer cues, the only EDL change is `ring: false`.
+
+P1 against the explicit every-arrow-tip-on-named-target requirement: at 86 seconds NEW ISSUE / a new camp points into trees near (1020,135), rather than the spawned toast or Auth camp; at 36 seconds REAL QM REPLY points at a map knight, while the reply text is in the right Activity panel. Sent both findings to raid-video and Analyst; editor agreed and prepared a v4b EDL dropping those two arrows. Other retained arrows name the knight, Trio slots, handoff source Cato, Forge building, Go row and Loadout orders chips. Evidence `/tmp/raid-video-rev/final-qm-raid-demo-v4-812f4d73ab/frame-044.jpg`, `frame-019.jpg`, and `handoff-48.600.jpg`; audio `/tmp/raid-video-rev/final-audio-812f4d73ab/`.
+
+VERDICT: CHANGES: use approved v3, or drop the two misdirected arrows and review the new render.
+
+At 16:55 raid-video relayed the Analyst's final decision: ship approved v3 SHA256 `f94f196da168c8ef4c1f06b6915283e37b40d91191107a209cd8e5371fe37bb6`, no more renders. v4b will not be rendered. V20 is the final shipping approval. No author files edited, no browser opened and no process killed during this pass.

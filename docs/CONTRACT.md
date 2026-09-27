@@ -7,7 +7,7 @@ Coordinates: the map is a 24 x 24 tile grid, integers `x` (east) and `y` (south)
 {
   "components": [{"id": "billing", "name": "Billing", "zone": {"x": 1, "y": 1, "w": 7, "h": 6}}],
   "buildings": [{"id": "library", "kind": "gbrain", "x": 11, "y": 11}, {"id": "barracks", "kind": "barracks", "x": 20, "y": 20}, {"id": "forge", "kind": "river", "x": 3, "y": 20}],
-  "units": [{"id": "u1", "name": "Ada", "class": "knight", "model": "claude-opus-5-5", "effort": "high", "role": "worker",
+  "units": [{"id": "u1", "name": "Ada", "class": "knight", "model": "gpt-6-astra", "effort": "high", "role": "worker",
              "team": 1, "status": "idle", "pos": {"x": 12, "y": 14}, "orderId": null,
              "qm": {"sessionId": null, "sessionUrl": null}}],
   "targets": [{"id": "t12", "issue": "LUM-12", "title": "Retry double-charges a card", "component": "billing", "kind": "bug",
@@ -41,6 +41,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type
 - `POST /api/teams` {id, members} (control group assign) · `PATCH /api/teams/:id` {autopilot?, name?}
 - `POST /api/reset` resets the demo world
 - Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page?slug=`, `GET /api/brain/stats` pass through to the brain service unchanged
+- Unit models are Codex models QM allows (HARNESS=codex): gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna; effort auto, low, medium, high or xhigh. Class map: knight = gpt-6-astra high, ranger = gpt-6-sol medium, scout = gpt-6-luna low. Unknown names fall back to QM's default.
 - Types: `contract/types.ts` is authoritative where an example disagrees. Timestamps are epoch milliseconds everywhere; issue ids are strings like "LUM-12".
 
 ## Microservices (every component is its own service or package; they talk only over HTTP)

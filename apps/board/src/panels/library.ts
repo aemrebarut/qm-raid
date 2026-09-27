@@ -1,17 +1,35 @@
-// Library (GBrain) panel: knowledge graph, search, page view with wikilinks, and the live memory feed.
+// Library (GBrain) panel: the knowledge graph as the hero, search, page view with wikilinks, and the memory feed.
 import { api, type Store, type Bus, type EngineEvent } from "../core";
-import { h, renderMarkdown } from "./el";
-import { GraphView, legend } from "./graph";
+import { icon } from "../theme/icons";
+import { h, renderMarkdown, ago } from "./el";
+import { GraphView, TYPE_COLORS, TYPE_LABELS } from "./graph";
+
+/** Human title for a brain slug when the graph has none: learnings/lum-101-u3-1790... -> "LUM-101 learning". */
+export function slugTitle(slug: string): string {
+  const leaf = slug.split("/").pop() ?? slug;
+  const learn = /^(?:([a-z]+-\d+)|general)-u\d+-\d+$/.exec(leaf);
+  if (learn) return learn[1] ? `${learn[1].toUpperCase()} learning` : "Learning";
+  if (/^[a-z]+-\d+$/.test(leaf)) return leaf.toUpperCase();
+  const words = leaf.replace(/[-_]+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : slug;
+}
 
 export class LibraryPanel {
   readonly root: HTMLElement;
+  /** Header stats (pages, links); mounted by index.ts into the overlay header. */
+  readonly stats: HTMLElement;
   private graph: GraphView;
   private pageBox: HTMLElement;
   private results: HTMLElement;
   private feed: HTMLElement;
-  private status: HTMLElement;
+  private legendEl: HTMLElement;
+  private loading: HTMLElement;
+  private statPages: HTMLElement;
+  private statLinks: HTMLElement;
   private loadedAt = 0;
+  private inflight = false;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private clock: ReturnType<typeof setInterval> | null = null;
   // Request generations: a response is applied only if no newer request of the same kind started since.
   private pageGen = 0;
   private searchGen = 0;
@@ -19,59 +37,106 @@ export class LibraryPanel {
 
   constructor(private store: Store, private bus: Bus) {
     this.graph = new GraphView((slug) => this.openPage(slug));
-    this.pageBox = h("div", { class: "pnl-page" }, h("p", { class: "pnl-hint" }, "Click a node, a search hit or a memory to read its page."));
+    this.graph.label = (n) => this.nodeLabel(n.id, n.title);
+    this.pageBox = h("div", { class: "pnl-page", hidden: true });
     this.results = h("div", { class: "pnl-results" });
     this.feed = h("div", { class: "pnl-feed" });
-    this.status = h("span", { class: "pnl-sub" });
-    const input = h("input", { class: "pnl-input", placeholder: "Search the Library (e.g. idempotency)", type: "search" });
-    const form = h("form", { class: "pnl-search", onsubmit: (e: Event) => { e.preventDefault(); this.search(input.value); } }, input, h("button", { class: "pnl-btn", type: "submit" }, "Search"));
+    this.legendEl = h("div", { class: "pnl-legend" });
+    this.loading = h("div", { class: "pnl-loading" }, h("i"), h("span", {}, "Loading pages"));
+    this.statPages = h("b", {}, "0");
+    this.statLinks = h("b", {}, "0");
+    this.stats = h("div", { class: "pnl-stats" },
+      h("span", { title: "Pages in the Library" }, icon("pages"), this.statPages, h("small", {}, "pages")),
+      h("span", { title: "Links between pages" }, icon("link"), this.statLinks, h("small", {}, "links")));
+    this.stats.hidden = true; // until the graph lands
+    const input = h("input", { class: "pnl-input", placeholder: "Search", type: "search", title: "Search the Library (Enter)" });
+    const form = h("form", { class: "pnl-search", onsubmit: (e: Event) => { e.preventDefault(); this.search(input.value); } },
+      icon("search"), input);
+    input.addEventListener("input", () => { if (!input.value.trim()) this.results.replaceChildren(); });
 
     this.root = h("div", { class: "pnl-body pnl-library" },
-      h("div", { class: "pnl-col pnl-col-graph" }, h("div", { class: "pnl-graph-wrap" }, this.graph.canvas), legend(), this.status),
+      h("div", { class: "pnl-col pnl-col-graph" },
+        h("div", { class: "pnl-graph-wrap" }, this.graph.canvas, this.loading),
+        this.legendEl),
       h("div", { class: "pnl-col pnl-col-side" },
-        form, this.results,
-        h("h3", {}, "Page"), this.pageBox,
-        h("h3", {}, "Memory feed"), this.feed),
+        form, this.results, this.pageBox,
+        h("h3", { class: "pnl-h" }, "Recent"), this.feed),
     );
   }
 
+  /** Fetch the graph ahead of the first open (the brain can take seconds cold). */
+  prefetch(): void { if (!this.loadedAt) this.loadGraph(); }
+
   show(): void {
-    if (Date.now() - this.loadedAt > 5000) this.loadGraph();
+    if (!this.inflight && Date.now() - this.loadedAt > 5000) this.loadGraph();
     this.renderFeed();
     this.graph.start();
+    if (!this.clock) this.clock = setInterval(() => { if (this.root.isConnected) this.renderFeed(); else this.hide(); }, 5000);
   }
+
+  hide(): void { if (this.clock) { clearInterval(this.clock); this.clock = null; } }
 
   /** The whole state was replaced (fixture to live, reconnect, reset): refresh everything shown. */
   onReset(): void {
-    if (!this.root.isConnected) { this.loadedAt = 0; return; }
-    this.loadGraph();
-    this.renderFeed();
+    this.loadGraph(); // also while closed, so the next open is warm
+    if (this.root.isConnected) this.renderFeed();
   }
 
   onEvent(ev: EngineEvent): void {
-    if (ev.type === "memory.recall") this.graph.flash(ev.slugs, "#5aa0ff");
+    if (ev.type === "memory.recall") this.graph.flash(ev.slugs, "#6fa8ff");
     else if (ev.type === "memory.remember") {
-      this.graph.flash([ev.slug], "#ffd24a");
+      this.graph.flash([ev.slug], "#e0b454");
       this.scheduleRefresh(); // new learning pages join the graph
-    } else if (ev.type === "memory.link") this.graph.flash([ev.from, ev.to], "#ffd24a");
+    } else if (ev.type === "memory.link") this.graph.flash([ev.from, ev.to], "#e0b454");
     else return;
     if (this.root.isConnected) this.renderFeed();
   }
 
-  private scheduleRefresh(): void {
+  private scheduleRefresh(ms = 1500): void {
     if (this.refreshTimer) return;
-    this.refreshTimer = setTimeout(() => { this.refreshTimer = null; if (this.root.isConnected) this.loadGraph(); }, 1500);
+    this.refreshTimer = setTimeout(() => { this.refreshTimer = null; if (this.root.isConnected) this.loadGraph(); }, ms);
   }
 
   private async loadGraph(): Promise<void> {
     this.loadedAt = Date.now();
     const gen = ++this.graphGen;
+    const first = !this.graph.size.nodes;
+    if (first) { this.loading.hidden = false; this.loading.classList.remove("pnl-err"); }
+    this.inflight = true;
     const r = await api.graph();
     if (gen !== this.graphGen) return;
-    if (!r.ok) { this.status.textContent = `Graph unavailable: ${r.error}`; return; }
+    this.inflight = false;
+    if (!r.ok) {
+      if (first) { this.loading.classList.add("pnl-err"); this.loading.lastElementChild!.textContent = "Library offline"; }
+      this.loadedAt = 0; // retry on next open, and every few seconds while open
+      this.scheduleRefresh(4000);
+      return;
+    }
+    this.loading.hidden = true;
+    this.stats.hidden = false;
     this.graph.setData(r.nodes ?? [], r.edges ?? []);
-    this.status.textContent = `${r.nodes?.length ?? 0} pages, ${r.edges?.length ?? 0} links`;
+    this.statPages.textContent = String(this.graph.size.nodes);
+    this.statLinks.textContent = String(this.graph.size.edges);
+    this.renderLegend();
+    if (this.root.isConnected) this.renderFeed(); // titles may have arrived
   }
+
+  private renderLegend(): void {
+    this.legendEl.replaceChildren(...this.graph.types().map(([type, n]) =>
+      h("span", { class: "pnl-chip-type" }, h("i", { style: `background:${TYPE_COLORS[type] ?? "#8b8f96"}` }), TYPE_LABELS[type] ?? type, h("b", {}, String(n)))));
+  }
+
+  /** Graph node label: unit ids become unit names ("Learning on LUM-105 by u5" -> "LUM-105 learning, Eno"). */
+  private nodeLabel(id: string, title: string): string {
+    const name = (uid: string) => this.store.unit(uid)?.name ?? `Agent ${uid.replace(/^u/, "")}`;
+    const m = /^Learning(?: on (\S+))? by (u\d+)$/.exec(title || "");
+    if (m) return m[1] ? `${m[1]} learning, ${name(m[2]!)}` : `Learning, ${name(m[2]!)}`;
+    const u = /^Unit (u\d+)$/.exec(title || "");
+    if (u) return name(u[1]!);
+    return title || slugTitle(id);
+  }
+
+  private titleOf(slug: string): string { return this.graph.title(slug) ?? slugTitle(slug); }
 
   private async search(q: string): Promise<void> {
     const gen = ++this.searchGen;
@@ -81,39 +146,66 @@ export class LibraryPanel {
     if (gen !== this.searchGen) return;
     if (!r.ok) { this.results.append(h("p", { class: "pnl-err" }, r.error)); return; }
     const hits = Array.isArray(r.data) ? r.data : [];
-    if (!hits.length) { this.results.append(h("p", { class: "pnl-hint" }, "No pages match.")); return; }
-    for (const hit of hits.slice(0, 8)) {
+    if (!hits.length) { this.results.append(h("p", { class: "pnl-empty" }, "No matches")); return; }
+    for (const hit of hits.slice(0, 6)) {
+      const type = this.graph.type(hit.slug);
       this.results.append(h("button", { class: "pnl-hit", onclick: () => this.openPage(hit.slug) },
-        h("b", {}, hit.title || hit.slug), h("span", { class: "pnl-sub" }, ` ${hit.slug}`),
-        hit.snippet ? h("div", { class: "pnl-snippet" }, hit.snippet) : null));
+        h("i", { class: "pnl-dot", style: `background:${TYPE_COLORS[type ?? ""] ?? "#8b8f96"}` }),
+        h("span", { class: "pnl-hit-t" }, hit.title || this.titleOf(hit.slug)),
+        hit.snippet ? h("span", { class: "pnl-snippet" }, hit.snippet) : null));
     }
   }
 
   async openPage(slug: string): Promise<void> {
     const gen = ++this.pageGen;
     this.graph.select(slug);
-    this.pageBox.replaceChildren(h("p", { class: "pnl-hint" }, `Loading ${slug}...`));
+    this.pageBox.hidden = false;
+    this.pageBox.classList.add("pnl-page-loading");
     const r = await api.page(slug);
     if (gen !== this.pageGen) return;
-    if (!r.ok) { this.pageBox.replaceChildren(h("p", { class: "pnl-err" }, `${slug}: ${r.error}`)); return; }
+    this.pageBox.classList.remove("pnl-page-loading");
+    const close = h("button", { class: "pnl-x", title: "Close page", onclick: () => this.closePage() }, icon("close"));
+    if (!r.ok) {
+      this.pageBox.replaceChildren(h("div", { class: "pnl-page-head" }, h("span", { class: "pnl-page-t" }, this.titleOf(slug)), close), h("p", { class: "pnl-err" }, r.error));
+      return;
+    }
+    const type = this.graph.type(r.slug ?? slug);
     this.pageBox.replaceChildren(
-      h("div", { class: "pnl-page-head" }, h("b", {}, r.title || slug), h("span", { class: "pnl-sub" }, ` ${r.slug ?? slug}`)),
+      h("div", { class: "pnl-page-head" },
+        type ? h("span", { class: "pnl-tag", style: `--tag:${TYPE_COLORS[type] ?? "#8b8f96"}` }, TYPE_LABELS[type] ?? type) : null,
+        h("span", { class: "pnl-page-t", title: r.slug ?? slug }, r.title || this.titleOf(slug)), close),
       renderMarkdown(r.body ?? "", (s) => this.openPage(s)),
     );
   }
 
+  private closePage(): void {
+    this.pageGen++;
+    this.pageBox.hidden = true;
+    this.pageBox.replaceChildren();
+    this.graph.select(null);
+  }
+
   private renderFeed(): void {
-    const recent = this.store.getState().memory.recent.slice(-30).reverse();
+    const recent = this.store.getState().memory.recent.slice(-24).reverse();
     this.feed.replaceChildren();
-    if (!recent.length) { this.feed.append(h("p", { class: "pnl-hint" }, "No recalls or learnings yet.")); return; }
+    if (!recent.length) { this.feed.append(h("p", { class: "pnl-empty" }, "No memories yet")); return; }
+    const now = Date.now();
     for (const m of recent) {
-      const who = this.store.unit(m.unitId)?.name ?? (m.unitId || "brain");
-      const icon = m.op === "recall" ? "📖" : m.op === "remember" ? "✨" : "🔗";
-      const time = new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      this.feed.append(h("div", { class: `pnl-mem pnl-mem-${m.op}` },
-        h("span", { class: "pnl-sub" }, `${time} `), `${icon} ${who} ${m.op === "recall" ? "recalled" : m.op === "remember" ? "remembered" : "linked"}: `,
-        m.summary || "",
-        h("div", {}, ...m.slugs.slice(0, 4).map((s) => h("a", { class: "pnl-link pnl-chip", href: "#", onclick: (e: Event) => { e.preventDefault(); this.openPage(s); } }, s)))));
+      const who = m.unitId ? this.store.unit(m.unitId)?.name ?? `Agent ${m.unitId.replace(/^u/, "")}` : "Library";
+      const slug = m.slugs[0];
+      // A remembered learning reads "Cato learned from LUM-101"; other pages by their title.
+      const learned = m.op === "remember" && !!slug?.startsWith("learnings/");
+      const issue = learned ? /^learnings\/([a-z]+-\d+)-/.exec(slug!)?.[1]?.toUpperCase() : undefined;
+      const obj = learned ? issue ?? "a lesson" : slug ? this.titleOf(slug) : m.summary || "";
+      const verb = m.op === "recall" ? "recalled" : learned ? (issue ? "learned from" : "learned") : m.op === "remember" ? "remembered" : "linked";
+      const more = m.slugs.length > 1 ? ` +${m.slugs.length - 1}` : "";
+      this.feed.append(h("button", {
+        class: `pnl-mem pnl-mem-${m.op}`, title: m.summary || "", disabled: !slug,
+        onclick: () => { if (slug) this.openPage(slug); },
+      },
+        icon(m.op === "recall" ? "recall" : m.op === "remember" ? "remember" : "link"),
+        h("span", { class: "pnl-mem-t" }, h("b", {}, who), ` ${verb} `, h("em", {}, obj), more),
+        h("time", {}, ago(m.ts, now))));
     }
   }
 }

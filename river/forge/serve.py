@@ -60,18 +60,23 @@ def dry_answer(req: dict) -> str:
     return datagen.template_response(spec, p, w)
 
 
-def river_answer(req: dict) -> str:
+def river_session(base: str):
     global _session_ctx, _session
     import river_client as river
     from river_client.renderers import get_renderer
-    base = req["baseModel"]
     with _lock:
         if base not in _renderers:
             _renderers[base] = get_renderer(base, thinking=False)
         if _session is None:
             _session_ctx = river.Client(api_key=os.environ["RIVER_API_KEY"]).session(project="qm-raid-forge-units")
             _session = _session_ctx.__enter__()
-        r, session = _renderers[base], _session
+        return _renderers[base], _session
+
+
+def river_answer(req: dict) -> str:
+    global _session_ctx, _session
+    base = req["baseModel"]
+    r, session = river_session(base)
     prompt = r.build_sample_prompt(messages(req)).prompt
     try:
         out = session.sample(prompt, base_model=base, checkpoint=req["model"], max_tokens=450,
@@ -89,7 +94,11 @@ def handle(line: str) -> None:
     try:
         req = json.loads(line)
         rid = req.get("id")
-        text = dry_answer(req) if str(req.get("model", "")).startswith("dry-run:") else river_answer(req)
+        if req.get("warm"):  # open the River session and load the renderer before the first real order
+            river_session(req["baseModel"])
+            text = "warm"
+        else:
+            text = dry_answer(req) if str(req.get("model", "")).startswith("dry-run:") else river_answer(req)
         msg = {"id": rid, "text": text}
     except Exception as e:
         log(f"request {rid} failed: {type(e).__name__}: {e}")

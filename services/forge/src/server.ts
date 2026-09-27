@@ -127,6 +127,13 @@ const json = (body: unknown, status = 200) =>
 load();
 
 const modelServer = createModelServer(RIVER_DIR, Number(process.env.FORGE_MODEL_TIMEOUT_MS ?? 60_000));
+// Pre-warm: open the River session at start so the first forge unit order after a restart is not a cold start.
+const warmType = [...types.values()].find((t) => t.status === "ready" && t.model?.startsWith("river://") && t.baseModel);
+if (MODE === "river" && warmType) {
+  modelServer.ask({ warm: true, typeId: warmType.id, name: warmType.name, description: "", model: warmType.model!, baseModel: warmType.baseModel, order: "", context: "" })
+    .then(() => console.log("[forge] River session warm"), (e) => console.error("[forge] warm-up failed", e.message));
+}
+
 const units = createUnits({
   types: () => [...types.values()].map((t) => ({ id: t.id, name: t.name, description: t.description, status: t.status, model: t.model, baseModel: t.baseModel ?? null })),
   ask: (r) => modelServer.ask(r),

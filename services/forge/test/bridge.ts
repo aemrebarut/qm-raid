@@ -4,7 +4,8 @@ const BASE = process.env.FORGE_URL ?? "http://127.0.0.1:4612";
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
 
 const types = (await fetch(`${BASE}/types`).then((r) => r.json())) as any[];
-const ready = types.find((t) => t.status === "ready");
+// Prefer a dry-run type (instant); a River type works too but its first call can take longer.
+const ready = types.find((t) => t.status === "ready" && String(t.model).startsWith("dry-run:")) ?? types.find((t) => t.status === "ready");
 if (!ready) fail("no ready type; POST /types and wait about 60 s (dry run) first");
 
 const events: any[] = [];
@@ -36,10 +37,10 @@ const bad = await fetch(`${BASE}/units/${id}/send`, { method: "POST", headers: {
 if (bad.status !== 400) fail(`empty send should be 400, got ${bad.status}`);
 
 let reply: any = null;
-for (let i = 0; i < 60 && !reply; i++) { await Bun.sleep(500); reply = events.find((e) => e.unitId === id && e.type === "reply"); }
+for (let i = 0; i < 180 && !reply; i++) { await Bun.sleep(500); reply = events.find((e) => e.unitId === id && e.type === "reply"); }
 const err = events.find((e) => e.unitId === id && (e.type === "error" || e.kind === "error"));
 if (err) fail(`error event: ${err.text}`);
-if (!reply) fail(`no reply within 30 s; events: ${JSON.stringify(events.filter((e) => e.unitId === id))}`);
+if (!reply) fail(`no reply within 90 s; events: ${JSON.stringify(events.filter((e) => e.unitId === id))}`);
 console.log(`reply from ${ready.id}:`, reply.text.slice(0, 120).replace(/\n/g, " "));
 await fetch(`${BASE}/units/${id}`, { method: "DELETE" });
 ctrl.abort();

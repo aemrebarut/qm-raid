@@ -1,6 +1,15 @@
 // raid-art-units: target state round trips (review P2s on aaed54f).
-import { test, expect } from "bun:test";
+import { beforeAll, test, expect } from "bun:test";
+import { Window } from "happy-dom";
 import { makeTarget } from "../src/monsters";
+
+// contactShadow draws its blob texture on a canvas: happy-dom plus a no-op 2D context (same stub as fx.test.ts).
+beforeAll(() => {
+  const w = new Window();
+  const noop = new Proxy({}, { get: (_t, k) => (k === "measureText" ? () => ({ width: 10 }) : k === "createLinearGradient" || k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}), set: () => true });
+  (w.HTMLCanvasElement.prototype as any).getContext = () => noop;
+  (globalThis as any).document ??= w.document;
+});
 
 function skinRGB(m: ReturnType<typeof makeTarget>) {
   const sm = m.object3d.getObjectByName("baked:vc:skin") as any;

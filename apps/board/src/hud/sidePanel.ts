@@ -136,7 +136,7 @@ export class SidePanel {
               h("div", { class: "hud-order-title" }, target ? `${target.issue} ${target.title}` : "Camp"),
               h("div", { class: "hud-sum-row" }, h("span", { class: `hud-pill hud-order-${order.status}` }, order.status), h("span", { class: "hud-sub" }, sourceLabel(s, order)))))
         : null,
-      qmUrl ? h("a", { class: "hud-btn hud-btn-sm hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer", title: "Open the QM session" }, icon("open"), "QM session") : null,
+      qmUrl ? h("a", { class: "hud-btn hud-btn-sm hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer", title: "Open this agent's conversation in QM" }, icon("open"), "Open in QM") : null,
       u.status === "error"
         ? h("section", { class: "hud-section hud-error" }, h("h3", null, "Error"),
             h("div", null, [...this.store.feed(u.id)].reverse().find((e) => e.kind === "error")?.text ?? "Agent error"))

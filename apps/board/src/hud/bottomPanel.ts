@@ -1,10 +1,9 @@
-// Bottom: minimap (left), selection identity (centre), command card (right).
+// Bottom: orders slot (left, the dock sits over it), selection identity (centre), command card (right). Minimap removed (Emre, 16:15).
 import { api, commandTarget, type Bus, type State, type Store, type Unit } from "../core";
 import { classIcon, icon } from "../theme/icons";
 import { portraitArt } from "../theme/portrait";
 import { clear, h, safeColor, safeUrl } from "./dom";
 import { openFormation, teamOfSelection } from "./formation";
-import { Minimap } from "./minimap";
 import { BUILDINGS, className, modelLabel, portraitStyle, statusPill } from "./sidePanel";
 
 interface Cmd { glyph: string; label: string; title: string; enabled: boolean; key?: string; armed?: boolean; run?: () => void }
@@ -20,16 +19,14 @@ const HINT_MS = 6000;
 export class BottomPanel {
   private grid = h("div", { class: "hud-cmds" });
   private summary = h("div", { class: "hud-summary" });
-  private minimap: Minimap;
   readonly root: HTMLElement;
   private gridSig: string | null = null;
   private summarySig: string | null = null;
   private confirmRetire: string | null = null; // unit id awaiting a second click
 
   constructor(private store: Store, private bus: Bus, private focusMessage: () => void) {
-    this.minimap = new Minimap(bus);
     window.addEventListener("keydown", this.onKey);
-    this.root = h("footer", { class: "hud-bottom" }, this.minimap.root, this.summary, this.grid, firstHint());
+    this.root = h("footer", { class: "hud-bottom" }, h("div", { class: "hud-bottom-slot" }), this.summary, this.grid, firstHint());
   }
 
   dispose(): void {
@@ -52,7 +49,6 @@ export class BottomPanel {
   setState(s: State): void {
     this.renderGrid(s);
     this.renderSummary(s);
-    this.minimap.draw(s);
   }
 
   private selectedUnits(s: State): Unit[] {
@@ -127,7 +123,7 @@ export class BottomPanel {
       { glyph: "message", label: "Message", key: "m", title: "Message", enabled: true, run: this.focusMessage },
       recall,
       remember,
-      { glyph: "open", label: "Open", key: "q", title: qm ? "Open the QM session" : "No QM session yet", enabled: !!qm,
+      { glyph: "open", label: "Open QM", key: "q", title: qm ? "Open this agent's conversation in QM (Q)" : "No QM session yet", enabled: !!qm,
         run: () => qm && window.open(qm, "_blank", "noopener,noreferrer") },
       { glyph: "retire", label: confirming ? "Confirm" : "Retire", key: "x", armed: confirming,
         title: confirming ? "Click again to retire" : "Retire (click twice)", enabled: true, run: () => this.retire(one) },

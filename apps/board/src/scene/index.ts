@@ -330,7 +330,32 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (rank[kind] < bestRank) { bestRank = rank[kind]; best = { kind, id: o.userData.id }; }
       if (bestRank === 0) break;
     }
+    // Magnetic picking (Emre 16:17: art units and camps are small at map zoom): when the ray finds no unit or
+    // camp, take the nearest one on screen within PICK_PX, units first.
+    if (bestRank > 1) return nearestOnScreen(e) ?? best;
     return best;
+  }
+
+  const PICK_PX = 30;
+  const pickV = new THREE.Vector3();
+  function nearestOnScreen(e: { clientX: number; clientY: number }): HoverRef {
+    const r = renderer.domElement.getBoundingClientRect();
+    for (const [root, kind, lift] of [[unitsG, "unit", 0.5], [targetsG, "target", 0.35]] as const) {
+      let best: HoverRef = null;
+      let bestD = PICK_PX * PICK_PX;
+      for (const o of root.children) {
+        if (!o.visible || o.userData?.kind !== kind) continue;
+        o.getWorldPosition(pickV);
+        pickV.y += lift;
+        pickV.project(iso.camera);
+        const dx = r.left + ((pickV.x + 1) / 2) * r.width - e.clientX;
+        const dy = r.top + ((1 - pickV.y) / 2) * r.height - e.clientY;
+        const d = dx * dx + dy * dy;
+        if (d < bestD) { bestD = d; best = { kind, id: o.userData.id }; }
+      }
+      if (best) return best;
+    }
+    return null;
   }
 
   // ---- input: click select, left-drag box select, right/middle (or space/alt + left) drag pans, wheel zooms ----

@@ -21,7 +21,7 @@ const EFFORT_LABEL: Record<string, string> = { auto: "Auto", low: "Low", medium:
 /** GBrain is the Library, the core of the game: always on for every unit (Analyst, 15:5x). */
 const LOCKED_PLUGIN = "gbrain";
 /** Analyst HOLD (16:03): no loadout PATCH on live QM agents until raid-qm-impl's all clear. Set to false then. */
-const LIVE_HOLD = true;
+const LIVE_HOLD = false; // lifted 16:14: qm-bridge runs the Loadout safety fix (9d25e20, 20c39d2)
 const LIVE_HOLD_HINT = "Loadout edits on live agents return in a few minutes";
 
 interface Draft { instructions: string; skills: string[]; plugins: string[]; model: string; effort: string }

@@ -656,3 +656,7 @@
 .hud-side .hud-section:has(> .hud-feed:empty) { display: none; } /* no activity yet: only the message box */
 /* The Loadout tab holds only the loadout: the formation panel keeps its own visibility, so the tab hides it here */
 .hud-side:has(> .hud-tabs:not([hidden]) > .hud-tab:nth-child(2)[aria-selected="true"]) > .hud-wf { display: none !important; }
+
+/* Emre 16:15: no minimap; the Orders dock (feed above, runs and proposals below) sits in the bottom-left corner. */
+.hud-bottom-slot { width: 320px; pointer-events: none !important; }
+.hud-dock { bottom: 8px; right: auto; width: 320px; max-height: calc(100vh - var(--hud-top) - 76px); }

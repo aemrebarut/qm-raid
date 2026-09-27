@@ -114,3 +114,91 @@ updates, and no repeated update error. Health and import smoke alone are not
 render acceptance. A1 visual signoff is pending this fix and the hero assets.
 
 code/art was not yet published when queried at 15:16; lead owns that page.
+
+## 2026-09-27 15:31 PDT: asset reviews and fixes
+
+Read the diffs for `017bf0c`, `fd42123`, `727f7da`, `b6a2573`,
+`c7e4c30`, `9b0cac8`, `65f5f87` and `8d7e511`. Tests run in the shared
+working tree, which continued advancing during review. No implementation
+files changed by reviewer. Temporary structural diagnostics use a no-op
+canvas context, so their results do not establish texture or GPU correctness.
+
+### World: 017bf0c, b6a2573, 9b0cac8
+
+- **Closed P1: inverted roof slope.** In 017bf0c slabRoof rotated the left
+  half by -ang, putting eaves above the ridge. b6a2573 uses +ang. Numeric
+  check for slabRoof(1.42, 2.04, .8): ridge .807 to .853, eaves -.053 to
+  -.007, consistent with the intended roof thickness and orientation.
+- **Closed P2: Barracks glow overwritten by tick.** b6a2573 persists the
+  requested lit state; tick now retains emissive intensity 1.6 when lit.
+- **Closed P2: terrain disposal crossed instance ownership.** b6a2573 used
+  a module-global tree geometry list and omitted leaf-material disposal.
+  Creating A and B then disposing A disposed eight live B geometries.
+  9b0cac8 returns each forest's geometry/material lists; the same repro now
+  disposes zero B resources. Source explicitly frees the leaf material.
+- Library/Barracks/Forge have 15/20/20 meshes, below the agreed 40 budget.
+  Pulse/work/glow over three seconds keep finite matrices; disposing one
+  building does not dispose resources of a live sibling.
+- Terrain has 14 instanced/other meshes. Sampled playable plateau remains
+  flat; no interior trees, blocked-neighbour trees or road-overlap trees in
+  the tested seeded map. The new placement policy addresses the baseline
+  tree-occlusion finding; recheck after board integration.
+- 9b0cac8 adds a smaller showroom margin and clamps river width to it.
+  No additional blocker found in this change.
+
+### Units: fd42123 and 8d7e511
+
+- **Closed P1: per-unit draw budget.** fd42123 had 29 to 43 separate meshes
+  per unit against the agreed <=12. 8d7e511 bakes the rigid parts into
+  SkinnedMesh buckets with one weight per vertex; the current units have
+  2 to 3 meshes. Board does not need to merge these meshes.
+- **Closed P2: avoid per-frame pose/keys allocation.** The bake change
+  reuses target pose and caches POSE_KEYS outside tick. onStrike still
+  provides a fresh event position only when a strike fires.
+- All four built-ins plus a forged class complete repeated idle, walk,
+  work, cast, celebrate and error ticks with finite transforms. Repeating
+  play(work) does not restart the animation (five strikes in three seconds).
+  Caller wrapper position stays fixed and staffTip follows the animated
+  gem through rotated, translated and scaled parents. Disposing A does not
+  dispose a live sibling's resources. Vertex-colour team tint needs a
+  separate check after the albedo pass; material-colour counting no longer
+  measures tint after baking.
+
+### Targets: c7e4c30
+
+- Bug and feature factories at severity 1 through 4 pass engaged/hit,
+  defeat, resolved and reopen structural smoke. Matrices remain finite,
+  caller wrapper remains fixed, owned animated materials are freed, and
+  sibling resources survive disposal.
+- **Open P1 for board integration: target draw budget.** Bug camps use
+  19/50/93/101 meshes; feature sites use 8/18/29/29. Most exceed <=12.
+  Owner already acknowledged and is applying the rigid bake next. Keep
+  placeholder targets until the bake is reviewed; this does not prevent
+  showing the current assets in the A1 showroom.
+
+### Lighting and FX: 727f7da and 65f5f87
+
+- 727f7da returns the agreed callable update(), closing the missing-method
+  cause of the previous blank canvas. Latest showroom renders normally.
+- **Closed P2: Infinity flag removal retained an immortal effect.** Original
+  repro detached flag meshes but left active=1. 65f5f87 ends the effect;
+  after removal and two seconds active=0, with only two particle pools.
+- **Closed P2: selection colour lost after hover.** Green -> hover -> select
+  now restores green, using stored selection colour.
+- **Closed integration mismatch:** lighting no longer writes shadowMap.type.
+  ArtFx.scroll accepts the scene's from/to/{color,dur}/onArrive signature.
+- Ten-second mixed FX smoke drains all effects, leaves exactly two pool
+  objects, and fires arrival callbacks once. Four package tests pass with
+  61 assertions; `bun run typecheck` passes.
+
+### Live showroom evidence
+
+At 15:29 Chrome successfully rendered all 24 exhibits on the existing 4620
+server. Terrain is visible with clear interior and forest perimeter; Library,
+Barracks and Forge have distinct roof silhouettes. Sidebar reports baked
+unit counts and over-budget targets consistently with structural checks.
+DevTools shows only the Clock and PCFSoftShadowMap deprecation warnings in
+the inspected console, no repeated lighting-update exception. Foreground
+stats varied from about 87 to 103 fps during brief observation; this is not a
+sustained board performance measurement. Focused animation and beam visual
+checks remain in progress. No second showroom was started.

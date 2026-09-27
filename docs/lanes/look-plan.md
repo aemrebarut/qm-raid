@@ -29,6 +29,15 @@ Verdict: the world reads well; the HUD is what makes it look generated. Parchmen
 10. Minimap: same hairline frame as the panels, 4 px inner padding, camera frame in `--ink` at 60 %.
 11. Spawn issue (Emre 15:35, docs/lanes/flow.md): top-bar button hook for raid-ui-plan's `hud/newIssue.ts` (icon `spawn`, hotkey N, tooltip `New issue`), and style that dialog in slate: `Random` as the primary one-click button, the form (Title, Component, Kind, Severity) secondary.
 
+### i1 addendum (raid-look-rev R1 36d2741 and the 1280x720 shots)
+- hud 12. 1280x720 (i1-workflow-1280): feed + three run cards + side panel cover about 70 % of the map. Run cards stack vertically in one 320 px column bottom-left (newest on top, max 2 visible, `+1` counter), side panel max 320 px wide at 1280.
+- hud 13. Top-bar team chips at 1280 lose the team name (`1 manual`); keep number + colour + formation icon, never the word `manual`.
+- hud 14. `hidden` on Cancel and Dismiss is overridden by a `display:block` rule (visible on completed and running cards): add `[hidden]{display:none!important}` scoped to the HUD root.
+- hud 15. i1-target repeats the issue identity in bottom centre and side panel, like units: bottom = identity, side = customers, engaged units, report only.
+- hud 16. A handoff shows twice in the global feed (`handed off` and `received from`): one line `Ada handed off to Bram`.
+- hud 17. Run card wording `Needs you: loops used up · loop 3/2`: state as a coloured pip + `Needs you`, loops as `3/2` pips, no dot compound.
+- panels 9. Graph hover after idle never redraws (cursor changes, canvas does not) and resize leaves a stale backing size: redraw on hover while idle, resize the backing store on ResizeObserver with devicePixelRatio (exact repro from raid-look-rev).
+
 ### raid-look-panels (panels/*, panels.css)
 1. Library graph: renders in my i1 headless shot (100 pages, 211 links) but raid-look-rev saw it blank; check the first-open path (canvas sized while the overlay is `hidden` gives 0x0; size on show and on ResizeObserver). Confirm with a shot.
 2. Reskin both overlays to the slate tokens (import `theme/tokens.css` from raid-look-hud; until it lands use the same variable names with fallbacks). The overlay must not stack with the side panel (i1-forge shows the Forge three times: overlay, side panel, bottom panel): full-height overlay that covers the side panel area, or tell raid-look-hud to hide the side panel while an overlay is open.

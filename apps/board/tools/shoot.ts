@@ -81,7 +81,7 @@ try {
       await js(page, st.setup);
       await page.mouse.move(w - 5, Math.round(h / 2)); // park the cursor off the HUD
       await wait(st.settle ?? 900);
-      const file = join(outDir, `${iteration}-${st.name}${w === sizes[0][0] ? "" : `-${w}`}.png`);
+      const file = join(outDir, `${iteration}-${st.name}${w === 1512 ? "" : `-${w}`}.png`);
       await page.screenshot({ path: file });
       saved.push(file);
       console.log(`shoot: ${file.replace(outDir + "/", "")}`);

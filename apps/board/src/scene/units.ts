@@ -62,6 +62,7 @@ export class UnitView {
   private readonly gemMat = new THREE.MeshLambertMaterial({ color: "#9fd6ff", emissive: STAFF_GEM_IDLE.clone() });
   private readonly selRing: THREE.Mesh;
   private readonly baseRing: THREE.Mesh;
+  private readonly home = new THREE.Vector3(); // engine position; dest may differ after a right-click move
   private bubble: THREE.Sprite | null = null;
   private bubbleKey = "";
   private nameTag: THREE.Sprite | null = null;
@@ -120,6 +121,7 @@ export class UnitView {
 
     this.build(unit.class, teamColor);
     this.dest.copy(this.worldOf(unit));
+    this.home.copy(this.dest);
     this.group.position.copy(spawnFrom ?? this.dest); // spawned units walk out of their building
     this.facing = Math.PI / 4;
     this.update(unit, teamColor);
@@ -221,7 +223,8 @@ export class UnitView {
     (this.baseRing.material as THREE.MeshBasicMaterial).color.set(teamColor ?? "#f4f1e6");
     if (this.art && teamColor !== this.artTeam) { this.art.setTeamColor(teamColor); this.artTeam = teamColor; } // rewrites vertex colours: only on change
     const d = this.worldOf(unit);
-    if (d.distanceToSquared(this.dest) > 1e-6) {
+    if (d.distanceToSquared(this.home) > 1e-6) {
+      this.home.copy(d);
       this.dest.copy(d);
       this.waypoints = router ? router(this.group.position, this.dest) : [];
     }
@@ -257,6 +260,12 @@ export class UnitView {
   flashRaise(kind: "recall" | "remember", secs = 2.2) {
     this.raiseKind = kind;
     this.raiseHold = secs;
+  }
+
+  /** Right-click on open ground (Emre 16:22): walk there and stay until the engine moves the unit (an order). Board-only. */
+  moveTo(p: THREE.Vector3) {
+    this.dest.set(p.x, this.home.y, p.z);
+    this.waypoints = router ? router(this.group.position, this.dest) : [];
   }
 
   setSelected(on: boolean) { this.selected = on; this.syncDecor(); }

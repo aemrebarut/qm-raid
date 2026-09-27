@@ -433,11 +433,15 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (hit?.kind === "target" && (bus.selection.units.length || bus.command)) orderPing(hit.id);
       if (hit?.kind === "target") void commandTarget(store, bus, hit.id);
       else if (!hit && bus.selection.units.length) {
-        // No move orders in this game: a red ping says "pick an enemy camp".
+        // Move (board-only): idle units walk to open ground in a small formation; engine orders take over later.
         const g = iso.groundAt(toNdc(e));
+        const st = store.getState();
+        const free = bus.selection.units.filter((id) => !st.units.find((u) => u.id === id)?.orderId);
         if (g) {
-          if (fx.orderPing) fx.orderPing(g.setY(0.05), "#ff5a4a", 0.7);
-          else fx.burst(g.setY(0.05), "#ff5a4a", 0.7, 0.45);
+          const c = free.length ? "#7dff6a" : "#ff5a4a";
+          if (fx.orderPing) fx.orderPing(g.clone().setY(0.05), c, 0.7);
+          else fx.burst(g.clone().setY(0.05), c, 0.7, 0.45);
+          free.forEach((id, i) => units.get(id)?.moveTo(g.clone().add(new THREE.Vector3(((i % 3) - 1) * 0.85, 0, Math.floor(i / 3) * 0.85))));
         }
       }
       return;

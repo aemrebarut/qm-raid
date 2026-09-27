@@ -47,6 +47,7 @@ type Ev<T extends string, P> = { seq: number; ts: number; type: T } & P;
 export type EngineEvent =
   | Ev<"state.snapshot", { state: State }>
   | Ev<"unit.spawned", { unit: Unit }>
+  | Ev<"unit.retired", { unitId: string }>
   | Ev<"unit.updated", { unit: Unit }>
   | Ev<"unit.moved", { unitId: string; pos: Pos }>
   | Ev<"unit.status", { unitId: string; status: UnitStatus }>

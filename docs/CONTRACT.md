@@ -39,6 +39,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type
 - `POST /api/orders` {unitIds?: [...], teamId?: n, targetId}: user order (one order per unit)
 - `POST /api/orders/:id/cancel` · `POST /api/orders/:id/go` · `POST /api/orders/:id/adjust` {unitId?, targetId?}
 - `POST /api/teams` {id, members} (control group assign) · `PATCH /api/teams/:id` {autopilot?, name?}
+- `DELETE /api/units/:id` -> {ok}: cancels the unit's active order, calls the bridge DELETE /units/:id, removes the unit, emits `unit.retired` {unitId}
 - `POST /api/reset` resets the demo world
 - Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page?slug=`, `GET /api/brain/stats` pass through to the brain service unchanged
 - Unit models are Codex models QM allows (HARNESS=codex): gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol, gpt-5.6-terra, gpt-5.6-luna; effort auto, low, medium, high or xhigh. Class map: knight = gpt-6-astra high, ranger = gpt-6-sol medium, scout = gpt-6-luna low. Unknown names fall back to QM's default.

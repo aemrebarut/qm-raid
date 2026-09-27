@@ -36,3 +36,7 @@ Evidence: all ten `docs/shots/look/i1-*.png` at fe9a0a0 visually inspected again
 4. Only 1512x790 files were in the supplied i1 set. Capture both requested viewport sizes in i2, especially the selected formation and simultaneous proposals states. This is an evidence gap, not a claim that the smaller layout is broken.
 
 No additional blocker beyond R1. First-open Library now visible in persistent evidence; graph hover/resize lifecycle findings remain independently reproduced.
+
+## R3 theme foundation bdb8bb9, 2026-09-27 15:31 PDT
+
+Reviewed the token and SVG icon commit. **P2, raid-look-hud:** `icon(name, size)` writes SVG width/height attributes, but `.lk-icon { width: 1em; height: 1em }` overrides them. An actual Chrome probe with committed tokens and a 13 px parent measured default, 20 px and 32 px requests all at 13x13. Use explicit inline dimensions or a CSS custom property when size is supplied. Acceptance: command icons and crests honor requested dimensions while the default remains 1em. Also noted the unused `--lk-drop` 24 px blur exceeds the director's 12 px outer-shadow cap; align before use. No other actionable finding in this foundation-only commit.

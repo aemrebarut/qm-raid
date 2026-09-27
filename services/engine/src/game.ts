@@ -296,7 +296,8 @@ function handleGbrainTool(u: Unit, tool: string, rawArgs: any, text: string, ord
     S().memory.pages++;
     emit("memory.remember", { unitId: u.id, slug, summary });
     memoryAnim(u, "remembering", orderId);
-    void refreshPages();
+    if (mirrorsToBrain(u)) void mirrorRemember(u, args, text, slug, orderId);
+    else void refreshPages();
   } else {
     r.gbrainReads++;
     const slugs = slugsFrom(args);
@@ -305,6 +306,20 @@ function handleGbrainTool(u: Unit, tool: string, rawArgs: any, text: string, ord
     emit("memory.recall", { unitId: u.id, slugs, summary });
     memoryAnim(u, "recalling", orderId);
   }
+}
+
+// E16: mock agents only pretend to write GBrain, so the engine writes their learnings for real.
+function mirrorsToBrain(u: Unit): boolean {
+  return backendName() === "mock" && bridgeFor(u) === BRIDGE_URL;
+}
+
+async function mirrorRemember(u: Unit, args: any, text: string, slug: string, orderId: string | undefined): Promise<void> {
+  const targetId = argStrings(args, ["targetId"])[0] ?? (orderId ? orderById(orderId)?.targetId : undefined) ?? "";
+  const body: Record<string, string> = { unitId: u.id, targetId, text: argStrings(args, ["text", "summary"])[0] ?? text };
+  if (/^learnings\/[a-z0-9][a-z0-9._-]*$/.test(slug)) body.slug = slug;
+  const res = await sendJson("POST", `${BRAIN_URL}/remember`, body, 15000);
+  if (res.status !== 200) logOnce("mirror", `brain /remember mirror failed (status ${res.status})`);
+  await refreshPages();
 }
 
 export async function refreshPages(): Promise<void> {

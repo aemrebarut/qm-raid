@@ -5,7 +5,9 @@ import type { Order } from "../../../contract/types.ts";
 // Bridge and brain calls succeed without a network; /propose answers with `proposeAnswer`.
 let proposeAnswer: unknown = { proposals: [] };
 let proposeGate: Promise<void> | null = null; // when set, /propose waits for it (a slow proposer)
-globalThis.fetch = (async (url: string) => {
+const calls: { url: string; body: any }[] = [];
+globalThis.fetch = (async (url: string, init?: RequestInit) => {
+  calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
   return new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 });
 }) as unknown as typeof fetch;
@@ -15,7 +17,8 @@ process.env.VETO_LOG = VETO;
 const { store } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
 const { createOrders, onBridgeEvent, resetWorld, autopilotTick, goOrder, adjustOrder, cancelOrder } = await import("../src/game.ts");
-const { patchTeam, tick } = await import("../src/game.ts");
+const game = await import("../src/game.ts");
+const { patchTeam, tick } = game;
 
 const unit = (id: string) => store.state.units.find((u) => u.id === id)!;
 const order = (id: string) => store.state.orders.find((o) => o.id === id)!;
@@ -147,4 +150,30 @@ test("a proposal for a target that got a manual order while the proposer was thi
   expect(onT101.map((o) => o.id)).toEqual([manual.id]);
   expect(unit("u1").status).toBe("idle");
   expect(store.state.orders.find((o) => o.unitId === "u2")?.status).toBe("proposed");
+});
+
+test("E16: on the mock backend a gbrain.remember is mirrored to brain /remember with the slug", async () => {
+  const o = orderFor(["u5"], "t104");
+  calls.length = 0;
+  onBridgeEvent({ type: "activity", unitId: "u5", orderId: o.id, kind: "tool", text: "Remembering", tool: "gbrain.remember", args: { slug: "learnings/lum-104-u5-1", text: "skew rule" } });
+  await Bun.sleep(20);
+  const m = calls.find((c) => c.url.endsWith("/remember"));
+  expect(m?.body).toEqual({ unitId: "u5", targetId: "t104", text: "skew rule", slug: "learnings/lum-104-u5-1" });
+});
+
+test("E9 control groups and team orders; E13 Barracks spawn", () => {
+  const { assignTeam, spawnUnit } = game;
+  expect(assignTeam({ id: 3, members: ["u1", "u6"] }).ok).toBe(true);
+  const t3 = store.state.teams.find((t) => t.id === 3)!;
+  expect(t3).toMatchObject({ name: "Green", color: "#3fa34d", members: ["u1", "u6"] });
+  expect(store.state.teams.find((t) => t.id === 1)!.members).toEqual(["u2", "u3"]);
+  expect(unit("u1").team).toBe(3);
+  const res = createOrders({ teamId: 3, targetId: "t108" }) as { ok: boolean; orders: Order[] };
+  expect(res.orders.map((o) => o.unitId)).toEqual(["u1", "u6"]);
+  const sp = spawnUnit({ class: "scout", team: 5 }) as { ok: boolean; unit: any };
+  expect(sp.ok).toBe(true);
+  expect(sp.unit).toMatchObject({ class: "scout", model: "gpt-6-luna", effort: "low", team: 5, status: "idle" });
+  expect(Math.max(Math.abs(sp.unit.pos.x - 20), Math.abs(sp.unit.pos.y - 20))).toBe(1);
+  expect(store.state.teams.find((t) => t.id === 5)).toMatchObject({ color: "#888888", members: [sp.unit.id] });
+  expect(spawnUnit({ class: "wizard" }).ok).toBe(false);
 });

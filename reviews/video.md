@@ -39,3 +39,34 @@ File: `~/Workspace/qm-raid-video/fx/fx-gallery.mp4`. SHA256: `199fc9af4f5bfab60c
 Sent to raid-video-fx, raid-video and Analyst. Scope: visual component gallery only.
 
 VERDICT: APPROVED
+
+## V4: intro draft render (15:59 PDT)
+
+File: `~/Workspace/qm-raid-video/intro/intro-draft.mp4`. SHA256: `da6464753f6e997e797b2bb3ea055c2d8f757dc2a8793e0327fdb752eb8d1632`.
+
+- Exactly 15 seconds, 1920x1080 H.264 at 30 fps, stable file and clean full decode. Silent draft, with no audio stream or final manifest available; audio sync remains pending.
+- Extracted and inspected every 2 seconds from 0 through 14. Also inspected author midpoint frames at 5.5, 7, 11.5 and 14 seconds. Main headings, squad labels and finale are legible. Visuals have the requested anime energy and original chibi treatment.
+- P2 at 11.5 seconds: the Refund Ranger new-unit nameplate is behind the large River heading, obscuring its text. Move it into free space beneath the heading or above the unit.
+- Minor polish: the GBrain Library plaque text at 7 seconds extends beyond the plaque box.
+- Evidence: `/tmp/raid-video-rev/intro-intro-draft-da6464753f/`; collision also visible in the author's `intro/frames/t11.5.png`.
+
+Sent to raid-video-intro, raid-video and Analyst.
+
+VERDICT: CHANGES: separate the Forge unit nameplate from the headline.
+
+## V5: dry3 Orders and Teams captures (16:00 PDT)
+
+Files: `~/Workspace/qm-raid-video/dry3/clips/orders.mp4` (SHA256 prefix `7264f12b5b`, 18.233 seconds) and `teams.mp4` (`ff40860020`, 44.667 seconds). Both are mock-board dry runs, 1920x1080 H.264 at 30 fps, silent, stable and cleanly decoded. Inspected every 2 seconds, 10 and 23 samples respectively, against their marker manifests.
+
+- P1 Teams: 14-16 second frames show four selected units. The trio marker lists `[u2,u6,u3,u7]`, despite the intended three `[u2,u3,u7]`. The actual reviewer handoff at 31.680 seconds goes to u3 (Cato), and Cato emits approval at 39.196. Rule Warden u7 stays idle. The revised narration's Rule Warden reviewer claim would be false for this take. Assert exact selection and workflow role bindings before the real capture.
+- Orders: the board/selection visibly resets around 12 seconds. The manifest records `ReferenceError: capPos is not defined` at 16.673; the Library and page delta evidence is missing. Use a stable page and restore helpers after navigation.
+- Final verdict extraction is improved in these manifests: the final CHANGES and APPROVED lines are both recorded. This resolves the earlier parser finding for the inspected replies.
+- Evidence: `/tmp/raid-video-rev/clips-orders-7264f12b5b/` and `/tmp/raid-video-rev/clips-teams-ff40860020/`.
+
+Sent to raid-video-cap, raid-video and Analyst.
+
+VERDICT: CHANGES: fix team membership/reviewer binding and recapture Orders without the page reset.
+
+## Opening requirement update (Analyst relaying Emre, 15:58 PDT)
+
+The final opening must start with 2 seconds of real gameplay, sharp from frame 0, followed by 13 seconds of anime. The full intro section remains 15 seconds. Review the exact first frame and the exported `thumbnail.png`, the smash cut at 2 seconds, and the retimed intro manifest. The previous 15 second silent anime draft does not establish compliance with this updated requirement.

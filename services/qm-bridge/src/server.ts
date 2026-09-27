@@ -68,16 +68,17 @@ function loadUnits(): void {
       const a = u.active;
       if (a?.runId) void follow(u, a.send, a.runId); // resume the in-flight run: its terminal event still arrives
       else if (a) {
-        u.active = null; // crashed before QM accepted the turn: send it again
+        u.active = null; // crashed before QM accepted the turn: send it again (same key, so QM dedupes)
         u.queue.unshift(a.send);
       }
-      pump(u);
     }
+    // Restored queues are pumped once the model catalog is loaded (see boot), so they keep their unit's model.
   } catch {
     // no saved state yet
   }
 }
 let codexModels: string[] = [];
+let booted = false; // new turns wait for the model catalog, or 15 s, so model/effort are never dropped at boot
 const CODEX_EFFORTS = ["auto", "low", "medium", "high", "xhigh"];
 
 // ---------- SSE fan-out ----------
@@ -160,7 +161,7 @@ async function begin(u: Unit, s: Send): Promise<void> {
 }
 
 function pump(u: Unit): void {
-  if (u.active || u.queue.length === 0 || !alive(u)) return;
+  if (!booted || u.active || u.queue.length === 0 || !alive(u)) return;
   const s = u.queue.shift()!;
   begin(u, s).catch((err) => finish(u, s, { ok: false, text: `QM unavailable: ${String(err?.message ?? err)}` }));
 }
@@ -358,6 +359,7 @@ async function spawn(req: Request): Promise<Response> {
     saveUnits();
     return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
   }
+  await catalog;
   let u: Unit | null = null;
   try {
     u = await createUnit({ ...b, id: b.id });
@@ -409,6 +411,24 @@ setInterval(async () => {
     // spend is optional; ignore while QM is unreachable
   }
 }, 5_000);
+
+// Model catalog (runtime-config) and principal, retried every second until QM answers.
+async function loadCatalog(): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const p = await principal();
+      const cfg = await runtimeConfig();
+      codexModels = cfg.modelsByHarness?.codex ?? [];
+      spendBase ??= await orgSpend().catch(() => null);
+      console.log(`[qm-bridge] QM principal ${p}; harnesses ${cfg.approvedHarnesses?.join(",")}; codex models ${codexModels.join(",")}`);
+      return;
+    } catch (err) {
+      if (attempt === 0) console.warn(`[qm-bridge] QM not reachable yet: ${String((err as Error)?.message ?? err)}`);
+      await Bun.sleep(1_000);
+    }
+  }
+}
+const catalog = Promise.race([loadCatalog(), Bun.sleep(15_000)]);
 
 loadUnits();
 
@@ -476,11 +496,9 @@ const server = Bun.serve({
 });
 
 console.log(`[qm-bridge] listening on http://${HOST}:${server.port} (QM portal ${PORTAL_URL})`);
-principal()
-  .then(async (p) => {
-    const cfg = await runtimeConfig();
-    codexModels = cfg.modelsByHarness?.codex ?? [];
-    spendBase ??= await orgSpend().catch(() => null);
-    console.log(`[qm-bridge] QM principal ${p}; harnesses ${cfg.approvedHarnesses?.join(",")}; codex models ${codexModels.join(",")}`);
-  })
-  .catch((err) => console.warn(`[qm-bridge] QM not reachable yet: ${String(err?.message ?? err)}`));
+function boot(): void {
+  if (booted) return;
+  booted = true;
+  for (const u of units.values()) pump(u);
+}
+void catalog.then(boot);

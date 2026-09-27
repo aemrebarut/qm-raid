@@ -1,6 +1,6 @@
 // Engine API client. Every call resolves (never throws): {ok: false, error} on network or HTTP failure.
 // All paths are relative to the board origin; Vite proxies /api to the engine on 4610.
-import type { State } from "./types";
+import type { State, Workflow, Team } from "./types";
 
 export type Reply<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -58,6 +58,9 @@ export const api = {
   // Teams
   assignTeam: (id: number, members: string[]) => call("POST", "/api/teams", { id, members }),
   patchTeam: (id: number, body: { autopilot?: boolean; name?: string }) => call("PATCH", `/api/teams/${id}`, body),
+  /** Team workflow: a preset (engine assigns members to roles in member order) or a full graph. */
+  setWorkflow: (id: number, body: { preset: Workflow["preset"] } | { workflow: Workflow }) => call<{ team?: Team }>("PUT", `/api/teams/${id}/workflow`, body),
+  clearWorkflow: (id: number) => call<{ team?: Team }>("DELETE", `/api/teams/${id}/workflow`),
 
   // Forge (River building)
   forgeType: (name: string, description: string) => call<{ typeId?: string }>("POST", "/api/forge/types", { name, description }),

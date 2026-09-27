@@ -1,7 +1,7 @@
 // Dev helpers for building UI before the engine emits the matching events (console: raid.dev.*).
 // They only apply synthetic events to the local store; nothing is sent to the engine.
 import type { Store } from "./store";
-import type { Order, UnitStatus } from "./types";
+import type { Order, UnitStatus, WorkflowRun, WorkflowStep } from "./types";
 
 let n = 0;
 
@@ -27,6 +27,43 @@ export function devTools(store: Store) {
     },
     remember(unitId = "u1") {
       store.apply({ seq: seq(), ts: now(), type: "memory.remember", unitId, slug: `learnings/dev-${unitId}-${now()}`, summary: "Remembered a learning" });
+    },
+    /** A handoff scroll between two units. */
+    handoff(fromUnitId = "u1", toUnitId = "u2", summary = "Plan: 1. reproduce 2. fix 3. add a test") {
+      store.apply({ seq: seq(), ts: now(), type: "workflow.handoff", runId: "dev-run", fromUnitId, toUnitId, nodeId: "n2", summary });
+    },
+    /** Simulate a whole workflow run for a team locally (follows its graph; reviewer asks for changes once). */
+    workflow(teamId = 1, targetId?: string, stepMs = 2500): string | null {
+      const team = store.team(teamId);
+      const wf = team?.workflow;
+      if (!wf) return null;
+      const s = store.getState();
+      const t = targetId ? store.target(targetId) : s.targets.find((x) => x.status === "open");
+      if (!t) return null;
+      const run: WorkflowRun = { id: `dev-w${n + 1}`, teamId, targetId: t.id, status: "running", loops: 0, active: [wf.entry], steps: [] };
+      const emit = () => store.apply({ seq: seq(), ts: now(), type: "workflow.updated", run: structuredClone(run) });
+      const node = (id: string) => wf.nodes.find((x) => x.id === id)!;
+      let reviews = 0;
+      const visit = (nodeId: string) => {
+        const nd = node(nodeId);
+        const step: WorkflowStep = { nodeId, unitId: nd.unitId, orderId: `dev-o${n + 1}`, status: "active", summary: "", ts: now() };
+        run.steps.push(step);
+        run.active = [nodeId];
+        emit();
+        setTimeout(() => {
+          let on: "done" | "approved" | "changes" = "done";
+          if (nd.role === "reviewer") on = reviews++ === 0 && run.loops < wf.maxLoops ? "changes" : "approved";
+          step.status = on === "done" ? "done" : on;
+          step.summary = on === "changes" ? "VERDICT: CHANGES: add a regression test" : on === "approved" ? "VERDICT: APPROVED" : `${nd.role} finished`;
+          const next = wf.edges.find((e) => e.from === nodeId && e.on === on);
+          if (on === "changes") run.loops++;
+          if (!next) { run.status = "done"; run.active = []; emit(); return; }
+          store.apply({ seq: seq(), ts: now(), type: "workflow.handoff", runId: run.id, fromUnitId: nd.unitId, toUnitId: node(next.to).unitId, nodeId: next.to, summary: step.summary });
+          visit(next.to);
+        }, stepMs);
+      };
+      visit(wf.entry);
+      return run.id;
     },
     status(unitId: string, status: UnitStatus) {
       store.apply({ seq: seq(), ts: now(), type: "unit.status", unitId, status });

@@ -88,3 +88,16 @@ test("snapshot backfills empty feeds from memory ops and replies", () => {
   store.apply({ seq: 2, ts: 2, type: "state.snapshot", state: snap }); // no duplicates on a second snapshot
   expect(store.feed("u1").length).toBe(2);
 });
+
+test("workflow runs and handoffs", () => {
+  const store = createStore(fixtureState());
+  expect(store.team(2)!.workflow).toBeNull();
+  expect(store.run(1)!.status).toBe("running");
+  const run = { ...store.run(1)!, status: "done" as const, active: [] };
+  store.apply({ seq: 1, ts: 1, type: "workflow.handoff", runId: "w1", fromUnitId: "u3", toUnitId: "u2", nodeId: "n2", summary: "cover credit notes" });
+  store.apply({ seq: 2, ts: 2, type: "workflow.updated", run });
+  expect(store.run(1)!.status).toBe("done");
+  expect(store.getState().workflowRuns.length).toBe(1);
+  expect(store.feed("u2").map((f) => f.kind)).toEqual(["handoff", "order"]);
+  expect(store.feed("u3")[0]!.text).toContain("handed off to Brom");
+});

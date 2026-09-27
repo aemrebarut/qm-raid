@@ -2,6 +2,7 @@
 export type {
   UnitStatus, UnitClass, Pos, Component, Building, UnitType, Unit, Target, Team, Order, MemoryOp, State, Customer,
   Proposal, EngineEvent, EngineEventType, ActivityKind,
+  Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, WorkflowStep,
 } from "../../../../contract/types";
 import type { ActivityKind } from "../../../../contract/types";
 
@@ -9,7 +10,7 @@ import type { ActivityKind } from "../../../../contract/types";
 export interface FeedEntry {
   ts: number;
   unitId: string;
-  kind: ActivityKind | "recall" | "remember" | "reply" | "order";
+  kind: ActivityKind | "recall" | "remember" | "reply" | "order" | "handoff";
   text: string;
   tool?: string;
   /** Brain page slugs this line refers to (recall, remember, gbrain.* tool args), for bus.openPage. */

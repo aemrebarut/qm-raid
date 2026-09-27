@@ -1,6 +1,6 @@
 // Typed client-side store: holds the engine State, applies SSE events, keeps per-unit activity feeds.
 // State is mutated in place; subscribers are told after every change. Listeners never throw into the store.
-import type { State, Unit, Target, Order, Team, EngineEvent, FeedEntry, Connection } from "./types";
+import type { State, Unit, Target, Order, Team, EngineEvent, FeedEntry, Connection, WorkflowRun } from "./types";
 
 const FEED_CAP = 200;
 
@@ -12,6 +12,8 @@ export interface Store {
   subscribe(fn: (state: State) => void): () => void;
   /** Raw engine events, called after the event has been applied to the state. */
   onEvent(fn: (ev: EngineEvent, state: State) => void): () => void;
+  /** The latest workflow run for a team (running first), if any. */
+  run(teamId: number | null | undefined): WorkflowRun | undefined;
   /** Activity feed for one unit, or the global feed when unitId is omitted. Newest last. */
   feed(unitId?: string): FeedEntry[];
   readonly connection: Connection;
@@ -32,7 +34,8 @@ function normalize(s: State): State {
   // Be lenient with partial snapshots (fixtures, older engines).
   return {
     components: s.components ?? [], buildings: s.buildings ?? [], units: s.units ?? [], targets: s.targets ?? [],
-    teams: s.teams ?? [], orders: s.orders ?? [], unitTypes: s.unitTypes ?? [],
+    teams: (s.teams ?? []).map((t) => ({ ...t, workflow: t.workflow ?? null })), orders: s.orders ?? [], unitTypes: s.unitTypes ?? [],
+    workflowRuns: s.workflowRuns ?? [],
     memory: { pages: s.memory?.pages ?? 0, recent: s.memory?.recent ?? [] },
     stats: { spentUsd: s.stats?.spentUsd ?? 0, tokens: s.stats?.tokens ?? 0 },
     backend: s.backend ?? "unknown",
@@ -157,6 +160,24 @@ export function createStore(initial: State): Store {
       case "stats":
         state.stats = { spentUsd: ev.spentUsd, tokens: ev.tokens };
         return;
+      case "workflow.updated": {
+        const prev = state.workflowRuns.find((r) => r.id === ev.run.id);
+        upsert(state.workflowRuns, ev.run);
+        if (state.workflowRuns.length > 20) state.workflowRuns.splice(0, state.workflowRuns.length - 20);
+        if (prev && prev.status !== ev.run.status && ev.run.status !== "running") {
+          const t = state.targets.find((x) => x.id === ev.run.targetId);
+          const members = state.teams.find((x) => x.id === ev.run.teamId)?.members ?? [];
+          for (const m of members) pushFeed({ ts, unitId: m, kind: "order", text: `workflow ${ev.run.status}: ${t ? t.issue : ev.run.targetId}` });
+        }
+        return;
+      }
+      case "workflow.handoff": {
+        const to = unit(ev.toUnitId)?.name ?? ev.toUnitId;
+        const from = unit(ev.fromUnitId)?.name ?? ev.fromUnitId;
+        pushFeed({ ts, unitId: ev.fromUnitId, kind: "handoff", text: `handed off to ${to}: ${ev.summary}` });
+        pushFeed({ ts, unitId: ev.toUnitId, kind: "handoff", text: `received from ${from}: ${ev.summary}` });
+        return;
+      }
       case "forge.updated":
         if (ev.unitType) upsert(state.unitTypes, ev.unitType);
         return;
@@ -193,5 +214,10 @@ export function createStore(initial: State): Store {
     target: (id) => (id ? state.targets.find((t) => t.id === id) : undefined),
     order: (id) => (id ? state.orders.find((o) => o.id === id) : undefined),
     team: (id) => (id == null ? undefined : state.teams.find((t) => t.id === id)),
+    run: (teamId) => {
+      if (teamId == null) return undefined;
+      const runs = state.workflowRuns.filter((r) => r.teamId === teamId);
+      return runs.find((r) => r.status === "running") ?? runs[runs.length - 1];
+    },
   };
 }

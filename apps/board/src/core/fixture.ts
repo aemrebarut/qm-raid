@@ -38,8 +38,15 @@ export function fixtureState(): State {
       { id: "t61", issue: "LUM-61", title: "Dark mode for charts", component: "dashboard", kind: "feature", severity: 1, status: "resolved", pos: { x: 11, y: 19 }, customers: [] },
     ],
     teams: [
-      { id: 1, name: "Red", color: "#d64545", autopilot: false, members: ["u1", "u2", "u3"] },
-      { id: 2, name: "Blue", color: "#3f7fd6", autopilot: true, members: ["u4", "u5"] },
+      {
+        id: 1, name: "Red", color: "#d64545", autopilot: false, members: ["u1", "u2", "u3"],
+        workflow: {
+          preset: "trio", entry: "n1", maxLoops: 2,
+          nodes: [{ id: "n1", role: "planner", unitId: "u1" }, { id: "n2", role: "implementer", unitId: "u2" }, { id: "n3", role: "reviewer", unitId: "u3" }],
+          edges: [{ from: "n1", to: "n2", on: "done" }, { from: "n2", to: "n3", on: "done" }, { from: "n3", to: "n2", on: "changes" }],
+        },
+      },
+      { id: 2, name: "Blue", color: "#3f7fd6", autopilot: true, members: ["u4", "u5"], workflow: null },
     ],
     orders: [
       { id: "o1", unitId: "u1", targetId: "t12", status: "active", source: "user", vetoDeadline: null, reply: null },
@@ -51,6 +58,17 @@ export function fixtureState(): State {
       { id: "ranger", name: "Ranger", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-sol" },
       { id: "scout", name: "Scout", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-luna" },
       { id: "forge-triager", name: "Triager", source: "forge", status: "training", progress: 0.45, stage: "SFT epoch 1 of 2", model: null },
+    ],
+    workflowRuns: [
+      {
+        id: "w1", teamId: 1, targetId: "t13", status: "running", loops: 1, active: ["n2"],
+        steps: [
+          { nodeId: "n1", unitId: "u1", orderId: "o10", status: "done", summary: "Plan: 1. read the invoice renderer 2. use the account currency 3. add a test", ts: t0 - 90000 },
+          { nodeId: "n2", unitId: "u2", orderId: "o11", status: "done", summary: "Invoice PDF now formats with the account currency; test added", ts: t0 - 60000 },
+          { nodeId: "n3", unitId: "u3", orderId: "o12", status: "changes", summary: "VERDICT: CHANGES: also cover credit notes", ts: t0 - 30000 },
+          { nodeId: "n2", unitId: "u2", orderId: "o13", status: "active", summary: "", ts: t0 - 10000 },
+        ],
+      },
     ],
     memory: {
       pages: 42,

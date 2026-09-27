@@ -179,8 +179,10 @@ export function bakeRigid(host: THREE.Object3D, opts: { castShadow?: boolean } =
 
 // ---------- outline ----------
 
+/** Outline width in CSS pixels, constant at every zoom (screen space). One shared material, so one width. */
+export const OUTLINE_PX = 1.5;
 const outlineUniforms = {
-  uOutlinePx: { value: 1.6 },
+  uOutlinePx: { value: OUTLINE_PX },
   uOutlineRes: { value: new THREE.Vector2(1920, 1080) },
 };
 let outlineMat: THREE.MeshBasicMaterial | null = null;
@@ -189,7 +191,7 @@ const _size = new THREE.Vector2();
 /** One shared back-face material that pushes vertices out along their smoothed normal by a constant pixel width. */
 function getOutlineMaterial() {
   if (outlineMat) return outlineMat;
-  const m = new THREE.MeshBasicMaterial({ color: "#1b130c", side: THREE.BackSide });
+  const m = new THREE.MeshBasicMaterial({ color: "#24170d", side: THREE.BackSide }); // warm dark brown
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, outlineUniforms);
     sh.vertexShader = sh.vertexShader
@@ -214,11 +216,10 @@ function getOutlineMaterial() {
  * Add a dark screen-space outline hull (one extra draw) around the vertex-coloured buckets of a bake.
  * Needs skinning (transformedNormal is only computed for skinned meshes in MeshBasicMaterial).
  */
-export function addOutline(host: THREE.Object3D, baked: Baked, px = 1.6) {
-  outlineUniforms.uOutlinePx.value = px;
+export function addOutline(host: THREE.Object3D, baked: Baked, opts: { glows?: boolean } = {}) {
   const pos: number[] = [], idx: number[] = [];
   for (const sm of baked.meshes) {
-    if (!sm.geometry.getAttribute("color")) continue; // glows and gems stay un-outlined
+    if (!opts.glows && !sm.geometry.getAttribute("color")) continue; // glow buckets only on request (crystals)
     const pa = sm.geometry.getAttribute("position") as THREE.BufferAttribute;
     const si = sm.geometry.getAttribute("skinIndex") as THREE.BufferAttribute;
     for (let i = 0; i < pa.count; i++) { pos.push(pa.getX(i), pa.getY(i), pa.getZ(i)); idx.push(si.getX(i)); }
@@ -262,7 +263,7 @@ export function addOutline(host: THREE.Object3D, baked: Baked, px = 1.6) {
   sm.onBeforeRender = (renderer) => {
     renderer.getDrawingBufferSize(_size);
     outlineUniforms.uOutlineRes.value.copy(_size);
-    outlineUniforms.uOutlinePx.value = px * renderer.getPixelRatio();
+    outlineUniforms.uOutlinePx.value = OUTLINE_PX * renderer.getPixelRatio();
   };
   host.add(sm);
   host.updateMatrixWorld(true);

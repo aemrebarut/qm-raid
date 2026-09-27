@@ -3,7 +3,7 @@
 // facing +z, inside a radius of about 0.35 + 0.1 * severity.
 import * as THREE from "three";
 import type { TargetArt, TargetOpts, TargetState } from "./types";
-import { bakeRigid } from "./rigid";
+import { addOutline, bakeRigid } from "./rigid";
 
 // ---------- shared resources ----------
 
@@ -608,6 +608,8 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
   object3d.name = `art-target:${opts.kind}:${sev}`;
   object3d.add(b.root);
   const baked = bakeRigid(object3d);
+  // Interactive pieces get the dark outline (buildings and world do not); resolved camps drop it so open ones pop.
+  const outline = addOutline(object3d, baked, { glows: opts.kind === "feature" });
   const skinMatB = baked.material("skin");
   let greyK = 0; // last desaturation written to the skin bucket
 
@@ -737,6 +739,7 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
     }
 
     // Materials: hit flash to white, resolved fades to grey
+    if (outline) outline.visible = !dead || dk < 0.35;
     if (dead) applyResolvedMaterials(dk);
     else if (flash > 0 || flashed) {
       const f = flash > 0 ? Math.min(1, flash / 0.12) : 0;
@@ -782,6 +785,7 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
     },
     dispose() {
       baked.dispose();
+      outline?.geometry.dispose();
       for (const m of b.owned) m.dispose();
       object3d.traverse((o) => {
         const g = (o as THREE.Mesh).geometry;

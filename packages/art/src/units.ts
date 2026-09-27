@@ -434,7 +434,7 @@ export function makeUnit(opts: UnitOpts & { outline?: boolean }): UnitHandle {
   object3d.add(root);
   gem.userData.keep = true; // stays a real mesh: its own glow material, and staffTip reads its world position
   const baked = bakeRigid(object3d);
-  const outline = opts.outline === false ? null : addOutline(object3d, baked, 1.5);
+  const outline = opts.outline === false ? null : addOutline(object3d, baked);
 
   const rig: Rig = { root, hips, torso, head, legL, legR, armL, armR, elbowL, elbowR, wrist, gem, cape, halo };
   return animate(rig, {

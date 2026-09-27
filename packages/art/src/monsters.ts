@@ -4,6 +4,7 @@
 import * as THREE from "three";
 import type { TargetArt, TargetOpts, TargetState } from "./types";
 import { addOutline, bakeRigid } from "./rigid";
+import { contactShadow } from "./lighting";
 
 // ---------- shared resources ----------
 
@@ -610,6 +611,8 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
   const baked = bakeRigid(object3d);
   // Interactive pieces get the dark outline (buildings and world do not); resolved camps drop it so open ones pop.
   const outline = addOutline(object3d, baked, { glows: opts.kind === "feature" });
+  // Soft dark rim just past the camp disc so the site sits in the grass (shared geometry and material).
+  object3d.add(contactShadow(b.radius * 1.15, 0.5));
   const skinMatB = baked.material("skin");
   let greyK = 0; // last desaturation written to the skin bucket
 

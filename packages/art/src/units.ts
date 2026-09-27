@@ -5,6 +5,7 @@ import * as THREE from "three";
 
 import type { UnitAnim, UnitArt, UnitOpts } from "./types";
 import { addOutline, bakeRigid, type Baked } from "./rigid";
+import { contactShadow } from "./lighting";
 
 export type BuiltinClass = "knight" | "ranger" | "scout" | "oracle";
 export const UNIT_CLASSES: BuiltinClass[] = ["knight", "ranger", "scout", "oracle"];
@@ -176,7 +177,7 @@ interface Rig {
 const HIP_Y = 0.2;
 const SHOULDER_Y = 0.22; // above the hips, in torso space
 
-export function makeUnit(opts: UnitOpts & { outline?: boolean }): UnitHandle {
+export function makeUnit(opts: UnitOpts & { outline?: boolean; shadow?: boolean }): UnitHandle {
   const cls = opts.cls;
   const builtin = (UNIT_CLASSES as string[]).includes(cls);
   const forged = opts.forged ?? !builtin;
@@ -435,6 +436,8 @@ export function makeUnit(opts: UnitOpts & { outline?: boolean }): UnitHandle {
   gem.userData.keep = true; // stays a real mesh: its own glow material, and staffTip reads its world position
   const baked = bakeRigid(object3d);
   const outline = opts.outline === false ? null : addOutline(object3d, baked);
+  // Soft contact blob at the feet (fake AO): a direct child of object3d so hops leave it on the ground. Shared geometry and material.
+  if (opts.shadow !== false) object3d.add(contactShadow(0.22 * scale, 0.55));
 
   const rig: Rig = { root, hips, torso, head, legL, legR, armL, armR, elbowL, elbowR, wrist, gem, cape, halo };
   return animate(rig, {

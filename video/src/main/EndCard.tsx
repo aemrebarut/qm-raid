@@ -12,7 +12,7 @@ export const EndCard: React.FC = () => {
         QM RAID
       </div>
       <div style={{ opacity: o(10), color: theme.parchment, fontFamily: theme.bodyFont, fontSize: 52, fontWeight: 700, marginTop: 10 }}>
-        Built today by one human and 24 AI agents
+        Built today by one human and 31 AI agents
       </div>
       <div style={{ opacity: o(22), color: theme.gold, fontFamily: theme.bodyFont, fontSize: 44, marginTop: 30 }}>
         github.com/aemrebarut/qm-raid

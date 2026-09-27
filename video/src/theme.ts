@@ -11,6 +11,10 @@ export const theme = {
   recall: "#4fa7e0",
   red: "#d65a45",
   green: "#7cc47f",
-  titleFont: "'Cinzel', 'Trajan Pro', Georgia, serif",
-  bodyFont: "'Inter', 'Helvetica Neue', Arial, sans-serif",
+  recallBeam: "#6fa8ff",
+  brass: "#8c7a5a",
+  brassHi: "#c8ad7a",
+  // Board tokens (apps/board/src/theme/tokens.css): condensed heads, system body.
+  titleFont: "'Avenir Next Condensed', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', sans-serif",
+  bodyFont: "-apple-system, 'SF Pro Text', system-ui, sans-serif",
 };

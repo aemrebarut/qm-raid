@@ -1,6 +1,7 @@
 import { AbsoluteFill, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
 import { ClipDef, FPS, clipFrames } from "../timeline";
 import { theme } from "../theme";
+import { FxLayer, punch } from "./FxLayer";
 import { LowerThird } from "./LowerThird";
 import { TitleCard } from "./TitleCard";
 
@@ -39,9 +40,11 @@ const Placeholder: React.FC<{ c: ClipDef }> = ({ c }) => (
 );
 
 export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
+  const frame = useCurrentFrame();
   let at = 0;
   return (
     <AbsoluteFill style={{ background: theme.night }}>
+      <AbsoluteFill style={{ transform: punch(frame, c.fx) }}>
       {c.src && c.segments.length ? (
         c.segments.map((g, i) => {
           const len = Math.round(((g.to - g.from) / g.rate) * FPS);
@@ -57,6 +60,8 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
       ) : (
         <Placeholder c={c} />
       )}
+      </AbsoluteFill>
+      <FxLayer cues={c.fx} />
       {c.captions.map((k, i) => (
         <Sequence key={`cap${i}`} from={Math.round(k.at * FPS)} durationInFrames={Math.round(k.dur * FPS)}>
           <LowerThird text={k.text} frames={Math.round(k.dur * FPS)} />

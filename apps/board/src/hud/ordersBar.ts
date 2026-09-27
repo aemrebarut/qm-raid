@@ -11,8 +11,8 @@ const SVG = "http://www.w3.org/2000/svg";
 interface Card { el: HTMLElement; ring: SVGCircleElement; secs: HTMLElement; title: HTMLElement; reason: HTMLElement; deadline: number | null; unitId: string }
 
 export class OrdersBar {
-  readonly root = h("section", { class: "hud-orders", hidden: true },
-    h("h3", { class: "hud-orders-head" }, "Autopilot proposals"));
+  private head = h("h3", { class: "hud-orders-head" }, "Autopilot proposals");
+  readonly root = h("section", { class: "hud-orders", hidden: true }, this.head);
   private cards = new Map<string, Card>();
   private timer: ReturnType<typeof setInterval> | null = null;
 
@@ -39,6 +39,7 @@ export class OrdersBar {
       c.reason.hidden = !reason;
     }
     this.root.hidden = this.cards.size === 0;
+    this.head.textContent = this.cards.size > 1 ? `Autopilot proposals (${this.cards.size})` : "Autopilot proposal";
     const cmd = this.bus.command;
     if (cmd?.kind === "adjust" && gone.has(cmd.orderId)) this.bus.setCommand(null); // its card just went away
     this.markAdjusting();

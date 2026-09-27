@@ -205,10 +205,12 @@
 /* Dock above the bottom panel, left of the side panel: global feed, then the orders bar. Click-through except cards. */
 .hud-dock {
   position: absolute; left: 12px; right: calc(var(--hud-side) + 12px); bottom: var(--hud-bottom);
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none !important;
-  max-height: calc(100vh - var(--hud-top) - var(--hud-bottom) - 60px); overflow: hidden;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 8px; pointer-events: none !important;
+  max-height: calc(100vh - var(--hud-top) - var(--hud-bottom) - 60px);
 }
 .hud-gfeed {
+  /* Shrinks first when proposals need the room; the oldest lines are clipped at the top. */
+  flex: 0 100 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
   max-width: min(100%, 720px); margin: 0; padding: 0; list-style: none;
   font-size: 13px; color: #f1e3bd; text-shadow: 0 1px 2px #000, 0 0 4px #000;
 }
@@ -232,8 +234,13 @@
 .hud-team[data-on="true"] .hud-team-auto { background: #c7a23a; color: #2e2410; font-weight: 700; }
 
 /* Orders bar: autopilot proposal cards, top left under the top bar */
-.hud-orders { display: flex; flex-wrap: wrap-reverse; align-items: flex-end; gap: 6px; max-width: 100%; }
-.hud-orders-head { flex-basis: 100%; order: 99; }
+/* Bounded scroll region so every card's buttons stay reachable however many proposals there are. */
+.hud-orders {
+  flex: 0 1 auto; min-height: 0; overflow-y: auto; pointer-events: auto;
+  display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; max-width: 100%; box-sizing: border-box; padding-right: 4px;
+}
+.hud-orders-head { flex-basis: 100%; }
+.hud-card { flex: none; }
 .hud-card { pointer-events: auto; width: 300px; box-sizing: border-box; }
 .hud-orders[hidden] { display: none; }
 .hud-orders-head { margin: 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #ffd98a; text-shadow: 0 1px 2px #000; }

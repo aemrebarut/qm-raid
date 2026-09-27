@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current review: proposal dock P1 resolved by af72769; Library race, chimney coordinates, and gate-routing teleport findings are resolved. One P2 open in 157675c: store.run selects the oldest running run, hiding the new local workflow simulation behind the fixture run. Board checks pass, including independent headless Chrome on mock board 4619. Hardware GPU performance remains unmeasured.
+Current checkpoint: no open actionable findings in the reviewed submissions. Proposal dock P1, Library race, chimney coordinates, gate-routing teleport, and workflow run selection are verified fixed. Board smoke: 11 tests / 55 assertions; typecheck, production build, and test-board health pass. Independent headless Chrome verifies mock-board layout and interactions at 1200x600 and 1512x790; hardware GPU performance and the new W1/W2 engine workflow remain future milestone checks.
 
 ## Review procedure
 
@@ -162,3 +162,10 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Read updated authoritative types, Team workflows contract, docs/lanes/flow.md, and W1/W2 UI plan. Automated workflow checks stay on 4618/4619; real-QM W2 requires the lead's coordinated single run.
 - Normalization and workflow event reducers match the contract. PUT/DELETE workflow paths and bodies pass with mocked fetch. Local trio simulator emits planner, implementer, changes, implementer, approved, finishes with one loop, and sends no network requests.
 - **P2 open, assigned to raid-ui-plan:** store.run promises the latest running run but uses Array.find, returning the oldest. With fixture w1 running, raid.dev.workflow(1, undefined, 1) creates dev-w1 yet store.run(1) remains w1 throughout the simulation; the Formation consumer would show static fixture progress. Prefer the newest running run or retire the fixture run when starting a local simulation.
+
+
+## Workflow fix and whole-team commands: 78ca8fb
+
+- **157675c P2 resolved:** store.run now returns the newest running run, falling back to newest completed. Starting the local simulator cancels the existing fixture run. Exact reproduction now returns dev-w2 while dev-w2 runs, then shows its completed state.
+- commandTarget sends {teamId,targetId} for an exact workflow-team selection; a partial team still sends {unitIds,targetId}. Regression checks cover both. Existing Adjust branch remains ahead of normal team commands.
+- Final checkpoint: 11 tests pass, 55 assertions, typecheck and production build pass (46 modules), 4619 health returns ok. No remaining actionable findings in this reviewed batch. Workflow UI and full mock/real engine runs are future W1/W2 work, not claimed as complete here.

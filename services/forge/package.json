@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun run src/server.ts",
     "smoke": "bun run test/smoke.ts",
-    "smoke:bridge": "bun run test/bridge.ts"
+    "smoke:bridge": "bun run test/bridge.ts",
+    "test:commander": "bun run test/commander.ts"
   }
 }

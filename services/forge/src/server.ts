@@ -3,6 +3,7 @@
 // Later milestones: forge units implement the Bridge API on this same port.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { commanderModel, propose } from "./commander";
 import { createModelServer } from "./model";
 import { createUnits } from "./units";
 
@@ -118,6 +119,16 @@ Bun.serve({
       if (bridge) return bridge;
       if (req.method === "GET" && path === "/health") return json({ ok: true, service: "forge", mode: MODE });
       if (req.method === "GET" && path === "/types") return json([...types.values()].map(publicType));
+      if (req.method === "POST" && path === "/propose") {
+        const body = await req.json().catch(() => null);
+        if (!body || typeof body !== "object") return json({ ok: false, error: "json body required", proposals: [] }, 400);
+        return json({ proposals: propose(body) });
+      }
+      if (req.method === "GET" && path === "/commander") {
+        const m = commanderModel();
+        const weights = Object.fromEntries(Object.entries(m.w).filter(([, v]) => Math.abs(v) > 0.01).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])));
+        return json({ vetoRows: m.rows, examples: m.examples, trainedAt: m.trainedAt || null, weights });
+      }
       if (req.method === "POST" && path === "/types") {
         const body = (await req.json().catch(() => ({}))) as { name?: string; description?: string; dryRun?: boolean };
         const name = String(body.name ?? "").trim();

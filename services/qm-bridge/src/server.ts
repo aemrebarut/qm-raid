@@ -245,17 +245,7 @@ function introText(u: Unit): string {
   );
 }
 
-async function spawn(req: Request): Promise<Response> {
-  const b = await body<SpawnRequest>(req);
-  if (!b.id) return json({ ok: false, error: "id required" }, 400);
-  const existing = units.get(b.id);
-  if (existing) return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
-  let threadRef: string;
-  try {
-    threadRef = await threadRefFor(`${b.id}-${BOOT}`);
-  } catch (err) {
-    return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
-  }
+async function createUnit(b: Partial<SpawnRequest> & { id: string }): Promise<Unit> {
   const u: Unit = {
     id: b.id,
     name: b.name ?? b.id,
@@ -263,17 +253,31 @@ async function spawn(req: Request): Promise<Response> {
     effort: b.effort ?? "",
     role: b.role ?? "worker",
     team: b.team ?? null,
-    threadRef,
+    threadRef: await threadRefFor(`${b.id}-${BOOT}`),
     sessionId: null,
     queue: [],
     active: null,
   };
   units.set(u.id, u);
+  return u;
+}
+
+async function spawn(req: Request): Promise<Response> {
+  const b = await body<SpawnRequest>(req);
+  if (!b.id) return json({ ok: false, error: "id required" }, 400);
+  const existing = units.get(b.id);
+  if (existing) return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
+  let u: Unit;
+  try {
+    u = await createUnit({ ...b, id: b.id });
+  } catch (err) {
+    return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
+  }
   enqueue(u, { text: introText(u), intro: true });
   // The session exists as soon as QM accepts the turn; look it up briefly so "Open in QM" works at once.
   for (let i = 0; i < 8 && !u.sessionId; i++) {
     await Bun.sleep(250);
-    u.sessionId = await findSessionId(threadRef).catch(() => null);
+    u.sessionId = await findSessionId(u.threadRef).catch(() => null);
   }
   return json({ sessionId: u.sessionId, sessionUrl: u.sessionId ? sessionUrl(u.sessionId) : null });
 }
@@ -309,8 +313,18 @@ const server = Bun.serve({
     if (m === "POST" && url.pathname === "/units") return spawn(req);
 
     if (parts[0] === "units" && parts[1]) {
-      const u = units.get(decodeURIComponent(parts[1]));
-      if (!u) return json({ ok: false, error: "unknown unit" }, 404);
+      const id = decodeURIComponent(parts[1]);
+      let u = units.get(id);
+      if (!u && m === "DELETE") return json({ ok: true });
+      if (!u) {
+        // Unknown unit (for example after a bridge restart): adopt it with a fresh session instead of failing the order.
+        try {
+          u = await createUnit({ id });
+          console.log(`[qm-bridge] adopted unknown unit ${id}`);
+        } catch (err) {
+          return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
+        }
+      }
       if (m === "POST" && parts[2] === "send") {
         const b = await body<Send>(req);
         if (!b.text || typeof b.text !== "string") return json({ ok: false, error: "text required" }, 400);

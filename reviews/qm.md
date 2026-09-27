@@ -70,3 +70,10 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Ran an independent live HTTP smoke with a synthetic gpt-6-luna unit and two orders queued during its intro. First order made agent-originated gbrain.recall with flat componentId, targetId, and matching unitId; second order completed after the first. Each order emitted one reply with its own orderId, with no additional terminal during a one-second observation window. Total 11.1 s; DELETE succeeded.
 - The first reply applied the billing idempotency rule from the game brain. No memory write was requested by this verification. Intro produced activity without an order terminal.
 - Registration and the live recall/queue path are accepted. The three lifecycle findings above remain open; no live engine/board integration or remember persistence verdict is implied by this test.
+
+## 2026-09-27 15:01 PDT: b6f8f1c and 96a7997 QM extension
+
+- Reviewed both commits, README, skill content, and installer against QM's skill-pack routes. The corrected directory glob matches QM ingestion; existing packs are PATCHed before import. No QM core imports or credential files are introduced.
+- Executed `QM_PORTAL_URL=http://localhost:8129 RAID_REF=b6f8f1c9a3e9c40fa6d205743131cec7e49a4665 bun qm-ext/install.ts --skip-mcp`: exit 0, eligible 1, imported/updated empty on an unchanged rerun. The existing pack id was reused; the portal lists one matching repo pack, pinned to b6f8f1c.
+- A fresh synthetic documentation turn using gpt-6-luna completed done/ok. Its own transcript contains tool_call skills with action read and name raid-board, and the reply includes the exact documented unit/order/target/component/team header template.
+- Extension installation and skill availability accepted with no new finding. MCP registration was independently verified in the 9b6be9b review; this installer rerun intentionally exercised only the skill-pack path.

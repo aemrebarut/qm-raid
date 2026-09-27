@@ -4,7 +4,8 @@ import { listenerCount, recentEvents, store } from "./store.ts";
 import { sseResponse } from "./sse.ts";
 import { forgeProxy } from "./forge.ts";
 import { spawnTarget } from "./targets.ts";
-import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
+import { getCatalog, patchLoadout } from "./loadout.ts";
+import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, ensureSpawned, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
 
 // Only listed browser origins get CORS headers; any other page can neither read nor change engine state.
 function corsHeaders(req: Request): Record<string, string> {
@@ -40,6 +41,20 @@ async function brainProxy(path: string, search: string): Promise<Response> {
   }
 }
 
+// PATCH /api/units/:id: loadout fields (instructions, skills, plugins, model, effort) go through loadout.ts to the
+// unit's bridge; team and role stay local (patchUnit). A body may carry both.
+const LOADOUT_KEYS = ["instructions", "skills", "plugins", "model", "effort"];
+async function patchUnitRoute(id: string, b: any): Promise<Response> {
+  if (!b || typeof b !== "object" || !LOADOUT_KEYS.some((k) => k in b)) return reply(patchUnit(id, b));
+  const r = await patchLoadout(id, b, ensureSpawned);
+  if (!r.ok) return json({ ok: false, error: r.error }, r.status);
+  if (b.team !== undefined || b.role !== undefined) {
+    const t = patchUnit(id, { team: b.team, role: b.role });
+    if (!t.ok) return reply(t);
+  }
+  return json(r.notes ? { ok: true, unit: r.unit, notes: r.notes } : { ok: true, unit: r.unit });
+}
+
 async function route(req: Request): Promise<Response> {
   const url = new URL(req.url);
   const p = url.pathname.replace(/\/+$/, "") || "/";
@@ -60,6 +75,7 @@ async function route(req: Request): Promise<Response> {
     if (p === "/api/brain/stats") return brainProxy("/stats", "");
     if (p === "/api/brain/search") return brainProxy("/search", url.search);
     if (p === "/api/brain/page") return brainProxy("/page", url.search);
+    if (p === "/api/catalog") { const r = await getCatalog(url.searchParams.get("unitId")); return r.ok ? json({ items: r.items }) : json({ ok: false, error: r.error }, r.status); }
     return json({ ok: false, error: "not found" }, 404);
   }
 
@@ -90,7 +106,7 @@ async function route(req: Request): Promise<Response> {
   } else if (m === "PUT") {
     if ((mm = p.match(/^\/api\/teams\/(\d+)\/workflow$/))) return reply(setTeamWorkflow(Number(mm[1]), b));
   } else {
-    if ((mm = p.match(/^\/api\/units\/([^/]+)$/))) return reply(patchUnit(decodeURIComponent(mm[1]!), b));
+    if ((mm = p.match(/^\/api\/units\/([^/]+)$/))) return patchUnitRoute(decodeURIComponent(mm[1]!), b);
     if ((mm = p.match(/^\/api\/teams\/(\d+)$/))) return reply(patchTeam(Number(mm[1]), b));
   }
   return json({ ok: false, error: "not found" }, 404);

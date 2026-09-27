@@ -9,6 +9,7 @@ import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
 import { forgeType, pollForge, startForge } from "./forge.ts";
 import { flow, linkWorkflows, type NodeBrief } from "./flowlink.ts";
+import { reapplyLoadout } from "./loadout.ts";
 import { bridgeFor, deleteOnBridge, followBridgeEvents, patchOnBridge, sendToBridge, spawnOnBridge } from "./bridge.ts";
 
 type Result = { ok: true; [k: string]: unknown } | { ok: false; error: string; status?: number };
@@ -85,7 +86,7 @@ async function loadWorld(): Promise<void> {
 
 // ---------- bridge ----------
 
-async function ensureSpawned(u: Unit): Promise<boolean> {
+export async function ensureSpawned(u: Unit): Promise<boolean> {
   const r = runtime(u.id);
   if (r.spawned) return true;
   if (!r.spawning) {
@@ -163,6 +164,7 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
     // Bridge restarted and forgot the unit: spawn again and retry once.
     r.spawned = false;
     const again = await ensureSpawned(u);
+    if (again) await reapplyLoadout(u); // the bridge lost the unit, so also its loadout
     if (!current()) return;
     if (again) status = await sendToBridge(u, req);
   }
@@ -604,6 +606,7 @@ export async function messageUnit(id: string, body: any): Promise<Result> {
     // Bridge restarted and forgot the unit: spawn again and retry once (as dispatchOrder).
     runtime(u.id).spawned = false;
     if (!(await ensureSpawned(u))) return fail(`bridge unavailable at ${bridgeFor(u)}`, 502);
+    await reapplyLoadout(u);
     if (!alive()) return fail("unit retired or reset running", 409);
     status = await sendToBridge(u, { text: body.text });
   }

@@ -18,6 +18,7 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
   if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
   if (String(url).endsWith("/reset") && brainResetGate) await brainResetGate;
   if (String(url).endsWith("/recall") && recallGate) await recallGate;
+  if (String(url).endsWith("/catalog")) return new Response(JSON.stringify({ items: [{ id: "gbrain", name: "GBrain", description: "Team memory", kind: "plugin" }] }), { status: 200 });
   if (String(url).endsWith("/issues") && issuesAnswer) return new Response(JSON.stringify(issuesAnswer.body), { status: issuesAnswer.status });
   if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
   if (String(url).endsWith("/units") && init?.method === "POST") {
@@ -599,4 +600,32 @@ test("E18: save and restore mid-order: sent order completes, walking order walks
   writeFileSync(STATE, "{not json");
   expect(readSaved()).toBeNull();
   expect(game.restoreGame({ state: { units: [] } } as any)).toBe(false);
+});
+
+test("Loadout routes: GET /api/catalog proxy, PATCH loadout via the bridge, team-only PATCH stays local, mixed body does both", async () => {
+  const { handle } = await import("../src/app.ts");
+  const req = (method: string, path: string, body?: unknown) => handle(new Request(`http://127.0.0.1:4610${path}`, {
+    method, headers: body === undefined ? {} : { "content-type": "application/json", origin: "http://127.0.0.1:4621" }, body: body === undefined ? undefined : JSON.stringify(body) }));
+  const cat = await req("GET", "/api/catalog?unitId=u1");
+  expect(cat.status).toBe(200);
+  expect((await cat.json()).items[0].id).toBe("gbrain");
+
+  calls.length = 0;
+  const r = await req("PATCH", "/api/units/u1", { instructions: "Cite the rule slug.", skills: ["qm-review"] });
+  expect(r.status).toBe(200);
+  expect((await r.json()).unit.loadout).toEqual({ instructions: "Cite the rule slug.", skills: ["qm-review"], plugins: ["gbrain"] });
+  expect(calls.find((c) => c.url.endsWith("/units/u1"))!.body).toEqual({ loadout: { instructions: "Cite the rule slug.", skills: ["qm-review"], plugins: ["gbrain"] } });
+  expect(r.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:4621");
+
+  calls.length = 0;
+  const team = await req("PATCH", "/api/units/u6", { team: 2 });
+  expect(team.status).toBe(200);
+  expect(unit("u6").team).toBe(2);
+  expect(calls.filter((c) => c.url.endsWith("/units/u6") && c.body?.loadout)).toEqual([]);
+
+  const both = await req("PATCH", "/api/units/u5", { effort: "high", team: 3 });
+  expect(both.status).toBe(200);
+  expect(unit("u5")).toMatchObject({ effort: "high", team: 3 });
+  expect((await req("PATCH", "/api/units/u5", { effort: "extreme" })).status).toBe(400);
+  expect((await req("PATCH", "/api/units/nope", { instructions: "x" })).status).toBe(404);
 });

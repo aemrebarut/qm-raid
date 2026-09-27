@@ -587,3 +587,37 @@
 .hud-run-card .hud-card-title { padding-right: 64px; }
 .hud-run-card .hud-btn-sm { height: 20px; padding: 0 6px; font-size: 10.5px; }
 .hud-gfeed { margin-bottom: 4px; }
+
+/* i2 hud 25: group summary (bottom centre) = name, tags, busy/idle, then the portrait strip */
+.hud-sum-group { display: flex; align-items: center; gap: 16px; height: 100%; min-width: 0; }
+.hud-sum-group .hud-sum-info { flex: 0 1 auto; min-width: 140px; }
+.hud-sum-group .hud-sum-many { flex: 1; min-width: 0; max-height: 100%; overflow: hidden; }
+.hud-tag .lk-icon { font-size: 12px; }
+
+/* New issue dialog (hud/newIssue.ts, raid-ui-plan): slate skin over its built-in style; Random is the primary */
+#hud .nix { font-family: var(--font-body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 3px; box-shadow: var(--panel-inner), 0 8px 24px rgba(0, 0, 0, .5); }
+#hud .nix-head { font-family: var(--font-head); font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #c8a462; }
+#hud .nix-btn { font-family: var(--font-body); font-weight: 600; border-radius: 3px; color: var(--ink);
+  background: linear-gradient(180deg, rgba(52, 60, 71, .9), rgba(34, 40, 49, .9)); border: 1px solid rgba(200, 164, 98, .3);
+  transition: border-color var(--lk-t) var(--ease), box-shadow var(--lk-t) var(--ease); }
+#hud .nix-btn:hover:not(:disabled) { border-color: var(--gold); box-shadow: 0 0 10px rgba(217, 164, 65, .25); }
+#hud .nix > .nix-btn { color: #1a1407; background: linear-gradient(180deg, #e3b456, #c08f33); border-color: #f0cc80; }
+#hud .nix-form input, #hud .nix-form select, #hud .nix-form textarea { font: inherit; font-size: 12px; color: var(--ink); background: rgba(0, 0, 0, .35);
+  border: 1px solid rgba(200, 164, 98, .22); border-radius: 3px; }
+#hud .nix-form input:focus, #hud .nix-form select:focus, #hud .nix-form textarea:focus { outline: none; border-color: var(--gold); }
+#hud .nix-err { color: var(--danger); }
+
+/* Bottom centre sizes to its content (a card, not a slab) */
+.hud-summary { justify-self: center; width: auto; min-width: 360px; max-width: 100%; }
+#hud .nix-btn:focus-visible, #hud .nix-x:focus-visible { outline: 1px solid var(--gold); outline-offset: 1px; }
+
+/* ordersBar.ts classes (raid-ui-hud): name > issue on proposals, loop count and icon buttons on runs */
+.hud-card-who { font-weight: 600; color: var(--ink); }
+.hud-card-to { display: inline-flex; vertical-align: -2px; margin: 0 4px; color: var(--ink-3); font-size: 12px; }
+.hud-card-to .lk-icon { transform: rotate(-90deg); }
+.hud-card-issue { font-family: var(--lk-font-mono); font-size: 11.5px; color: var(--ink-2); }
+.hud-run-loops { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-3); margin-left: 8px; }
+.hud-btn-icon { width: 22px; height: 22px; padding: 0; justify-content: center; }
+.hud-btn-icon .lk-icon { font-size: 13px; }
+.hud-run-card .hud-btn-icon { width: 20px; height: 20px; }

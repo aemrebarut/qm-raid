@@ -3,7 +3,7 @@ import { api, commandTarget, type Bus, type State, type Store, type Unit } from 
 import { classIcon, icon } from "../theme/icons";
 import { portraitArt } from "../theme/portrait";
 import { clear, h, safeColor, safeUrl } from "./dom";
-import { openFormation } from "./formation";
+import { openFormation, teamOfSelection } from "./formation";
 import { Minimap } from "./minimap";
 import { BUILDINGS, className, modelLabel, portraitStyle, statusPill } from "./sidePanel";
 
@@ -227,12 +227,25 @@ export class BottomPanel {
                   style: `--p:${order?.status === "done" ? 100 : 0}%` }, h("i")))
             : h("div", { class: "hud-sum-sub hud-dim" }, "No order")));
     } else if (units.length > 1) {
-      sig = "m:" + units.map((u) => `${u.id}:${u.status}:${u.team}`).join(",");
-      node = h("div", { class: "hud-sum-many" }, units.slice(0, 18).map((u) => {
-        const team = s.teams.find((t) => t.id === u.team);
-        return h("button", { class: "hud-portrait hud-portrait-md", type: "button", title: `${u.name}, ${u.status.replace("_", " ")}`, "data-status": u.status,
-          style: portraitStyle(u.class, team?.color), onclick: () => this.bus.select([u.id]) }, portraitArt(u.class, team?.color, 44));
-      }));
+      const group = teamOfSelection(s, units.map((u) => u.id));
+      const busy = units.filter((u) => u.status !== "idle").length;
+      sig = "m:" + units.map((u) => `${u.id}:${u.status}:${u.team}`).join(",") + `:${group?.id}:${group?.name}:${group?.workflow?.preset}:${group?.autopilot}`;
+      node = h("div", { class: "hud-sum-group" },
+        h("div", { class: "hud-sum-info" },
+          h("div", { class: "hud-sum-name", style: group ? `color:${safeColor(group.color)}` : null }, group ? group.name : `${units.length} selected`),
+          h("div", { class: "hud-sum-row" },
+            group ? h("span", { class: "hud-tag" }, `Group ${group.id}`) : null,
+            h("span", { class: "hud-tag" }, `${units.length} units`),
+            group?.workflow ? h("span", { class: "hud-tag" }, icon("formation"), group.workflow.preset) : null,
+            group?.autopilot ? h("span", { class: "hud-tag", style: "color:var(--gold)" }, "Auto") : null),
+          h("div", { class: "hud-sum-row" },
+            h("span", { class: "hud-pill hud-st-working" }, `${busy} busy`),
+            h("span", { class: "hud-pill hud-st-idle" }, `${units.length - busy} idle`))),
+        h("div", { class: "hud-sum-many" }, units.slice(0, 12).map((u) => {
+          const team = s.teams.find((t) => t.id === u.team);
+          return h("button", { class: "hud-portrait hud-portrait-md", type: "button", title: `${u.name}, ${u.status.replace("_", " ")}`, "data-status": u.status,
+            style: portraitStyle(u.class, team?.color), onclick: () => this.bus.select([u.id]) }, portraitArt(u.class, team?.color, 44));
+        })));
     } else {
       sig = "none";
     }

@@ -20,6 +20,11 @@ export const BRAIN_RESET = process.env.BRAIN_RESET !== "0";
 export const VETO_LOG = process.env.VETO_LOG ?? new URL("../../../data/vetoes.jsonl", import.meta.url).pathname;
 export const AUTOPILOT_EVERY_MS = 3000;
 export const VETO_WINDOW_MS = 15000;
+// E18 restart safety: the game is saved here about 1 s after changes and restored at boot when younger than
+// STATE_MAX_AGE_MS. STATE_FILE=0 disables; default repo data/engine-state-<PORT>.json (git-ignored).
+export const STATE_FILE: string | null = process.env.STATE_FILE === "0" ? null
+  : process.env.STATE_FILE || new URL(`../../../data/engine-state-${PORT}.json`, import.meta.url).pathname;
+export const STATE_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
 // SSE: a client with more unread events than this is dropped (it reconnects and gets a fresh snapshot).
 export const SSE_MAX_QUEUE = 2000;

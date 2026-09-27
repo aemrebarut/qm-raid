@@ -10,6 +10,7 @@ let seq = 0;
 // Last events, for debugging (GET /api/debug/events).
 const recent: string[] = [];
 export const recentEvents = () => recent.map((j) => JSON.parse(j));
+export const currentSeq = () => seq;
 
 type Payload<T extends EngineEventType> = Omit<Extract<EngineEvent, { type: T }>, "seq" | "ts" | "type">;
 

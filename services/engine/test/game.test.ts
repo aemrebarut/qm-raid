@@ -28,6 +28,8 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
 }) as unknown as typeof fetch;
 const VETO = `/tmp/engine-test-vetoes-${process.pid}.jsonl`;
 process.env.VETO_LOG = VETO;
+const STATE = `/tmp/engine-test-state-${process.pid}.json`;
+process.env.STATE_FILE = STATE; // never the real data/engine-state-<PORT>.json
 
 const { store, recentEvents } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
@@ -536,4 +538,65 @@ test("POST /api/targets route: brain Target pushed with target.spawned, bad inpu
   // Brain down -> 503 is covered in test/targets.test.ts (it also checks the once-a-minute log, so not repeated here).
   expect((await post({ kind: "chore" })).status).toBe(400);
   issuesAnswer = null;
+});
+
+test("E18: save and restore mid-order: sent order completes, walking order walks on, proposal gets a fresh window", async () => {
+  const { STATE_FILE } = await import("../src/config.ts");
+  expect(STATE_FILE).toBe(STATE);
+  const { startSaving, saveNow, readSaved } = await import("../src/persist.ts");
+  const { writeFileSync } = await import("node:fs");
+  unit("u2").loadout = { instructions: "Be brief.", skills: ["qm-review"], plugins: ["gbrain"] };
+  const sentOrder = orderFor(["u1"], "t101");
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  expect(unit("u1").status).toBe("working");
+  const walking = orderFor(["u4"], "t109");
+  tick();
+  expect(unit("u4").status).toBe("moving");
+  patchTeam(2, { autopilot: true });
+  proposeAnswer = { proposals: [{ unitId: "u5", targetId: "t104", reason: "search is idle" }] };
+  await autopilotTick();
+  patchTeam(2, { autopilot: false });
+  proposeAnswer = { proposals: [] };
+  const proposed = store.state.orders.find((o) => o.status === "proposed")!;
+  expect(proposed.unitId).toBe("u5");
+  const oldDeadline = proposed.vetoDeadline!;
+
+  const stop = startSaving(game.gameSnapshot);
+  await saveNow();
+  stop();
+  const saved = readSaved<any>()!;
+  expect(saved.game.state.orders.length).toBe(3);
+  const maxSaved = Math.max(...saved.game.state.orders.map((o: any) => Number(o.id.slice(1))));
+
+  // "Restart": a different world in memory, then the saved one comes back.
+  store.state = fixtureState();
+  await Bun.sleep(5);
+  expect(game.restoreGame(saved.game)).toBe(true);
+  expect(unit("u1")).toMatchObject({ status: "working", orderId: sentOrder.id });
+  expect(unit("u2").loadout).toEqual({ instructions: "Be brief.", skills: ["qm-review"], plugins: ["gbrain"] });
+  expect(unit("u5").status).toBe("waiting_approval");
+  expect(order(proposed.id).vetoDeadline!).toBeGreaterThan(oldDeadline);
+  expect(store.state.targets.find((t) => t.id === "t101")!.status).toBe("engaged");
+
+  // The reply the bridge kept for the sent order still finishes it.
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: sentOrder.id, text: "fixed after restart" });
+  expect(order(sentOrder.id).status).toBe("done");
+  expect(store.state.targets.find((t) => t.id === "t101")!.status).toBe("resolved");
+  // The walking unit arrives and sends its order with the same id.
+  calls.length = 0;
+  for (let i = 0; i < 60 && unit("u4").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  expect(calls.find((c) => c.url.endsWith("/units/u4/send"))!.body.orderId).toBe(walking.id);
+  // The veto still resolves and logs; new ids never reuse saved ones.
+  expect(game.goOrder(proposed.id).ok).toBe(true);
+  const fresh = orderFor(["u6"], "t102");
+  expect(Number(fresh.id.slice(1))).toBeGreaterThan(maxSaved);
+
+  // Old, broken or missing files are ignored.
+  writeFileSync(STATE, JSON.stringify({ ...saved, savedAt: Date.now() - 3 * 3600 * 1000 }));
+  expect(readSaved()).toBeNull();
+  writeFileSync(STATE, "{not json");
+  expect(readSaved()).toBeNull();
+  expect(game.restoreGame({ state: { units: [] } } as any)).toBe(false);
 });

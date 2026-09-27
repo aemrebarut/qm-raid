@@ -1,8 +1,9 @@
 // Game rules: world loading, orders, movement, teams, and mapping bridge events to engine events.
-import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, Workflow, World } from "../../../contract/types.ts";
+import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, State, Target, Team, Unit, Workflow, World } from "../../../contract/types.ts";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { AUTOPILOT_EVERY_MS, BRAIN_RESET, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
+import { readSaved, saveNow, startSaving } from "./persist.ts";
+import { AUTOPILOT_EVERY_MS, BRAIN_RESET, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, STATE_FILE, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
 import { defaultLoadout, fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
@@ -799,6 +800,7 @@ export async function resetWorld(): Promise<Result> {
   }
   for (const u of S().units) void ensureSpawned(u);
   void pollForge();
+  void saveNow(); // the state file holds the fresh world at once
   return { ok: true };
 }
 
@@ -922,8 +924,95 @@ async function autopilotTick(): Promise<void> {
 
 // ---------- startup ----------
 
+// ---------- E18: save and restore (src/persist.ts writes the file) ----------
+
+type SavedRuntime = Pick<Runtime, "sentOrderId" | "learningSlug" | "gbrainCalls" | "gbrainReads" | "gbrainWrites">;
+export interface GameSave {
+  backend: string; state: State; nextOrder: number; nextUnit: number; customers: Customer[];
+  briefs: [string, NodeBrief][]; proposals: [string, { proposal: Proposal; context: ProposeContext }][];
+  history: [string, { targetId: string; component: string }[]][]; runtime: Record<string, SavedRuntime>; flow: unknown;
+}
+
+// Everything a restart needs; null while a reset runs (the half-cleared world is never saved).
+export function gameSnapshot(): GameSave | null {
+  if (resetting) return null;
+  const runtime: Record<string, SavedRuntime> = {};
+  for (const [id, r] of rt) runtime[id] = { sentOrderId: r.sentOrderId, learningSlug: r.learningSlug, gbrainCalls: r.gbrainCalls, gbrainReads: r.gbrainReads, gbrainWrites: r.gbrainWrites };
+  let flowRuns: unknown = null;
+  try { flowRuns = flow.saveRuns?.() ?? null; } catch (err) { logOnce("flowsave", `workflow saveRuns failed: ${err}`); }
+  return {
+    backend: backendName(), state: S(), nextOrder, nextUnit, customers: [...customers.values()],
+    briefs: [...briefs], proposals: [...proposals], history: [...history], runtime, flow: flowRuns,
+  };
+}
+
+// Puts a saved game back. Active orders stay active: a unit that had not reached its target walks on and sends on
+// arrival; a unit whose order was sent keeps working and the bridge delivers the reply with the same orderId.
+// Proposed orders get a fresh veto window. Returns false (nothing changed) when the save is unusable.
+export function restoreGame(g: GameSave): boolean {
+  const st = g?.state;
+  if (!st || !Array.isArray(st.units) || !Array.isArray(st.orders) || !Array.isArray(st.targets) || !Array.isArray(st.components) || !st.components.length) return false;
+  st.backend = backendName();
+  st.workflowRuns ??= [];
+  store.state = st;
+  for (const r of rt.values()) if (r.animTimer) clearTimeout(r.animTimer);
+  rt.clear();
+  briefs.clear();
+  proposals.clear();
+  history.clear();
+  customers = new Map((g.customers ?? []).map((c) => [c.id, c]));
+  for (const [k, v] of g.briefs ?? []) briefs.set(k, v);
+  for (const [k, v] of g.proposals ?? []) proposals.set(k, v);
+  for (const [k, v] of g.history ?? []) history.set(k, v);
+  const num = (id: string) => Number(id.slice(1)) || 0;
+  nextOrder = Math.max(nextOrder, g.nextOrder ?? 1, ...st.orders.map((o) => num(o.id) + 1));
+  nextUnit = Math.max(g.nextUnit ?? 1, ...st.units.map((u) => num(u.id) + 1));
+  const now = Date.now();
+  for (const u of st.units) {
+    u.loadout ??= defaultLoadout();
+    const r = runtime(u.id);
+    Object.assign(r, g.runtime?.[u.id] ?? {});
+    const o = u.orderId ? orderById(u.orderId) : undefined;
+    const t = o ? targetById(o.targetId) : undefined;
+    if (!o || !t || o.unitId !== u.id || (o.status !== "active" && o.status !== "proposed")) {
+      u.orderId = null;
+      u.status = "idle";
+    } else if (o.status === "proposed") {
+      o.vetoDeadline = now + VETO_WINDOW_MS;
+      u.status = "waiting_approval";
+    } else if (r.sentOrderId === o.id) {
+      u.status = "working";
+    } else {
+      u.status = "moving";
+      r.dest = destFor(u, t);
+    }
+  }
+  // An open order whose unit no longer holds it cannot finish: close it quietly (no clients are connected yet).
+  for (const o of st.orders) {
+    if ((o.status === "active" || o.status === "proposed") && unitById(o.unitId)?.orderId !== o.id) { o.status = "cancelled"; proposals.delete(o.id); }
+  }
+  for (const t of st.targets) if (t.status === "engaged" && !st.orders.some((o) => o.targetId === t.id && o.status === "active")) t.status = "open";
+  unblockUnits(false);
+  if (flow.loadRuns) {
+    try { flow.loadRuns(g.flow); } catch (err) { console.error("[engine] workflow loadRuns failed:", err); }
+  } else {
+    // Without the runner's own data a running run cannot take its next edge: end it; its open step finishes as is.
+    for (const run of st.workflowRuns) if (run.status === "running") run.status = "failed";
+  }
+  return true;
+}
+
 export async function startGame(): Promise<void> {
-  await loadWorld();
+  const saved = readSaved<GameSave>();
+  if (saved && saved.game.backend !== backendName()) console.log(`[engine] ${STATE_FILE} is for backend ${saved.game.backend}, not ${backendName()}; starting fresh`);
+  if (saved && saved.game.backend === backendName() && restoreGame(saved.game)) {
+    const open = S().orders.filter((o) => o.status === "active" || o.status === "proposed").length;
+    console.log(`[engine] restored the game from ${STATE_FILE} (saved ${Math.round((Date.now() - saved.savedAt) / 1000)} s ago, ${S().orders.length} orders, ${open} open)`);
+    void refreshPages();
+  } else {
+    await loadWorld();
+  }
+  startSaving(gameSnapshot);
   setInterval(tick, Math.round(1000 / TILES_PER_SEC));
   setInterval(() => void autopilotTick(), AUTOPILOT_EVERY_MS);
   setInterval(() => void refreshPages(), 10000);

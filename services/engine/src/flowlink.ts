@@ -19,6 +19,10 @@ export interface FlowModule {
   onOrderEnded(order: Order): void;
   cancelRun(runId: string): { ok: true } | { ok: false; error: string };
   runForOrder(orderId: string): WorkflowRun | undefined;
+  // E18 (optional): per-run data outside store.state as JSON, and back after a restart. loadRuns runs after
+  // store.state (with workflowRuns) is restored and must link each run to the object in store.state.workflowRuns.
+  saveRuns?(): unknown;
+  loadRuns?(saved: unknown): void;
 }
 
 const NA = "team workflows are not available yet (src/workflow.ts missing)";

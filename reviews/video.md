@@ -25,3 +25,17 @@ Read `apps/board/tools/video/capture.ts` while checking the source of forthcomin
 - The current loadout capture stops after Apply. Showing the next order carry changed instructions requires a follow-on capture.
 
 VERDICT: CHANGES: bind the Forge take to its exact model and mark the final reviewer verdict honestly.
+
+## V3: FX gallery render (15:56 PDT)
+
+File: `~/Workspace/qm-raid-video/fx/fx-gallery.mp4`. SHA256: `199fc9af4f5bfab60c593faac2dd9fc847ef3c990d03df22c98041fccd5db914`.
+
+- Clean full video decode, 33.867 seconds, 1920x1080 H.264 at 30 fps, stable during inspection. No audio stream, as expected for a visual gallery. Audio sync is not approved by this review.
+- Extracted and inspected 17 full-resolution frames at 0, 2, ... 32 seconds; added 3, 27 and 33.4 second samples for short callout/mascot/transition beats.
+- Callouts, recall label, page pop, approval stamp, score bars, and mascot captions are legible. Fun visual treatment fits the storyboard. No blocker in the sampled visuals.
+- The rendered gallery uses Refund Ranger and 0.82/0.42. The newer Rule Warden name and score props in current source still need render verification. Gallery counts are synthetic showcase inputs, not evidence for final cut claims.
+- Evidence: `/tmp/raid-video-rev/fx-fx-gallery-199fc9af4f/` (probe, exact timestamps, frames, contact sheets, decode log).
+
+Sent to raid-video-fx, raid-video and Analyst. Scope: visual component gallery only.
+
+VERDICT: APPROVED

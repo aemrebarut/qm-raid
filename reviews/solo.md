@@ -112,9 +112,23 @@ Inspected every commit with `git show`. The owner reports the running Forge stil
 
 Reviewed the diff and ran `SMOKE_WRITE=1 bun run test` against the service reported as PID 75288. PASS, including the regression that a new learning's actual fact text survives `context.slice(0, 1500)`. Recall now leads with condensed persisted learnings and strips their metadata footer before including the component/rules/issue/customer context. This closes the cross-lane P2 from `dcce227` for the demonstrated t101-to-t102 learning flow. No new actionable findings.
 
+## 2026-09-27: Forge restart/distillation `d8000aa`, `e2a6671`, unit persistence `3a7b55e`
+
+Inspected all three commit diffs and relevant current files. Runtime validation spanned owner-reported Forge PIDs 51379 and 71581. The real training type `forge-refund-ranger-2` was not changed or deleted. No engine requests were made; future automated engine checks use the mock test engine on 4618, not shared real QM on 4610.
+
+- `bun run smoke`: PASS in river mode with the committed `dryRun: true` payload. Created `forge-smoke-ranger`; followed to `ready`, progress 1, 160 examples, `model: dry-run:forge-smoke-ranger`, `evalScore: null`. This completes live verification of `1665e13`.
+- `bun run test:commander`: PASS. Live `POST /propose` and `GET /commander` schema checks passed without writing the veto log or creating types.
+- The first bridge attempt used the existing smoke code with an in-memory selector for the new dry fixture; the fixture was no longer listed after concurrent owner restart/cleanup, so it exited before spawning a unit. The requested unmodified `bun run smoke:bridge` subsequently PASSed against existing ready type `forge-refund-ranger` on its River checkpoint. No new real training was started.
+- `e2a6671`: inspected shared short training/eval/serving prompt and teacher-only style guide; the same scoring and decoding limits apply to both evaluated models. Offline parser check passed for markdown headings and multiline Plan/Remember content. No new actionable finding in these changes. Full model-quality evaluation remains the lane owner's real run.
+- `3a7b55e`: offline check with a temporary store PASSed create, team patch, reconstruction of createUnits with the same type/team, and delete persistence. orderFacts removes the actual engine's GBrain-pages/instruction lines and retains the work facts. No new actionable finding in the submitted unit-binding persistence change.
+
+**P1 remains open: direct messages abandon an active order.** Reproduced again on the submitted units code with an injected deferred model: direct send returns 200, only the direct reply emits, and the unit retains `orderId: review-A`. `units.ts` still increments one generation for both order and chat sends. This was sent again to `raid-river`; the original blocker was already copied to the Analyst.
+
+**P2: replay finished progress before deciding a pipeline was interrupted.** In `d8000aa`, `services/forge/src/server.ts:44-46` only follows progress when the stored PID is alive. If training finishes while Forge is down (or in the polling/save gap), the PID is gone but progress.jsonl contains a terminal ready event and checkpoint. Startup instead marks the type failed and leaves its model null. An isolated execution of the committed load function with a stale training store, dead PID, and final ready record confirmed only types.json was read and the result was `failed: interrupted by a forge restart`. Replay persisted progress regardless of PID liveness; follow only unfinished live children. Sent to `raid-river`. This reproduction did not restart the shared service, touch demo types, or call River.
+
 ## Lane review queue
 
 - `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved.
-- `raid-river`: reviewed through batch ending `1ccc96e`; P1 direct-message interruption in `c8ba93a` awaiting fix. Live dryRun/commander checks await owner restart notification. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-river`: reviewed through `d8000aa`, `e2a6671`, `3a7b55e`; P1 direct-message interruption and P2 recovery of pipelines completed during downtime awaiting fixes. Live dryRun, bridge, and commander checks pass. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

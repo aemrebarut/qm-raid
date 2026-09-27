@@ -110,3 +110,8 @@ Demo path dry run (bridge only, test units, the engine's order text on t101 bill
 
 ## New issues, brain side (raid-gbrain, 16:05)
 Brain on 4616: `cd services/brain && SMOKE_WRITE=1 bun run test` (all PASS; spawns pool and titled issues, checks /world, recall, remember links, 3 parallel unique ids, 400s, cleans up). Manual: `curl -s -XPOST 127.0.0.1:4616/issues -H 'content-type: application/json' -d '{"pos":{"x":5,"y":2}}'` returns `{ok, target}` with t110 / LUM-110 from the pool; `curl -s 127.0.0.1:4616/world` lists it; `world/reset.sh` removes it and refills the pool. Destructive check: `SMOKE_RESET=1 bun run test`.
+
+## A2 art (units, targets, buildings in the board, raid-art-plan)
+- Board 4619 with `?art=on` (or `?art=units,targets,buildings`; localStorage `raid.art`; default off, `?art=off` = placeholders). Scene commits 4caaa56 (units, buildings, lighting, fx), 74466f8 (targets), cdd1e5e (terrain and zones via makeWorld, A3).
+- `sh packages/art/scripts/shots/setup.sh && cd /tmp/art-shot-tool && node flow.mjs`: orders the first idle unit onto the nearest open target on the 4618 mock; screenshots /tmp/a2-0..2.png show art units walking out, the art recall beam from the Library, art camps and buildings, no console errors (checked 15:44).
+- `node perf.mjs off on`: art on draws fewer calls than the placeholders (313 vs 414 at 6 units, 15:40; 343 with the art world on per raid-ui-scene). Budgets per instance held: units 3 to 4 draws (with outline), camps 2 to 6, buildings 15 to 20.

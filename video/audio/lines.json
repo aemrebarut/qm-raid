@@ -1,0 +1,211 @@
+{
+ "voices": {
+  "hype": {
+   "kokoro": "am_puck",
+   "kokoroSpeed": 1.15
+  },
+  "herald": {
+   "kokoro": "bm_george",
+   "kokoroSpeed": 1.05
+  }
+ },
+ "lines": [
+  {
+   "id": "vo_intro_1",
+   "section": "intro",
+   "at": 2.0,
+   "max": 2.3,
+   "role": "hype",
+   "text": "Your issues are monsters!",
+   "el": "[shouts] Your issues are MONSTERS!",
+   "kokoroSpeed": 1.15
+  },
+  {
+   "id": "vo_intro_2",
+   "section": "intro",
+   "at": 4.4,
+   "max": 2.7,
+   "role": "hype",
+   "text": "Your AI agents are units!",
+   "el": "[excited] Your AI agents... are UNITS!"
+  },
+  {
+   "id": "vo_intro_3",
+   "section": "intro",
+   "at": 7.2,
+   "max": 2.5,
+   "role": "hype",
+   "text": "GBrain is their shared memory!",
+   "el": "[excited] G Brain is their shared memory!",
+   "say": "G Brain is their shared memory!"
+  },
+  {
+   "id": "vo_intro_4",
+   "section": "intro",
+   "at": 9.8,
+   "max": 2.8,
+   "role": "hype",
+   "text": "And River forges new unit types!",
+   "el": "[excited] And River forges NEW unit types!"
+  },
+  {
+   "id": "vo_intro_5",
+   "section": "intro",
+   "at": 12.7,
+   "max": 2.2,
+   "role": "hype",
+   "text": "This is QM RAID!",
+   "el": "[excited] This is... Q M RAID!",
+   "say": "This is Q M RAID!"
+  },
+  {
+   "id": "vo_orders_1",
+   "section": "orders",
+   "role": "herald",
+   "text": "Hear ye! Pick a knight, a real QM agent. Point it at a camp.",
+   "el": "Hear ye! Pick a knight, a real Q M agent. Point it at a camp.",
+   "say": "Hear ye! Pick a knight, a real Q M agent. Point it at a camp."
+  },
+  {
+   "id": "vo_orders_2",
+   "section": "orders",
+   "role": "herald",
+   "text": "Blue beam: it recalls from GBrain.",
+   "el": "Blue beam: it recalls from G Brain.",
+   "say": "Blue beam: it recalls from G Brain."
+  },
+  {
+   "id": "vo_orders_3",
+   "section": "orders",
+   "role": "herald",
+   "text": "It works the issue for real.",
+   "el": "It works the issue... for real."
+  },
+  {
+   "id": "vo_orders_4",
+   "section": "orders",
+   "role": "herald",
+   "text": "Gold orb: it remembers what it learned.",
+   "el": "Gold orb: it remembers what it learned."
+  },
+  {
+   "id": "vo_teams_1",
+   "section": "teams",
+   "role": "herald",
+   "text": "Three units, one team: the Trio.",
+   "el": "Three units, one team: the Trio."
+  },
+  {
+   "id": "vo_teams_2",
+   "section": "teams",
+   "role": "herald",
+   "text": "Right-click a camp, and the scrolls fly.",
+   "el": "Right-click a camp... and the scrolls fly!"
+  },
+  {
+   "id": "vo_teams_3",
+   "section": "teams",
+   "role": "herald",
+   "text": "The reviewer is a Rule Warden, forged by River. It checks the house rules.",
+   "el": "The reviewer is a Rule Warden, forged by River. It checks the house rules."
+  },
+  {
+   "id": "vo_teams_4",
+   "section": "teams",
+   "role": "herald",
+   "text": "Verdict: approved! The camp falls.",
+   "el": "[excited] Verdict: APPROVED! The camp falls."
+  },
+  {
+   "id": "vo_teams_4b",
+   "section": "teams",
+   "alt": true,
+   "role": "herald",
+   "text": "Verdict: changes! Back to the anvil, implementer.",
+   "el": "Verdict: changes! Back to the anvil, implementer."
+  },
+  {
+   "id": "vo_forge_1",
+   "section": "forge",
+   "role": "herald",
+   "text": "A new kind of unit? To the Forge! Describe a Refund Ranger.",
+   "el": "A new kind of unit? [excited] To the Forge! Describe a Refund Ranger."
+  },
+  {
+   "id": "vo_forge_2",
+   "section": "forge",
+   "role": "herald",
+   "text": "River fine-tunes a model on orders the Forge writes.",
+   "el": "River fine-tunes a model on orders the Forge writes."
+  },
+  {
+   "id": "vo_forge_3",
+   "section": "forge",
+   "role": "herald",
+   "text": "It beats the base model on held-out test orders.",
+   "el": "It beats the base model on held-out test orders."
+  },
+  {
+   "id": "vo_forge_4",
+   "section": "forge",
+   "role": "herald",
+   "text": "Train one, and out it walks.",
+   "el": "Train one, and out it walks!"
+  },
+  {
+   "id": "vo_auto_1",
+   "section": "autopilot",
+   "role": "herald",
+   "text": "A new issue? A fresh camp appears.",
+   "el": "A new issue? A fresh camp appears."
+  },
+  {
+   "id": "vo_auto_2",
+   "section": "autopilot",
+   "role": "herald",
+   "text": "Autopilot proposes orders, each on a fifteen second veto ring.",
+   "el": "Autopilot proposes orders, each on a fifteen second veto ring."
+  },
+  {
+   "id": "vo_auto_3",
+   "section": "autopilot",
+   "role": "herald",
+   "text": "Cancel one. Let one ride.",
+   "el": "Cancel one. [mischievously] Let one ride."
+  },
+  {
+   "id": "vo_loadout_1",
+   "section": "loadout",
+   "role": "herald",
+   "text": "Open a knight's loadout: standing orders, skills, and plugins, GBrain among them.",
+   "el": "Open a knight's loadout: standing orders, skills, and plugins, G Brain among them.",
+   "say": "Open a knight's loadout: standing orders, skills, and plugins, G Brain among them."
+  },
+  {
+   "id": "vo_loadout_2",
+   "section": "loadout",
+   "role": "herald",
+   "text": "Save new standing orders, and its very next order carries them.",
+   "el": "Save new standing orders, and its very next order carries them."
+  },
+  {
+   "id": "vo_end",
+   "section": "end",
+   "role": "herald",
+   "text": "One human. Thirty-one AI agents. Built today.",
+   "el": "One human. Thirty-one AI agents. Built today.",
+   "kokoroSpeed": 1.2,
+   "max": 3.5
+  },
+  {
+   "id": "vo_end_b",
+   "section": "end",
+   "alt": true,
+   "role": "herald",
+   "text": "One human, a swarm of AI agents, built today.",
+   "el": "One human, a swarm of AI agents, built today.",
+   "kokoroSpeed": 1.2,
+   "max": 3.5
+  }
+ ]
+}

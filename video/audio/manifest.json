@@ -1,0 +1,374 @@
+{
+ "tracks": [
+  {
+   "file": "vo_intro_1.wav",
+   "id": "vo_intro_1",
+   "section": "intro",
+   "duration": 2.32,
+   "text": "Your issues are monsters!",
+   "engine": "eleven",
+   "offset": 2.0,
+   "at": 2.0
+  },
+  {
+   "file": "vo_intro_2.wav",
+   "id": "vo_intro_2",
+   "section": "intro",
+   "duration": 2.41,
+   "text": "Your AI agents are units!",
+   "engine": "eleven",
+   "offset": 4.4,
+   "at": 4.4
+  },
+  {
+   "file": "vo_intro_3.wav",
+   "id": "vo_intro_3",
+   "section": "intro",
+   "duration": 1.94,
+   "text": "GBrain is their shared memory!",
+   "engine": "eleven",
+   "offset": 7.2,
+   "at": 7.2
+  },
+  {
+   "file": "vo_intro_4.wav",
+   "id": "vo_intro_4",
+   "section": "intro",
+   "duration": 2.58,
+   "text": "And River forges new unit types!",
+   "engine": "eleven",
+   "offset": 9.8,
+   "at": 9.8
+  },
+  {
+   "file": "vo_intro_5.wav",
+   "id": "vo_intro_5",
+   "section": "intro",
+   "duration": 2.32,
+   "text": "This is QM RAID!",
+   "engine": "eleven",
+   "offset": 12.7,
+   "at": 12.7
+  },
+  {
+   "file": "vo_orders_1.wav",
+   "id": "vo_orders_1",
+   "section": "orders",
+   "duration": 5.0,
+   "text": "Hear ye! Pick a knight, a real QM agent. Point it at a camp.",
+   "engine": "eleven",
+   "offset": 1.5,
+   "at": 16.5
+  },
+  {
+   "file": "vo_orders_2.wav",
+   "id": "vo_orders_2",
+   "section": "orders",
+   "duration": 2.71,
+   "text": "Blue beam: it recalls from GBrain.",
+   "engine": "eleven",
+   "offset": 8.08,
+   "at": 23.08
+  },
+  {
+   "file": "vo_orders_3.wav",
+   "id": "vo_orders_3",
+   "section": "orders",
+   "duration": 2.51,
+   "text": "It works the issue for real.",
+   "engine": "eleven",
+   "offset": 12.37,
+   "at": 27.37
+  },
+  {
+   "file": "vo_orders_4.wav",
+   "id": "vo_orders_4",
+   "section": "orders",
+   "duration": 2.94,
+   "text": "Gold orb: it remembers what it learned.",
+   "engine": "eleven",
+   "offset": 16.46,
+   "overrun": 0,
+   "at": 31.46
+  },
+  {
+   "file": "vo_teams_1.wav",
+   "id": "vo_teams_1",
+   "section": "teams",
+   "duration": 2.88,
+   "text": "Three units, one team: the Trio.",
+   "engine": "eleven",
+   "offset": 1.5,
+   "at": 36.5
+  },
+  {
+   "file": "vo_teams_2.wav",
+   "id": "vo_teams_2",
+   "section": "teams",
+   "duration": 2.72,
+   "text": "Right-click a camp, and the scrolls fly.",
+   "engine": "eleven",
+   "offset": 5.7,
+   "at": 40.7
+  },
+  {
+   "file": "vo_teams_3.wav",
+   "id": "vo_teams_3",
+   "section": "teams",
+   "duration": 5.27,
+   "text": "The reviewer is a Rule Warden, forged by River. It checks the house rules.",
+   "engine": "eleven",
+   "offset": 9.75,
+   "at": 44.75
+  },
+  {
+   "file": "vo_teams_4.wav",
+   "id": "vo_teams_4",
+   "section": "teams",
+   "duration": 3.06,
+   "text": "Verdict: approved! The camp falls.",
+   "engine": "eleven",
+   "offset": 16.34,
+   "overrun": 0,
+   "at": 51.34
+  },
+  {
+   "file": "vo_forge_1.wav",
+   "id": "vo_forge_1",
+   "section": "forge",
+   "duration": 5.78,
+   "text": "A new kind of unit? To the Forge! Describe a Refund Ranger.",
+   "engine": "eleven",
+   "offset": 1.5,
+   "at": 56.5
+  },
+  {
+   "file": "vo_forge_2.wav",
+   "id": "vo_forge_2",
+   "section": "forge",
+   "duration": 3.28,
+   "text": "River fine-tunes a model on orders the Forge writes.",
+   "engine": "eleven",
+   "offset": 8.69,
+   "at": 63.69
+  },
+  {
+   "file": "vo_forge_3.wav",
+   "id": "vo_forge_3",
+   "section": "forge",
+   "duration": 2.68,
+   "text": "It beats the base model on held-out test orders.",
+   "engine": "eleven",
+   "offset": 13.37,
+   "at": 68.37
+  },
+  {
+   "file": "vo_forge_4.wav",
+   "id": "vo_forge_4",
+   "section": "forge",
+   "duration": 1.94,
+   "text": "Train one, and out it walks.",
+   "engine": "eleven",
+   "offset": 17.46,
+   "overrun": 0,
+   "at": 72.46
+  },
+  {
+   "file": "vo_auto_1.wav",
+   "id": "vo_auto_1",
+   "section": "autopilot",
+   "duration": 2.8,
+   "text": "A new issue? A fresh camp appears.",
+   "engine": "eleven",
+   "offset": 1.5,
+   "at": 76.5
+  },
+  {
+   "file": "vo_auto_2.wav",
+   "id": "vo_auto_2",
+   "section": "autopilot",
+   "duration": 4.54,
+   "text": "Autopilot proposes orders, each on a fifteen second veto ring.",
+   "engine": "eleven",
+   "offset": 5.72,
+   "at": 80.72
+  },
+  {
+   "file": "vo_auto_3.wav",
+   "id": "vo_auto_3",
+   "section": "autopilot",
+   "duration": 2.72,
+   "text": "Cancel one. Let one ride.",
+   "engine": "eleven",
+   "offset": 11.68,
+   "overrun": 0,
+   "at": 86.68
+  },
+  {
+   "file": "vo_loadout_1.wav",
+   "id": "vo_loadout_1",
+   "section": "loadout",
+   "duration": 5.49,
+   "text": "Open a knight's loadout: standing orders, skills, and plugins, GBrain among them.",
+   "engine": "eleven",
+   "offset": 1.5,
+   "at": 91.5
+  },
+  {
+   "file": "vo_loadout_2.wav",
+   "id": "vo_loadout_2",
+   "section": "loadout",
+   "duration": 3.92,
+   "text": "Save new standing orders, and its very next order carries them.",
+   "engine": "eleven",
+   "offset": 10.48,
+   "overrun": 0,
+   "at": 100.48
+  },
+  {
+   "file": "vo_end.wav",
+   "id": "vo_end",
+   "section": "end",
+   "duration": 3.5,
+   "text": "One human. Thirty-one AI agents. Built today.",
+   "engine": "eleven",
+   "offset": 0.3,
+   "overrun": 0,
+   "at": 105.3
+  }
+ ],
+ "alts": [
+  {
+   "file": "vo_teams_4b.wav",
+   "id": "vo_teams_4b",
+   "section": "teams",
+   "duration": 3.98,
+   "text": "Verdict: changes! Back to the anvil, implementer.",
+   "engine": "eleven",
+   "offset": 16.34,
+   "at": 51.34
+  },
+  {
+   "file": "vo_end_b.wav",
+   "id": "vo_end_b",
+   "section": "end",
+   "duration": 3.5,
+   "text": "One human, a swarm of AI agents, built today.",
+   "engine": "eleven",
+   "offset": 0.3,
+   "at": 105.3
+  }
+ ],
+ "music": {
+  "file": "music.wav",
+  "duration": 109.0,
+  "note": "intro music 0 to 15 s at -18 LUFS, march bed from 14.5 s at -30 LUFS; VO is -16 LUFS"
+ },
+ "sfx": [
+  {
+   "file": "sfx_impact.wav",
+   "at": 2.0,
+   "duration": 1.48
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 4.34,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_impact.wav",
+   "at": 4.43,
+   "duration": 1.48
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 7.11,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_sparkle.wav",
+   "at": 8.59,
+   "duration": 1.0
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 9.71,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_hammer.wav",
+   "at": 10.15,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_hammer.wav",
+   "at": 10.58,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_hammer.wav",
+   "at": 11.01,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_riser.wav",
+   "at": 11.1,
+   "duration": 2.0
+  },
+  {
+   "file": "sfx_impact.wav",
+   "at": 12.83,
+   "duration": 1.48
+  },
+  {
+   "file": "sfx_slam.wav",
+   "at": 12.92,
+   "duration": 2.48
+  },
+  {
+   "file": "sfx_sparkle.wav",
+   "at": 13.18,
+   "duration": 1.0
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 15.0,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 35.0,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 55.0,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 75.0,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_whoosh.wav",
+   "at": 90.0,
+   "duration": 0.8
+  },
+  {
+   "file": "sfx_chime.wav",
+   "at": 105.0,
+   "duration": 1.48
+  }
+ ],
+ "extras": [
+  {
+   "file": "sfx_hammer.wav",
+   "use": "forge train"
+  },
+  {
+   "file": "sfx_chime.wav",
+   "use": "VERDICT: APPROVED stamp"
+  }
+ ]
+}

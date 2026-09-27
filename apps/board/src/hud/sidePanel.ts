@@ -229,11 +229,10 @@ class MessageBox {
   constructor(private onSend: (text: string) => Promise<string | null>) {
     this.el.addEventListener("submit", (e) => { e.preventDefault(); void this.submit(); });
     this.input.addEventListener("keydown", (e) => {
-      e.stopPropagation(); // keep WASD and hotkeys out of the scene while typing
+      e.stopPropagation(); // keep WASD and hotkeys out of the scene while typing (keyup still bubbles so held keys release)
       if (e.key === "Escape") { this.input.blur(); return; }
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void this.submit(); }
     });
-    this.input.addEventListener("keyup", (e) => e.stopPropagation());
   }
 
   focus(): void {

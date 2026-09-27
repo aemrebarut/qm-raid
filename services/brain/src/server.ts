@@ -40,8 +40,27 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-// Learnings written by this process, so recall finds them before gbrain's idle sweep turns their wikilinks into links.
-const recentLearnings: { slug: string; component: string; issue: string }[] = [];
+// gbrain's serve only sweeps wikilinks into links at startup or after about 10 idle minutes, so this service
+// reads wikilinks from page bodies itself: /graph and recall see a new learning's links at once.
+const WIKILINK = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
+function wikilinks(body: string): string[] {
+  return [...new Set([...body.matchAll(WIKILINK)].map((m) => m[1].trim()))];
+}
+const slugMs = (s: string) => Number(s.split("-").pop()) || 0;
+
+// Newest learnings whose body links the component or the issue.
+async function learningsFor(comp: string | undefined, issue: string | undefined): Promise<string[]> {
+  const rows = await tool<PageRow[]>("list_pages", { type: "learning", limit: 1000 }).catch(() => [] as PageRow[]);
+  const out: string[] = [];
+  for (const slug of rows.map((r) => r.slug).sort((a, b) => slugMs(b) - slugMs(a)).slice(0, 40)) {
+    const p = await getPage(slug);
+    if (!p) continue;
+    const links = wikilinks(p.body);
+    if ((comp && links.includes(`components/${comp}`)) || (issue && links.includes(issue))) out.push(slug);
+    if (out.length >= 6) break;
+  }
+  return out;
+}
 
 // Library panel node types, from the slug prefix (gbrain types lump components and rules together as concept).
 const PREFIX_TYPES: Record<string, string> = {
@@ -54,17 +73,25 @@ function nodeType(p: PageRow): string {
 }
 
 let graphCache: { nodes: any[]; edges: any[] } | null = null;
+let graphAt = 0;
+const GRAPH_TTL_MS = 10000;
 
 async function graph() {
-  if (graphCache) return graphCache;
+  if (graphCache && Date.now() - graphAt < GRAPH_TTL_MS) return graphCache;
   const pages = await listPages();
   const known = new Set(pages.map((p) => p.slug));
   const edges: { from: string; to: string; type: string }[] = [];
   for (const p of pages) {
     const links = await tool<Link[]>("get_links", { slug: p.slug });
     for (const l of links) if (known.has(l.to_slug)) edges.push({ from: l.from_slug, to: l.to_slug, type: l.link_type });
+    // Wikilinks not yet swept into gbrain links.
+    const page = await getPage(p.slug);
+    for (const to of wikilinks(page?.body ?? "")) {
+      if (known.has(to) && to !== p.slug && !edges.some((e) => e.from === p.slug && e.to === to)) edges.push({ from: p.slug, to, type: "mentions" });
+    }
   }
   graphCache = { nodes: pages.map((p) => ({ id: p.slug, type: nodeType(p), title: p.title })), edges };
+  graphAt = Date.now();
   return graphCache;
 }
 
@@ -87,17 +114,8 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
       if (contact) add(contact);
     }
   }
-  // Past learnings about this issue or component.
-  for (const s of [...slugs].filter((s) => s.startsWith("components/") || s.startsWith("issues/"))) {
-    const back = await tool<Link[]>("get_backlinks", { slug: s }).catch(() => [] as Link[]);
-    for (const l of back) if (l.from_slug.startsWith("learnings/")) add(l.from_slug);
-  }
-  for (const l of recentLearnings) if (l.component === comp || (target && l.issue === target.issue)) add(l.slug);
-  // Keep the newest learnings only (slug ends in epoch ms).
-  const learned = slugs.filter((s) => s.startsWith("learnings/"));
-  const ms = (s: string) => Number(s.split("-").pop()) || 0;
-  const keep = new Set(learned.sort((a, b) => ms(b) - ms(a)).slice(0, 6));
-  for (let i = slugs.length - 1; i >= 0; i--) if (slugs[i].startsWith("learnings/") && !keep.has(slugs[i])) slugs.splice(i, 1);
+  // Past learnings about this component or issue (read from page bodies, so no wait for gbrain's link sweep).
+  for (const l of await learningsFor(comp, target ? issueSlug(target.issue) : undefined)) add(l);
   if (query) for (const r of await search(query)) add(r.slug);
   const parts: string[] = [];
   for (const s of slugs) {
@@ -138,7 +156,6 @@ async function remember(unitId: string, targetId: string | undefined, text: stri
   const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim()}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
   // A repeated remember on the same slug overwrites that learning.
   await tool("put_page", { slug, content }).catch(() => tool("put_page", { slug, content, force: true }));
-  if (target && !recentLearnings.some((l) => l.slug === slug)) recentLearnings.push({ slug, component: target.component, issue: target.issue });
   graphCache = null;
   return { slug };
 }
@@ -185,7 +202,6 @@ async function reset() {
   for (const f of worldFiles()) {
     await tool("put_page", { slug: f.slug, content: f.content, force: true }).then(() => restored++).catch((e) => console.error("[brain] reset put", f.slug, e.message));
   }
-  recentLearnings.length = 0;
   graphCache = null;
   return { ok: true, deleted, restored };
 }
@@ -226,8 +242,6 @@ async function route(req: Request): Promise<Response> {
     const slug = String((await body(req)).slug ?? "");
     if (!/^(learnings\/|units\/)/.test(slug)) return fail("only learnings/* and units/* can be forgotten");
     await exclusive(() => tool("delete_page", { slug, force: true }));
-    const i = recentLearnings.findIndex((l) => l.slug === slug);
-    if (i >= 0) recentLearnings.splice(i, 1);
     graphCache = null;
     return json({ ok: true, slug });
   }

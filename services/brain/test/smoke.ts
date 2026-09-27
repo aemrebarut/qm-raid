@@ -35,6 +35,10 @@ if (process.env.SMOKE_WRITE === "1") {
   await check("remember writes a learning that recall returns", async () => {
     const { slug } = await post("/remember", { unitId: "smoke", targetId: "t101", text: "Smoke learning: reuse inv_<invoiceId> as the key on retries." });
     const r = await post("/recall", { componentId: "billing", targetId: "t101", unitId: "u2" });
+    // Regression (raid-rev): a new learning's edges are in /graph at once (no wait for gbrain's link sweep).
+    const g = await get("/graph");
+    const edgesNow = ["issues/lum-101", "components/billing", "units/smoke"].every((to) => g.edges.some((e: any) => e.from === slug && e.to === to));
+    if (!edgesNow) console.log("  learning edges missing from /graph");
     // Regression (raid-rev): parallel add_link on one page must keep both links.
     const mcp = (id: number, args: object) => fetch(BASE.replace(/:4616$/, ":4617") + "/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "add_link", arguments: args } }) }).then((r) => r.json());
     await Promise.all([mcp(1, { from: slug, to: "companies/orchard-education" }), mcp(2, { from: slug, to: "companies/brightpath-clinics" })]);
@@ -50,7 +54,7 @@ if (process.env.SMOKE_WRITE === "1") {
     await post("/forget", { slug });
     const after = await post("/recall", { componentId: "billing", targetId: "t101", unitId: "u2" });
     await post("/forget", { slug: "units/smoke" });
-    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
+    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && edgesNow && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
   });
 }
 console.log(failed ? `${failed} failed` : "all passed");

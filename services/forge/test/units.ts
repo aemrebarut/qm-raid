@@ -26,6 +26,8 @@ if (roleOf("Order o1: plain order") !== null) fail("plain order has no role");
 const custom = roleOf("Order\n\nRole: checker. Review against rules.\nEnd with VERDICT: APPROVED or VERDICT: CHANGES: <what>.\nPrevious work:\n- implementer (u1): done");
 if (!custom || !/VERDICT/.test(custom.instructions) || /implementer/.test(custom.instructions)) fail(`multi-line role: ${JSON.stringify(custom)}`);
 if (sections("Plan: p\nCustomer update: Hello team\nRemember: r")["customer reply"] !== "Hello team") fail("customer update heading");
+const rev = sections("Rules: rules/search-tenant-scope\nFinding: post-filters results.\nVERDICT: CHANGES: scope in the query");
+if (rev.rules !== "rules/search-tenant-scope" || rev.finding !== "post-filters results.") fail(`reviewer sections: ${JSON.stringify(rev)}`);
 
 const waiters: Array<(t: string) => void> = [];
 const units = createUnits({

@@ -14,11 +14,12 @@ export const CATALOG = [{ id: "gbrain", name: "GBrain", kind: "plugin",
 interface SendBody { text?: string; orderId?: string; targetId?: string; componentId?: string }
 
 // Splits a unit answer into its house-style sections; tolerates "**Plan:**", "## Plan:" and content on the next lines.
-const HEAD = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer (?:reply|update)|Remember)\s*\**\s*:\s*\**\s*(.*)$/i;
+const HEAD = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer (?:reply|update)|Remember|Rules|Finding)\s*\**\s*:\s*\**\s*(.*)$/i;
 export function sections(text: string): Record<string, string> {
   const out: Record<string, string[]> = {};
   let cur: string | null = null;
   for (const line of text.split("\n")) {
+    if (/^\W*VERDICT:/i.test(line)) { cur = null; continue; } // the verdict is not part of any section
     const m = line.match(HEAD);
     if (m) { cur = m[1].toLowerCase().replace("customer update", "customer reply"); out[cur] = m[2] ? [m[2]] : []; }
     else if (cur) out[cur].push(line);
@@ -162,10 +163,10 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       const sec = sections(answer);
       // Herald: the customer update is the point, and the engine shows the start of a reply as the handoff summary.
       if (role?.role === "herald" && sec["customer reply"]) answer = `${sec["customer reply"]}\n\n${answer}`;
-      const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")
+      const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`, sec.finding && `Finding: ${sec.finding}`].filter(Boolean).join(" ")
         || answer.replace(/\s+/g, " ").slice(0, 280);
       act("message", plan.slice(0, 400));
-      const learning = (sec.remember || sec.decision || "").slice(0, 400);
+      const learning = (sec.remember || sec.decision || (sec.finding && `${sec.rules ? `${sec.rules}: ` : ""}${sec.finding}`) || "").slice(0, 400);
       if (isOrder && brainOn && b.targetId && learning) {
         try {
           const rem = await brain("/remember", { unitId: u.id, targetId: b.targetId, text: `${u.name} (${t.name}): ${learning}` });

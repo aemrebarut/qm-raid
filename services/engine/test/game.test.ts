@@ -9,12 +9,16 @@ let spawnGate: Promise<void> | null = null; // when set, bridge POST /units wait
 const calls: { url: string; body: any }[] = [];
 let sessionGen = 0; // bridge POST /units answers a fresh sessionId each time
 let brainResetGate: Promise<void> | null = null; // when set, brain POST /reset waits for it (slow reset)
+let recallGate: Promise<void> | null = null; // when set, brain POST /recall waits for it
+let issuesAnswer: { status: number; body: unknown } | null = null; // brain POST /issues answer
 const sendStatuses: number[] = []; // bridge POST /units/:id/send answers these statuses first (then 200)
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
   if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
   if (String(url).endsWith("/reset") && brainResetGate) await brainResetGate;
+  if (String(url).endsWith("/recall") && recallGate) await recallGate;
+  if (String(url).endsWith("/issues") && issuesAnswer) return new Response(JSON.stringify(issuesAnswer.body), { status: issuesAnswer.status });
   if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
   if (String(url).endsWith("/units") && init?.method === "POST") {
     const id = `s${++sessionGen}`;
@@ -483,4 +487,53 @@ test("order header restates the unit's standing orders (loadout.instructions) on
   expect(a.split("\n")[1]).toBe("Standing orders: Answer customers in two sentences.");
   expect(a).toContain("\nQuote the house rule slug.\n");
   expect(await sent("u2", "t102")).not.toContain("Standing orders:");
+});
+
+test("P2: the brain fallback and remember mirror of a pre-reset order write and show nothing after the reset", async () => {
+  let open!: () => void;
+  recallGate = new Promise((r) => (open = r));
+  const o = orderFor(["u1"], "t101");
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: o.id, text: "Old completed result" }); // no gbrain calls: fallback runs
+  expect(order(o.id).status).toBe("done");
+  await Bun.sleep(10);
+  expect(calls.some((c) => c.url.endsWith("/recall"))).toBe(true);
+  await resetWorld();
+  calls.length = 0;
+  open();
+  recallGate = null;
+  await Bun.sleep(30);
+  expect(store.state.memory.recent).toEqual([]);
+  expect(calls.filter((c) => c.url.endsWith("/remember"))).toEqual([]);
+
+  // A chat gbrain.remember that arrives while the reset runs is not mirrored into the brain.
+  let release!: () => void;
+  brainResetGate = new Promise((r) => (release = r));
+  const reset = resetWorld();
+  await Bun.sleep(5);
+  calls.length = 0;
+  onBridgeEvent({ type: "activity", unitId: "u6", kind: "tool", text: "w", tool: "gbrain.remember", args: { slug: "learnings/old-chat", text: "old" } });
+  await Bun.sleep(10);
+  release();
+  brainResetGate = null;
+  await reset;
+  expect(calls.filter((c) => c.url.endsWith("/remember"))).toEqual([]);
+});
+
+test("POST /api/targets route: brain Target pushed with target.spawned, bad input 400", async () => {
+  const { handle } = await import("../src/app.ts");
+  const post = (body?: unknown) => handle(new Request("http://127.0.0.1:4610/api/targets", { method: "POST", headers: body === undefined ? {} : { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }));
+  const brainTarget = { id: "t110", issue: "LUM-110", title: "Export drops the last row", component: "search", kind: "feature", severity: 3, status: "open", pos: { x: 19, y: 12 }, customers: ["kestrel-labs"] };
+  issuesAnswer = { status: 200, body: { target: brainTarget } };
+  calls.length = 0;
+  const r = await post(); // Random: bodyless
+  expect(r.status).toBe(200);
+  expect(await r.json()).toEqual({ ok: true, target: brainTarget });
+  expect(calls.find((c) => c.url.endsWith("/issues"))!.body.title).toBeUndefined();
+  expect(store.state.targets.at(-1)).toEqual(brainTarget);
+  expect(recentEvents().at(-1)).toMatchObject({ type: "target.spawned", target: { id: "t110" } });
+  // Brain down -> 503 is covered in test/targets.test.ts (it also checks the once-a-minute log, so not repeated here).
+  expect((await post({ kind: "chore" })).status).toBe(400);
+  issuesAnswer = null;
 });

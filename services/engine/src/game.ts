@@ -223,8 +223,11 @@ function completeOrder(o: Order, reply: string): void {
 async function brainFallback(o: Order, reply: string, used: { reads: number; writes: number }): Promise<void> {
   const t = targetById(o.targetId);
   if (!t) return;
+  // A reset may start during any await: then the order is gone and nothing more is written or shown.
+  const alive = () => !resetting && isLive(o);
   if (used.reads === 0) {
     const res = await sendJson<{ slugs?: string[]; context?: string }>("POST", `${BRAIN_URL}/recall`, { componentId: t.component, targetId: t.id, unitId: o.unitId });
+    if (!alive()) return;
     if (res.status === 200 && res.data) {
       const slugs = Array.isArray(res.data.slugs) ? res.data.slugs.filter((x) => typeof x === "string") : [];
       const summary = `Recalled ${slugs.length} pages for ${t.issue} (engine fallback)`;
@@ -234,6 +237,7 @@ async function brainFallback(o: Order, reply: string, used: { reads: number; wri
   }
   if (used.writes === 0 && reply.trim()) {
     const res = await sendJson<{ slug?: string }>("POST", `${BRAIN_URL}/remember`, { unitId: o.unitId, targetId: t.id, text: reply });
+    if (!alive()) return;
     if (res.status === 200 && res.data && typeof res.data.slug === "string") {
       const summary = `Remembered the outcome of ${t.issue} (engine fallback)`;
       pushMemory({ ts: Date.now(), unitId: o.unitId, op: "remember", slugs: [res.data.slug], summary });
@@ -360,12 +364,14 @@ function mirrorsToBrain(u: Unit): boolean {
 }
 
 async function mirrorRemember(u: Unit, args: any, text: string, slug: string, orderId: string | undefined): Promise<void> {
+  if (resetting) return; // never write into the brain while it is being reset
+  const world = S();
   const targetId = argStrings(args, ["targetId"])[0] ?? (orderId ? orderById(orderId)?.targetId : undefined) ?? "";
   const body: Record<string, string> = { unitId: u.id, targetId, text: argStrings(args, ["text", "summary"])[0] ?? text };
   if (/^learnings\/[a-z0-9][a-z0-9._-]*$/.test(slug)) body.slug = slug;
   const res = await sendJson("POST", `${BRAIN_URL}/remember`, body, 15000);
   if (res.status !== 200) logOnce("mirror", `brain /remember mirror failed (status ${res.status})`);
-  await refreshPages();
+  if (S() === world && !resetting) await refreshPages();
 }
 
 export async function refreshPages(): Promise<void> {

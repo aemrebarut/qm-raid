@@ -3,6 +3,7 @@ import { BRAIN_URL, CORS_ORIGINS } from "./config.ts";
 import { listenerCount, recentEvents, store } from "./store.ts";
 import { sseResponse } from "./sse.ts";
 import { forgeProxy } from "./forge.ts";
+import { spawnTarget } from "./targets.ts";
 import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
 
 // Only listed browser origins get CORS headers; any other page can neither read nor change engine state.
@@ -84,6 +85,7 @@ async function route(req: Request): Promise<Response> {
     if (p === "/api/forge/types") { const r = await forgeProxy(b); return json(r, r.ok ? 200 : 400); }
     if ((mm = p.match(/^\/api\/units\/([^/]+)\/message$/))) return reply(await messageUnit(decodeURIComponent(mm[1]!), b));
     if (p === "/api/teams") return reply(assignTeam(b));
+    if (p === "/api/targets") { const r = await spawnTarget(b); return r.ok ? json({ ok: true, target: r.target }) : json({ ok: false, error: r.error }, r.status); }
     if (p === "/api/reset") return reply(await resetWorld());
   } else if (m === "PUT") {
     if ((mm = p.match(/^\/api\/teams\/(\d+)\/workflow$/))) return reply(setTeamWorkflow(Number(mm[1]), b));

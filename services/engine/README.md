@@ -23,10 +23,11 @@ Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost o
 - `src/config.ts` ports, URLs, class to model map, speeds
 - `src/fixture.ts` fallback world (mirrors the brain world) and 6 default units
 - `src/http.ts` fetch helpers with timeouts, throttled logging
+- `src/targets.ts` POST /api/targets (owner raid-eng-mock)
 - `test/smoke.ts` end-to-end smoke test
 
 ## API
-`GET /health`, `GET /api/state`, `GET /api/events` (SSE, `state.snapshot` first, `: ping` every 15 s), `POST /api/orders` {unitIds? | teamId?, targetId}, `POST /api/orders/:id/cancel`, `POST /api/units` {class, name?, team?}, `PATCH /api/units/:id` {team?, effort?, role?}, `POST /api/units/:id/message` {text}, `POST /api/teams` {id, members}, `PATCH /api/teams/:id` {autopilot?, name?}, `PUT /api/teams/:id/workflow` {workflow}, `DELETE /api/teams/:id/workflow`, `POST /api/reset`, Library proxies `GET /api/brain/graph|stats|search?q=|page?slug=`. Debug: `GET /api/debug/events`.
+`GET /health`, `GET /api/state`, `GET /api/events` (SSE, `state.snapshot` first, `: ping` every 15 s), `POST /api/orders` {unitIds? | teamId?, targetId}, `POST /api/orders/:id/cancel`, `POST /api/units` {class, name?, team?}, `PATCH /api/units/:id` {team?, effort?, role?}, `POST /api/units/:id/message` {text}, `POST /api/teams` {id, members}, `PATCH /api/teams/:id` {autopilot?, name?}, `PUT /api/teams/:id/workflow` {workflow}, `DELETE /api/teams/:id/workflow`, `POST /api/targets` {title?, body?, component?, kind?, severity?, customers?} (spawns an issue via brain `POST /issues`, `src/targets.ts`, owner raid-eng-mock; 503 when the brain is down), `POST /api/reset`, Library proxies `GET /api/brain/graph|stats|search?q=|page?slug=`. Debug: `GET /api/debug/events`.
 Errors are `{ok: false, error}` with 400 (bad input), 404 (unknown id), 502 (dependency down).
 
 ## Behavior

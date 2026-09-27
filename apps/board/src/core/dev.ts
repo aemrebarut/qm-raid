@@ -1,7 +1,7 @@
 // Dev helpers for building UI before the engine emits the matching events (console: raid.dev.*).
 // They only apply synthetic events to the local store; nothing is sent to the engine.
 import type { Store } from "./store";
-import type { Order, UnitStatus, WorkflowRun, WorkflowStep } from "./types";
+import type { Order, Target, UnitStatus, WorkflowRun, WorkflowStep } from "./types";
 
 let n = 0;
 
@@ -68,6 +68,21 @@ export function devTools(store: Store) {
       };
       visit(wf.entry);
       return run.id;
+    },
+    /** A new camp rises in a zone (target.spawned) on a free tile. */
+    issue(componentId?: string, title = "Synthetic issue from raid.dev"): Target | null {
+      const s = store.getState();
+      const c = componentId ? s.components.find((x) => x.id === componentId) : s.components[n % Math.max(1, s.components.length)];
+      if (!c) return null;
+      const taken = new Set([...s.targets, ...s.units].map((x) => `${x.pos.x},${x.pos.y}`));
+      let pos = { x: c.zone.x + 1, y: c.zone.y + 1 };
+      for (let y = c.zone.y + 1; y < c.zone.y + c.zone.h - 1; y++) for (let x = c.zone.x + 1; x < c.zone.x + c.zone.w - 1; x++) {
+        if (!taken.has(`${x},${y}`)) { pos = { x, y }; y = Infinity; break; }
+      }
+      const num = 900 + ++n;
+      const target: Target = { id: `dev-t${num}`, issue: `LUM-${num}`, title, component: c.id, kind: "bug", severity: 2, status: "open", pos, customers: [] };
+      store.apply({ seq: seq(), ts: now(), type: "target.spawned", target });
+      return target;
     },
     status(unitId: string, status: UnitStatus) {
       store.apply({ seq: seq(), ts: now(), type: "unit.status", unitId, status });

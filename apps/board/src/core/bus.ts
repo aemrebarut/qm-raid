@@ -25,6 +25,7 @@ export type BusEvents = {
   openPage: string; // open the Library overlay on this brain page slug (panels/ handles it)
   view: { corners: { x: number; y: number }[] }; // camera ground footprint in tile coords, clockwise from top-left (scene emits, minimap draws)
   toast: { text: string; level: "info" | "error" }; // HUD shows these
+  newIssue: null; // open the spawn-issue dialog (hud/newIssue.ts; hotkey N or a top-bar button)
 };
 
 type Handler<T> = (payload: T) => void;
@@ -37,6 +38,8 @@ export interface Bus {
   toast(text: string, level?: "info" | "error"): void;
   /** Open the Library overlay showing one brain page (e.g. a slug from a gbrain tool call). */
   openPage(slug: string): void;
+  /** Open the spawn-issue dialog. */
+  newIssue(): void;
   select(unitIds: string[], opts?: { add?: boolean }): void;
   selectTarget(id: string | null): void;
   selectBuilding(id: string | null): void;
@@ -70,6 +73,7 @@ export function createBus(): Bus {
     },
     toast(text, level = "info") { emit("toast", { text, level }); },
     openPage(slug) { emit("openPage", slug); },
+    newIssue() { emit("newIssue", null); },
     select(unitIds, opts) {
       const units = opts?.add ? [...new Set([...selection.units, ...unitIds])] : [...unitIds];
       // Selecting units keeps a selected target (so "units then target" can order), drops the building.

@@ -2,6 +2,7 @@
 // scene/index.ts must export mountScene(el, store, bus); hud/index.ts must export mountHud(el, store, bus).
 // Both are optional at load time (import.meta.glob), so the app runs while either is still being built.
 import { mountPanels } from "./panels";
+import { mountNewIssue } from "./hud/newIssue";
 import { createStore, createBus, connectEngine, fixtureState, installKeys, linkSelection, devTools, api, type Store, type Bus } from "./core";
 
 type Mount = (el: HTMLElement, store: Store, bus: Bus) => void | (() => void);
@@ -27,10 +28,11 @@ function mount(label: string, el: HTMLElement | null, fn: Mount | undefined) {
 mount("scene", document.getElementById("scene"), Object.values(scenes)[0]?.mountScene);
 mount("hud", document.getElementById("hud"), Object.values(huds)[0]?.mountHud);
 mount("panels", document.getElementById("hud"), mountPanels);
+mount("new issue", document.getElementById("hud"), mountNewIssue);
 connectEngine(store);
 installKeys(store, bus);
 linkSelection(store, bus);
 
 // Console handle for debugging and review: raid.store.getState(), raid.bus.select(["u1"]), raid.api.state(),
-// raid.dev.propose() / recall("u1") / remember("u1") inject synthetic events locally.
+// raid.dev.propose() / recall("u1") / remember("u1") / issue() inject synthetic events locally.
 (window as any).raid = { store, bus, api, dev: devTools(store) };

@@ -1,6 +1,6 @@
 // Engine API client. Every call resolves (never throws): {ok: false, error} on network or HTTP failure.
 // All paths are relative to the board origin; Vite proxies /api to the engine on 4610.
-import type { State, Workflow, Team } from "./types";
+import type { State, Workflow, Team, Target } from "./types";
 
 export type Reply<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -62,6 +62,9 @@ export const api = {
   setWorkflow: (id: number, body: { preset: Workflow["preset"] } | { workflow: Workflow }) => call<{ team?: Team }>("PUT", `/api/teams/${id}/workflow`, body),
   clearWorkflow: (id: number) => call<{ team?: Team }>("DELETE", `/api/teams/${id}/workflow`),
 
+  // Issues: spawn a new camp. No title = a random issue from the brain pool; component defaults to the least busy one.
+  spawnTarget: (body: SpawnTarget = {}) => call<{ target?: Target }>("POST", "/api/targets", body),
+
   // Forge (River building)
   forgeType: (name: string, description: string) => call<{ typeId?: string }>("POST", "/api/forge/types", { name, description }),
 
@@ -75,3 +78,5 @@ export const api = {
 };
 
 export type Api = typeof api;
+
+export interface SpawnTarget { title?: string; body?: string; component?: string; kind?: Target["kind"]; severity?: Target["severity"]; customers?: string[] }

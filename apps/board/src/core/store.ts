@@ -151,6 +151,7 @@ export function createStore(initial: State): Store {
       case "memory.link":
         state.memory.recent.push({ ts, unitId: "", op: "link", slugs: [ev.from, ev.to], summary: ev.linkType });
         break;
+      case "target.spawned":
       case "target.updated":
         upsert(state.targets, ev.target);
         return;

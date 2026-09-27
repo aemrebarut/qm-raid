@@ -96,7 +96,7 @@ Interface (fixed now so both sides build in parallel; change only via the lead):
 export interface NodeBrief { runId: string; nodeId: string; role: string; instructions: string;
   previous: { nodeId: string; role: string; unitId: string; reply: string }[] }   // latest last
 export interface FlowHooks {
-  startOrder(unitId: string, targetId: string, brief: NodeBrief): string | null; // game.ts creates an order (source "workflow"), walks, prompts; returns orderId or null
+  startOrder(unitId: string, targetId: string, brief: NodeBrief): string | null; // game.ts creates an order (source "workflow", runId = brief.runId, nodeId = brief.nodeId), walks, prompts; returns orderId or null
   cancelOrder(orderId: string): void;
   setTargetStatus(targetId: string, status: "open" | "engaged" | "resolved"): void;
 }
@@ -120,3 +120,4 @@ Steps
 - K12 (mock). Reviewer orders (text contains "VERDICT:") reply ending `VERDICT: CHANGES: <one concrete change>` the first time per (unit, target) and `VERDICT: APPROVED` the second; planner orders (text contains "Role: planner") reply with a 3-step numbered plan. Smoke covers both.
 - R5 (rev). On 4618 under the lock: trio preset on team 1, team order, expect planner -> implementer -> reviewer (changes) -> implementer -> reviewer (approved) -> run done, target resolved, handoff events between the right units, 5 orders with source workflow.
 - W2 (lead + impl). Same trio on 4610 real QM once, watched through the board on 4611.
+- W3 stretch after W2 (Analyst): autopilot proposes a whole-team workflow run (proposal carries teamId) for teams with a workflow, same veto window; until then autopilot skips units of workflow teams. Contract clarifications in 3bde133.

@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { Building } from "../core";
 import { makeBuilding } from "../../../../packages/art/src";
 import { artOn } from "./art";
-import { gableRoof, makeEngraved, mat, mergeStatic, mesh, tileToWorld } from "./util";
+import { CONDENSED, gableRoof, makeEngraved, mat, mergeStatic, mesh, tileToWorld } from "./util";
 
 const ART_KIND = { gbrain: "library", barracks: "barracks", river: "forge" } as const;
 
@@ -274,12 +274,14 @@ function forge(group: THREE.Group) {
 
 /** Parchment progress banner above the Forge while a type is being forged. */
 function workBanner(group: THREE.Group, y: number) {
+  // Engraved like the world names (look-plan i3): condensed caps with a halo, a thin River-blue bar, no box.
+  const W = 512, H = 64;
   const bannerCanvas = document.createElement("canvas");
-  bannerCanvas.width = 320; bannerCanvas.height = 72;
+  bannerCanvas.width = W; bannerCanvas.height = H;
   const bannerTex = new THREE.CanvasTexture(bannerCanvas);
   bannerTex.colorSpace = THREE.SRGBColorSpace;
   const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: bannerTex, depthTest: false, transparent: true }));
-  banner.scale.set(2.6, 2.6 * 72 / 320, 1);
+  banner.scale.set(3.9, 3.9 * H / W, 1);
   banner.center.set(0.5, 0);
   banner.position.set(0, y, 0);
   banner.renderOrder = 10;
@@ -295,16 +297,23 @@ function workBanner(group: THREE.Group, y: number) {
       if (key === bannerKey) return;
       bannerKey = key;
       const ctx = bannerCanvas.getContext("2d")!;
-      ctx.clearRect(0, 0, 320, 72);
-      ctx.fillStyle = "#f1e3bf"; ctx.strokeStyle = "#6b4e2a"; ctx.lineWidth = 3;
-      ctx.fillRect(2, 2, 316, 68); ctx.strokeRect(2, 2, 316, 68);
-      ctx.fillStyle = "#3a2a18"; ctx.fillRect(14, 44, 292, 16);
-      const grad = ctx.createLinearGradient(14, 0, 306, 0);
-      grad.addColorStop(0, "#ff8a1a"); grad.addColorStop(1, "#ffd05a");
-      ctx.fillStyle = grad; ctx.fillRect(14, 44, 292 * Math.max(0, Math.min(1, progress)), 16);
-      ctx.fillStyle = "#2b1d0e"; ctx.font = `600 22px "Iowan Old Style", Palatino, Georgia, serif`;
-      ctx.textBaseline = "middle";
-      ctx.fillText(label.length > 30 ? label.slice(0, 29) + "\u2026" : label, 14, 24);
+      ctx.clearRect(0, 0, W, H);
+      const text = (label.length > 34 ? label.slice(0, 33) + "\u2026" : label).toUpperCase();
+      let font = 30;
+      const fit = () => { ctx.font = `600 ${font}px ${CONDENSED}`; (ctx as any).letterSpacing = `${Math.round(font * 0.12)}px`; };
+      fit();
+      while (font > 18 && ctx.measureText(text).width > W - 24) { font -= 2; fit(); }
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineWidth = 6; ctx.lineJoin = "round"; ctx.strokeStyle = "rgba(10,8,5,0.82)";
+      ctx.strokeText(text, W / 2, 22);
+      ctx.fillStyle = "#fffaea";
+      ctx.fillText(text, W / 2, 22);
+      // Bar: dark track with the River-blue fill, about 3 px at the overview.
+      const bw = 300, bx = (W - bw) / 2, by = 46, bh = 10;
+      ctx.fillStyle = "rgba(10,8,5,0.72)";
+      ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+      ctx.fillStyle = "#4fa7e0";
+      ctx.fillRect(bx, by, bw * Math.max(0, Math.min(1, progress)), bh);
       bannerTex.needsUpdate = true;
     },
   };

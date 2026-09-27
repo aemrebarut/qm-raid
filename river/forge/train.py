@@ -49,9 +49,14 @@ def sft(args, train: list[dict], out: Path, emit) -> str:
     steps_per_epoch = math.ceil(len(data) / batch)
     total = epochs * steps_per_epoch
     c = client()
-    emit(status="training", progress=0.32, stage=f"starting River session ({args.base_model}, LoRA r16)")
-    with c.session(project="qm-raid-forge") as session:
+    emit(status="training", progress=0.32, stage=f"waiting for a River session ({args.base_model}, LoRA r16)")
+    timings = {"start": time.time()}
+    with c.session(project="qm-raid-forge", timeout=float(os.environ.get("FORGE_SESSION_TIMEOUT", "600"))) as session:
+        timings["session"] = time.time()
+        emit(status="training", progress=0.325, stage=f"River session open after {timings['session'] - timings['start']:.0f} s; loading {args.base_model}")
         model = session.create_model(base_model=args.base_model, lora=river.LoraConfig(rank=16))
+        timings["model"] = time.time()
+        emit(status="training", progress=0.33, stage=f"model loaded after {timings['model'] - timings['session']:.0f} s; training")
         rng = random.Random(args.seed)
         step = 0
         losses = []
@@ -69,7 +74,8 @@ def sft(args, train: list[dict], out: Path, emit) -> str:
         emit(status="training", progress=0.79, stage="saving checkpoint")
         ckpt = model.save_weights(args.type_id, mode="inference")
     info = {"checkpoint": ckpt.path, "base_model": args.base_model, "steps": total, "epochs": epochs,
-            "batch": batch, "lr": lr, "losses": losses, "train_examples": len(data), "seconds": round(time.time() - t0, 1)}
+            "batch": batch, "lr": lr, "losses": losses, "train_examples": len(data), "seconds": round(time.time() - t0, 1),
+            "sessionWait": round(timings["session"] - timings["start"], 1), "modelLoad": round(timings["model"] - timings["session"], 1)}
     (out / "model.json").write_text(json.dumps(info, indent=2))
     return ckpt.path
 

@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 
 const CATALOG = { items: [
   { id: "raid-board", name: "Raid board", description: "Order header format", kind: "skill" },
-  { id: "test-writer", name: "Test writer", description: "Regression tests first", kind: "skill" },
+  { id: "memory", name: "Memory", description: "Recall and remember", kind: "skill" },
   { id: "gbrain", name: "GBrain", description: "Team memory", kind: "plugin" },
   { id: "linear", name: "Linear", description: "Issue tracker", kind: "plugin" },
 ] };
@@ -38,7 +38,7 @@ test("loadout: Apply sends only the changed fields and shows applying then appli
     expect(apply().disabled).toBe(true);
     const box = (name: string) => [...root.querySelectorAll(".ldo-item")].find((l) => l.textContent!.includes(name))!.querySelector("input") as any;
     expect(box("GBrain").checked).toBe(true);
-    box("Test writer").checked = true; box("Test writer").dispatchEvent(new (globalThis as any).window.Event("change"));
+    box("Memory").checked = true; box("Memory").dispatchEvent(new (globalThis as any).window.Event("change"));
     ([...root.querySelectorAll(".ldo-chip")].find((c) => c.textContent === "Brief") as any).click();
     (root.querySelector('[data-effort="xhigh"]') as any).click();
     expect(apply().disabled).toBe(false);
@@ -47,7 +47,7 @@ test("loadout: Apply sends only the changed fields and shows applying then appli
     expect(apply().textContent).toBe("Applying");
     expect(patches[0].url).toBe("/api/units/u1");
     expect(Object.keys(patches[0].body).sort()).toEqual(["effort", "instructions", "skills"]);
-    expect(patches[0].body.skills).toEqual(["raid-board", "test-writer"]);
+    expect(patches[0].body.skills).toEqual(["raid-board", "memory"]);
     expect(patches[0].body.instructions).toContain("Keep replies under 120 words");
     const unit = { ...store.unit("u1")!, effort: "xhigh", loadout: { instructions: patches[0].body.instructions, skills: patches[0].body.skills, plugins: ["gbrain"] } };
     patches[0].resolve(new Response(JSON.stringify({ ok: true, unit })));
@@ -118,5 +118,22 @@ test("loadout: Apply is held on the real-QM backend (Analyst HOLD)", async () =>
     expect(view.root.querySelector(".ldo-status")!.textContent).toBe("Loadout edits on live agents return in a few minutes");
     expect(await view.apply()).toBe(false);
     expect(patches.length).toBe(0);
+  } finally { (globalThis as any).fetch = orig; }
+});
+
+test("loadout: skills the catalog no longer offers are shown, locked, and dropped from the PATCH", async () => {
+  const orig = (globalThis as any).fetch;
+  try {
+    const { store, view, patches, tick } = await setup();
+    store.apply({ seq: 8, ts: Date.now(), type: "unit.updated", unit: { ...store.unit("u4")!, loadout: { instructions: "", skills: ["raid-board", "write-tests"], plugins: ["gbrain"] } } });
+    view.show("u4");
+    await tick();
+    const row = (name: string) => [...view.root.querySelectorAll(".ldo-item")].find((l) => l.textContent!.includes(name))!;
+    expect(row("write-tests").textContent).toContain("No longer offered");
+    expect((row("write-tests").querySelector("input") as any).disabled).toBe(true);
+    const mem = row("Memory").querySelector("input") as any;
+    mem.checked = true; mem.dispatchEvent(new (globalThis as any).window.Event("change"));
+    view.apply();
+    expect(patches[0].body).toEqual({ skills: ["raid-board", "memory"] });
   } finally { (globalThis as any).fetch = orig; }
 });

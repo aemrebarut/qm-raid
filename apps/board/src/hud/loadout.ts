@@ -158,6 +158,12 @@ export class LoadoutView {
     if (!this.unitId || !this.base || !this.draft || this.held) return false;
     const body = loadoutPatch(this.base, this.draft);
     if (!Object.keys(body).length) return false;
+    // The bridge rejects ids outside its catalog (an allowlist), so ids it no longer offers are dropped here.
+    if (this.catalog) {
+      const offered = (kind: CatalogItem["kind"]) => new Set([...this.catalog!.filter((i) => i.kind === kind).map((i) => i.id), ...(kind === "plugin" ? [LOCKED_PLUGIN] : [])]);
+      if (body.skills) { const ok = offered("skill"); body.skills = body.skills.filter((s) => ok.has(s)); }
+      if (body.plugins) { const ok = offered("plugin"); body.plugins = body.plugins.filter((s) => ok.has(s)); }
+    }
     const id = this.unitId, gen = ++this.applyGen;
     const sent = structuredClone(this.draft);
     this.setState("applying");
@@ -281,12 +287,13 @@ export class LoadoutView {
     const list = (kind: CatalogItem["kind"], picked: string[], el: HTMLElement) => {
       const known = items.filter((i) => i.kind === kind);
       const extra = picked.filter((id) => !known.some((i) => i.id === id))
-        .map((id) => ({ id, name: id === LOCKED_PLUGIN ? "GBrain" : id, description: "Not in the catalog", kind }));
+        .map((id) => ({ id, name: id === LOCKED_PLUGIN ? "GBrain" : id, description: this.catalog ? "No longer offered" : "Not in the catalog", kind, retired: !!this.catalog && id !== LOCKED_PLUGIN }));
       const all = [...known, ...extra];
       if (!all.length) { el.replaceChildren(h("p", { class: "ldo-empty" }, this.catalogErr ? `Catalog unavailable: ${this.catalogErr}` : this.catalog ? "None available" : "Loading")); return; }
       el.replaceChildren(...all.map((i) => {
         const locked = kind === "plugin" && i.id === LOCKED_PLUGIN;
-        const box = h("input", { type: "checkbox", role: "switch", class: "ldo-switch", checked: locked || picked.includes(i.id), disabled: locked, "aria-label": i.name }) as HTMLInputElement;
+        const retired = "retired" in i && i.retired === true; // held by the unit but no longer in the catalog: shown, not toggleable
+        const box = h("input", { type: "checkbox", role: "switch", class: "ldo-switch", checked: locked || picked.includes(i.id), disabled: locked || retired, "aria-label": i.name }) as HTMLInputElement;
         box.addEventListener("change", () => {
           const at = picked.indexOf(i.id);
           if (box.checked && at < 0) picked.push(i.id);

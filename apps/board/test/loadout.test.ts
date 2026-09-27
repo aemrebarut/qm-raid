@@ -40,8 +40,7 @@ test("loadout: Apply sends only the changed fields and shows applying then appli
     expect(box("GBrain").checked).toBe(true);
     box("Test writer").checked = true; box("Test writer").dispatchEvent(new (globalThis as any).window.Event("change"));
     ([...root.querySelectorAll(".ldo-chip")].find((c) => c.textContent === "Brief") as any).click();
-    const effort = root.querySelectorAll("select")[1] as any;
-    effort.value = "xhigh"; effort.dispatchEvent(new (globalThis as any).window.Event("change"));
+    (root.querySelector('[data-effort="xhigh"]') as any).click();
     expect(apply().disabled).toBe(false);
 
     const done = view.apply();

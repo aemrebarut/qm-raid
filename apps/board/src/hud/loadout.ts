@@ -16,6 +16,8 @@ export const ORDERS: { label: string; line: string }[] = [
   { label: "Brief", line: "Keep replies under 120 words: what you found, what you changed, what is left." },
 ];
 const CATALOG_TTL_MS = 30_000;
+const MODEL_LABEL = (m: string) => m.replace(/^gpt-/, "").replace("-", " ");
+const EFFORT_LABEL: Record<string, string> = { auto: "Auto", low: "Low", medium: "Med", high: "High", xhigh: "Max" };
 /** GBrain is the Library, the core of the game: always on for every unit (Analyst, 15:5x). */
 const LOCKED_PLUGIN = "gbrain";
 
@@ -28,23 +30,35 @@ const CSS = `
 .ldo-h { margin: 0; font: 600 11px/1 "Avenir Next Condensed", "Arial Narrow", sans-serif; letter-spacing: .12em; text-transform: uppercase; color: #d9b56f; }
 .ldo textarea { width: 100%; min-height: 96px; box-sizing: border-box; padding: 8px; resize: vertical; border-radius: 3px;
   font: 12px/1.45 ui-monospace, Menlo, monospace; color: #e9e2d0; background: rgba(0, 0, 0, .35); border: 1px solid rgba(201, 164, 98, .3); }
-.ldo textarea:focus, .ldo select:focus { outline: none; border-color: rgba(217, 181, 111, .8); }
+.ldo textarea:focus { outline: none; border-color: rgba(217, 181, 111, .8); }
 .ldo-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .ldo-chip { height: 24px; padding: 0 8px; border-radius: 12px; cursor: pointer; font: 11px system-ui, sans-serif; color: #cfc6b0;
   background: rgba(255, 255, 255, .04); border: 1px solid rgba(201, 164, 98, .3); transition: background 120ms ease, border-color 120ms ease; }
 .ldo-chip[aria-pressed="true"] { color: #1d1a14; background: #d9b56f; border-color: #d9b56f; }
 .ldo-list { display: grid; gap: 2px; }
-.ldo-item { display: grid; grid-template-columns: 16px 1fr; gap: 0 8px; align-items: start; padding: 4px; border-radius: 3px; cursor: pointer; }
+.ldo-item { display: grid; grid-template-columns: 1fr 28px; gap: 0 8px; align-items: center; padding: 4px; border-radius: 3px; cursor: pointer; }
 .ldo-item:hover { background: rgba(255, 255, 255, .04); }
 .ldo-locked { cursor: default; }
 .ldo-locked:hover { background: none; }
-.ldo-item input { margin: 2px 0 0; accent-color: #d9b56f; }
+.ldo-text { display: grid; min-width: 0; }
 .ldo-name { color: #f3e7c9; }
-.ldo-desc { grid-column: 2; color: #9a927f; font-size: 11px; }
-.ldo-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.ldo select { height: 28px; padding: 0 4px; border-radius: 3px; font: 12px system-ui, sans-serif; color: #e9e2d0;
-  background: rgba(0, 0, 0, .35); border: 1px solid rgba(201, 164, 98, .3); }
-.ldo-foot { display: flex; align-items: center; gap: 8px; }
+.ldo-desc { color: #9a927f; font-size: 11px; }
+.ldo-switch { appearance: none; -webkit-appearance: none; position: relative; width: 28px; height: 16px; margin: 0; border-radius: 8px; cursor: pointer;
+  background: rgba(0, 0, 0, .45); border: 1px solid rgba(201, 164, 98, .35); transition: background 150ms ease, border-color 150ms ease; }
+.ldo-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #9a927f; transition: transform 150ms ease, background 150ms ease; }
+.ldo-switch:checked { background: rgba(217, 181, 111, .35); border-color: #d9b56f; }
+.ldo-switch:checked::after { transform: translateX(12px); background: #f3d99a; }
+.ldo-switch:focus-visible { outline: 1px solid #d9b56f; outline-offset: 2px; }
+.ldo-switch:disabled { cursor: default; opacity: .75; }
+.ldo-seg { display: grid; gap: 1px; padding: 1px; border-radius: 3px; background: rgba(201, 164, 98, .3); }
+.ldo-seg-model { grid-template-columns: repeat(3, 1fr); }
+.ldo-seg-effort { grid-template-columns: repeat(5, 1fr); }
+.ldo-seg button { height: 26px; padding: 0 4px; border: 0; cursor: pointer; font: 11px system-ui, sans-serif; color: #cfc6b0; background: rgba(22, 26, 31, .95);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background 120ms ease, color 120ms ease; }
+.ldo-seg button:hover { background: rgba(58, 50, 38, .95); }
+.ldo-seg button[aria-pressed="true"] { color: #1d1a14; background: #d9b56f; }
+.ldo-foot { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; padding: 8px 0; margin-bottom: -8px;
+  background: linear-gradient(rgba(22, 26, 31, 0), rgba(22, 26, 31, .96) 30%); }
 .ldo-btn { height: 32px; padding: 0 16px; border-radius: 3px; cursor: pointer; border: 1px solid rgba(201, 164, 98, .6);
   background: linear-gradient(#3a3226, #29241c); color: #f3e7c9; font: 600 12px/1 "Avenir Next Condensed", "Arial Narrow", sans-serif;
   letter-spacing: .1em; text-transform: uppercase; transition: box-shadow 120ms ease, filter 120ms ease; }
@@ -98,8 +112,8 @@ export class LoadoutView {
   private chips!: HTMLElement;
   private skills!: HTMLElement;
   private plugins!: HTMLElement;
-  private model!: HTMLSelectElement;
-  private effort!: HTMLSelectElement;
+  private model!: HTMLElement;
+  private effort!: HTMLElement;
   private applyBtn!: HTMLButtonElement;
   private revertBtn!: HTMLButtonElement;
   private status!: HTMLElement;
@@ -191,20 +205,14 @@ export class LoadoutView {
 
   private build(u: Unit): void {
     const d = this.draft!;
-    this.text = h("textarea", { rows: 6, spellcheck: "false", "aria-label": "Standing orders" }) as HTMLTextAreaElement;
+    this.text = h("textarea", { rows: 6, spellcheck: "false", placeholder: "Standing orders", "aria-label": "Standing orders" }) as HTMLTextAreaElement;
     this.text.value = d.instructions;
     this.text.addEventListener("input", () => { this.draft!.instructions = this.text.value; this.renderChips(); this.edited(); });
     this.chips = h("div", { class: "ldo-chips" });
     this.skills = h("div", { class: "ldo-list" });
     this.plugins = h("div", { class: "ldo-list" });
-    const models = MODELS.includes(d.model) ? MODELS : [d.model, ...MODELS];
-    this.model = h("select", { "aria-label": "Model" }, ...models.map((m) => h("option", { value: m }, m))) as HTMLSelectElement;
-    this.model.value = d.model;
-    this.model.addEventListener("change", () => { this.draft!.model = this.model.value; this.edited(); });
-    const efforts = EFFORTS.includes(d.effort) ? EFFORTS : [d.effort, ...EFFORTS];
-    this.effort = h("select", { "aria-label": "Effort" }, ...efforts.map((m) => h("option", { value: m }, m))) as HTMLSelectElement;
-    this.effort.value = d.effort;
-    this.effort.addEventListener("change", () => { this.draft!.effort = this.effort.value; this.edited(); });
+    this.model = h("div", { class: "ldo-seg ldo-seg-model", role: "group", "aria-label": "Model" });
+    this.effort = h("div", { class: "ldo-seg ldo-seg-effort", role: "group", "aria-label": "Effort" });
     this.applyBtn = h("button", { class: "ldo-btn", type: "button", title: "Send the changes to this agent", onclick: () => void this.apply() }, "Apply") as HTMLButtonElement;
     this.revertBtn = h("button", { class: "ldo-btn ldo-btn-ghost", type: "button", title: "Discard the changes", onclick: () => this.revert() }, "Revert") as HTMLButtonElement;
     this.status = h("span", { class: "ldo-status", role: "status" });
@@ -212,23 +220,34 @@ export class LoadoutView {
       h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Orders"), this.chips, this.text),
       h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Skills"), this.skills),
       h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Plugins"), this.plugins),
-      h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Model"), h("div", { class: "ldo-row" }, this.model, this.effort)),
+      h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Model"), this.model),
+      h("div", { class: "ldo-sec" }, h("h4", { class: "ldo-h" }, "Effort"), this.effort),
       h("div", { class: "ldo-foot" }, this.applyBtn, this.revertBtn, this.status),
     );
     this.root.dataset.unit = u.id;
     this.renderChips();
     this.renderLists();
+    this.renderSegs();
     this.refreshFoot();
+  }
+
+  // Segmented pickers; a value outside the list (older engine data) gets its own segment.
+  private renderSegs(): void {
+    const d = this.draft!;
+    const seg = (el: HTMLElement, values: string[], current: string, label: (v: string) => string, set: (v: string) => void, attr: string) => {
+      const all = values.includes(current) ? values : [...values, current];
+      el.replaceChildren(...all.map((v) => h("button", { type: "button", title: v, [`data-${attr}`]: v, "aria-pressed": String(v === current),
+        onclick: () => { set(v); this.renderSegs(); this.edited(); } }, label(v))));
+    };
+    seg(this.model, MODELS, d.model, MODEL_LABEL, (v) => { this.draft!.model = v; }, "model");
+    seg(this.effort, EFFORTS, d.effort, (v) => EFFORT_LABEL[v] ?? v, (v) => { this.draft!.effort = v; }, "effort");
   }
 
   // Puts draft values into the existing controls without rebuilding (keeps focus and caret in the textarea).
   private syncControls(): void {
     const d = this.draft!;
     if (this.text.value !== d.instructions) this.text.value = d.instructions;
-    if (![...this.model.options].some((o) => o.value === d.model)) this.model.append(h("option", { value: d.model }, d.model));
-    if (![...this.effort.options].some((o) => o.value === d.effort)) this.effort.append(h("option", { value: d.effort }, d.effort));
-    this.model.value = d.model;
-    this.effort.value = d.effort;
+    this.renderSegs();
     this.renderChips();
     this.renderLists();
   }
@@ -261,15 +280,15 @@ export class LoadoutView {
       if (!all.length) { el.replaceChildren(h("p", { class: "ldo-empty" }, this.catalogErr ? `Catalog unavailable: ${this.catalogErr}` : this.catalog ? "None available" : "Loading")); return; }
       el.replaceChildren(...all.map((i) => {
         const locked = kind === "plugin" && i.id === LOCKED_PLUGIN;
-        const box = h("input", { type: "checkbox", checked: locked || picked.includes(i.id), disabled: locked }) as HTMLInputElement;
+        const box = h("input", { type: "checkbox", role: "switch", class: "ldo-switch", checked: locked || picked.includes(i.id), disabled: locked, "aria-label": i.name }) as HTMLInputElement;
         box.addEventListener("change", () => {
           const at = picked.indexOf(i.id);
           if (box.checked && at < 0) picked.push(i.id);
           if (!box.checked && at >= 0) picked.splice(at, 1);
           this.edited();
         });
-        return h("label", { class: locked ? "ldo-item ldo-locked" : "ldo-item", title: i.id }, box, h("span", { class: "ldo-name" }, i.name),
-          h("span", { class: "ldo-desc" }, locked ? "The Library: always on" : i.description));
+        return h("label", { class: locked ? "ldo-item ldo-locked" : "ldo-item", title: i.id },
+          h("span", { class: "ldo-text" }, h("span", { class: "ldo-name" }, i.name), h("span", { class: "ldo-desc" }, locked ? "The Library: always on" : i.description)), box);
       }));
     };
     list("skill", this.draft.skills, this.skills);

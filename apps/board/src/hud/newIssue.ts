@@ -35,7 +35,7 @@ const CSS = `
 
 export class NewIssueDialog {
   readonly root: HTMLElement;
-  private title = h("input", { type: "text", maxlength: 120, placeholder: "Leave empty for a random issue", "aria-label": "Title" });
+  private title = h("input", { type: "text", maxlength: 120, placeholder: "Title (optional)", "aria-label": "Title" });
   private zone = h("select", { "aria-label": "Zone" });
   private kind = h("select", { "aria-label": "Kind" }, h("option", { value: "bug" }, "Bug"), h("option", { value: "feature" }, "Feature"));
   private severity = h("select", { "aria-label": "Severity" },

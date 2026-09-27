@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-M1 checkpoint findings are resolved. Current open P1: responsive proposal dock in d62bc78 clips veto controls when cards exceed its height; assigned to raid-ui-hud. Library request race is fixed in 0cbfb2c and Forge chimney coordinates in cc4c7b9. Seven smoke tests, typecheck, build, health, and isolated interaction checks pass. Independent headless Chrome now renders the mock test board at 4619; normal HUD screenshots fit 1200x600 and 1512x790. Hardware GPU performance remains unmeasured.
+Current review: proposal dock P1 resolved by af72769; Library race, chimney coordinates, and gate-routing teleport findings are resolved. One P2 open in 157675c: store.run selects the oldest running run, hiding the new local workflow simulation behind the fixture run. Board checks pass, including independent headless Chrome on mock board 4619. Hardware GPU performance remains unmeasured.
 
 ## Review procedure
 
@@ -136,3 +136,29 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - **P1 open, assigned to raid-ui-hud; lead copied:** dock max-height plus overflow:hidden makes veto controls inaccessible once proposal rows exceed its height. Reproduction at 1200x600 with eight synthetic proposed orders: bottom cards occupy y426..511 but dock ends y464, clipping Cancel/Adjust/Go. There is no scroll access. Give proposals bounded scrolling and prevent flex shrink from pushing the last row outside the dock. Screenshot /tmp/raid-ui-review/hud-many.png.
 - Console collection showed a missing resource (404) and the intentionally aborted fixture SSE request; no JavaScript page error or mount failure.
 - Automated checks now use mock engine 4618 and lead-owned test board 4619. Do not send automated commands to real-QM engine 4610 or demo board 4611. No Forge type was created; any future creation check requires dryRun:true.
+
+
+## Responsive dock fix and HUD follow-ups: af72769, 27f39ca, ccaa4d8, 295bb44
+
+- **Dock P1 resolved in af72769:** independent headless Chrome at 1200x600 with eight unique unit/proposal pairs and six feed entries gives a 350px scroll viewport with 380px content. After scrolling, the last Go now button occupies y439..464 and elementFromPoint hits that button. Screenshot /tmp/raid-ui-review/hud-scroll-fixed.png.
+- Normal HUD bounds also pass at 1512x790. Idle/open resource cycling selects distinct idle units and an unresolved target. Error text containing an HTML tag remains text; no page errors in this browser pass.
+- ccaa4d8: RowList preserves surviving nodes when truncating and appending, resets on replacement/empty; slug chips deduplicate, cap at four, show +n, and emit the full slug. Numeric forged hue and sanitized team color pass.
+- 295bb44: minimap clips a valid footprint and filters non-finite corners. Camera view stream is checked with 56c7e32/87e7793: four ground corners after a camera change, no duplicate event on an unchanged frame. Camp double-click selects active-order units.
+
+## Routing review: c3ef25a, 2118582; labels: 7e1e713
+
+- **P2 found in c3ef25a, resolved in 2118582:** using total routed path length as the teleport threshold caused ordinary engine moves to snap units across walls. Reproduction: fixture u1 from (5,4) toward (12,1), the nearest available neighbor of t22, at three engine steps/second and 60 render frames/second. At engine (9,1), visual position jumped from [5.209,0,6.466] to [9.663,0,1.556] in one frame.
+- Fix bases teleport on direct displacement while routed length only affects speed, capped at ten tiles/second. Exact reproduction is smooth; 48 fixture unit/target trajectories now have zero jumps over one tile/frame (previously twelve).
+- 4754060 transition checks also pass: resolving an existing target emits burst/text once, repeated resolved updates do not; retiring removes the unit and emits a puff. Read 7e1e713 Library label and Forge banner adjustments; no actionable finding.
+
+## Core feeds, page navigation, and Forge list: a3ba014, 07a3bf0, 3e5696e, b389710, 191116c
+
+- View event type agrees with the scene/minimap. bus.openPage selects Library and renders the URL-encoded page request. Shared slug metadata reaches recall/remember/tool feed entries; snapshot backfill includes memory/replies once without duplicate rows on a second snapshot.
+- Forge list puts ready types first; failed types are inside initially closed details and cannot Train. Existing ready-only Train and Barracks team payload checks still pass. No Forge creation request was sent.
+- Latest working-tree smoke before workflow review: 10 tests, 51 assertions, typecheck pass (includes in-progress whole-team order coverage). Most recent production build passed with 46 modules; Three.js chunk-size warning remains non-blocking.
+
+## Workflow core review: 157675c
+
+- Read updated authoritative types, Team workflows contract, docs/lanes/flow.md, and W1/W2 UI plan. Automated workflow checks stay on 4618/4619; real-QM W2 requires the lead's coordinated single run.
+- Normalization and workflow event reducers match the contract. PUT/DELETE workflow paths and bodies pass with mocked fetch. Local trio simulator emits planner, implementer, changes, implementer, approved, finishes with one loop, and sends no network requests.
+- **P2 open, assigned to raid-ui-plan:** store.run promises the latest running run but uses Array.find, returning the oldest. With fixture w1 running, raid.dev.workflow(1, undefined, 1) creates dev-w1 yet store.run(1) remains w1 throughout the simulation; the Formation consumer would show static fixture progress. Prefer the newest running run or retire the fixture run when starting a local simulation.

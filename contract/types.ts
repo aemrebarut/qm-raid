@@ -1,10 +1,11 @@
 // Shared types for all services. Owned by the Analyst; ask before changing.
 export type UnitStatus = "idle" | "moving" | "recalling" | "working" | "remembering" | "waiting_approval" | "error";
-export type UnitClass = "knight" | "ranger" | "scout" | "oracle";
+export type UnitClass = "knight" | "ranger" | "scout" | string; // string = a forged unit type id
 export type Pos = { x: number; y: number };
 
 export interface Component { id: string; name: string; zone: { x: number; y: number; w: number; h: number } }
-export interface Building { id: string; kind: "gbrain" | "barracks"; x: number; y: number }
+export interface Building { id: string; kind: "gbrain" | "barracks" | "river"; x: number; y: number }
+export interface UnitType { id: string; name: string; source: "builtin" | "forge"; status: "generating" | "training" | "evaluating" | "ready" | "failed"; progress: number; stage: string; model: string | null }
 export interface Unit {
   id: string; name: string; class: UnitClass; model: string; effort: string; role: string;
   team: number | null; status: UnitStatus; pos: Pos; orderId: string | null;
@@ -22,7 +23,7 @@ export interface Order {
 export interface MemoryOp { ts: number; unitId: string; op: "recall" | "remember" | "link"; slugs: string[]; summary: string }
 export interface State {
   components: Component[]; buildings: Building[]; units: Unit[]; targets: Target[]; teams: Team[]; orders: Order[];
-  memory: { pages: number; recent: MemoryOp[] }; stats: { spentUsd: number; tokens: number }; backend: string;
+  unitTypes: UnitType[]; memory: { pages: number; recent: MemoryOp[] }; stats: { spentUsd: number; tokens: number }; backend: string;
 }
 
 // Bridge API events (GET /events on qm-bridge and mock-bridge)

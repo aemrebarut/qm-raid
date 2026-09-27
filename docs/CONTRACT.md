@@ -6,7 +6,7 @@ Coordinates: the map is a 24 x 24 tile grid, integers `x` (east) and `y` (south)
 ```json
 {
   "components": [{"id": "billing", "name": "Billing", "zone": {"x": 1, "y": 1, "w": 7, "h": 6}}],
-  "buildings": [{"id": "library", "kind": "gbrain", "x": 11, "y": 11}, {"id": "barracks", "kind": "barracks", "x": 20, "y": 20}],
+  "buildings": [{"id": "library", "kind": "gbrain", "x": 11, "y": 11}, {"id": "barracks", "kind": "barracks", "x": 20, "y": 20}, {"id": "forge", "kind": "river", "x": 3, "y": 20}],
   "units": [{"id": "u1", "name": "Ada", "class": "knight", "model": "claude-opus-5-5", "effort": "high", "role": "worker",
              "team": 1, "status": "idle", "pos": {"x": 12, "y": 14}, "orderId": null,
              "qm": {"sessionId": null, "sessionUrl": null}}],
@@ -46,7 +46,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": "<iso>", "type": "<type>",
 |---|---|---|---|---|
 | engine (game state, orders, teams, SSE) | services/engine | 4610 | raid-eng | bridge, brain, autopilot |
 | board (Three.js UI) | apps/board | 4611 | raid-ui | engine only (/api proxy) |
-| commander (River model) | services/commander | 4612 | raid-river | nobody (answers /propose) |
+| forge (River building: trains new unit types, runs their units) | services/forge | 4612 | raid-river | River API, brain |
 | autopilot (heuristic proposer) | services/autopilot | 4613 | raid-eng | nobody (answers /propose) |
 | qm-bridge (real QM agents) | services/qm-bridge | 4614 | raid-qm | QM |
 | mock-bridge (fake agents) | services/mock-bridge | 4615 | raid-eng | nobody |
@@ -79,7 +79,14 @@ GBrain tool calls made by agents arrive as activity with `kind: "tool"` and `too
 - `POST /reset` restores the demo world
 Calls are serialized inside the service (PGLite is single-writer). The game brain lives at ~/Workspace/hackathon-gbrain/brain.pglite (keyless).
 
-## Proposer API (autopilot and commander implement the same API)
+## Forge API (services/forge, port 4612; the River building)
+The user names a new agent type and describes its job; the Forge generates synthetic training data for that job, fine-tunes a model with the River API, evaluates it, and then units of that type can be trained (spawned) from the Forge.
+- `POST /types` {name, description} -> {typeId}
+- `GET /types` -> [{id, name, description, status: "generating"|"training"|"evaluating"|"ready"|"failed", progress (0..1), stage (short text), examples (count), evalScore (0..1 or null), model (River model id or null)}]
+- Forge units implement the Bridge API on the same port (POST /units, /units/:id/send, PATCH, DELETE, GET /events), running a small agent loop on the trained model with the brain service for recall and remember (emit them as `gbrain.recall` / `gbrain.remember` tool activity).
+Engine side: `state.unitTypes` = [{id, name, source: "builtin"|"forge", status, progress, stage, model}]; `POST /api/forge/types` {name, description} proxies to the Forge; `POST /api/units` {class: "<typeId>"} spawns a unit of a forged type (only when ready); the engine routes each unit to its bridge (built-in classes to BRIDGE_URL, forge types to FORGE_URL, default http://127.0.0.1:4612) and polls GET /types every 2 s, emitting `forge.updated` {type} events.
+
+## Proposer API (autopilot implements it; the Forge may later offer a trained commander on the same API)
 - `POST /propose` {units: [{id, class, team, status, pos, history}], targets: [{id, component, severity, kind, status, pos, customers}], memory: "<short text>"} -> {proposals: [{unitId, targetId, reason}]}
 - `GET /health`
 

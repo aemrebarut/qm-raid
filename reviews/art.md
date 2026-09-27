@@ -251,3 +251,52 @@ Two showroom P2s were sent to the lead: ?focus=Knight did not match the actual
 Unit: knight name, and fixed zoom cropped the Library steeple. 25df8c4 is the
 proposed fix and is under visual recheck. A1 verdict sent to raid-art-plan;
 code/art-review updated. Board 4619 with ?art=on is the next acceptance gate.
+
+## 2026-09-27 15:42 PDT: world, outlines and board acceptance in progress
+
+- `cc42278` and `f4f2e5a`: makeWorld and makeProps reviewed. Composed sample
+  world has 37 meshes, explicit farm/clutter set 10, empty props zero. Finite
+  transforms after ticks; all sampled geometries disposed (37/37 and 10/10),
+  no live sibling resource disposal. Focused farm capture shows wheat rows,
+  fence/scarecrow, cart, crates, hay and barrels without console errors.
+- `25df8c4`: focus alias and height framing visually verified with
+  ?focus=knight and ?focus=library. Whole Library steeple and orb fit. Earlier
+  direct repo shot/flow invocation lacked playwright-core; lead added
+  setup.sh and README, verified setup copies tools into /tmp/art-shot-tool.
+- `ae45501` is the actual unit-outline commit; supplied `77441cb` belongs to
+  the brain lane. Rigid outline shader reviewed and rendered without errors.
+  All classes retain finite animation matrices and correct team recolouring;
+  unit mesh counts are 3 to 4 including the hull, under 12.
+- `b1491a8`: warm brown global-width hulls extend to camps and crystals.
+  All eight camps hide the hull when resolved and restore it when reopened.
+  Bug counts 3/7/7/7 and feature counts 3 each remain under 12. Shader/render
+  evidence covers the unit hull; focused crystal render is in progress.
+- Board `4caaa56`, `74466f8`, `cdd1e5e` reviewed: art bodies, target state,
+  world, lighting and FX integration. buildArtWorld passes camps, current
+  unit tiles, 9x9 Library plaza and building door rows as exclusions. Current
+  1440x900 art-on board frame shows clear Library staging, visible Barracks,
+  distinct buildings and readable camps. Baseline tree/HUD findings are
+  closed for this viewport. Routing and pick ownership stay with the board.
+- `a727e52` closes building material-disposal and target resolved-snapshot
+  findings. BuildingView retains a.dispose and calls it on rebuild/teardown.
+  Target constructor previously left art open for a resolved snapshot;
+  current independent repro gives board=resolved and art=resolved. The fix
+  had already landed by the time the repro ran; corrected the notification
+  to scene owner. Scene now uses richer recallBeam/orderPing/forgeSparks.
+- Board typecheck passes; 17 tests pass with 103 assertions. Art typecheck
+  passes; five tests pass with 162 assertions at the latest check.
+
+**A2/A3 live acceptance not yet granted.** Two order probes were interrupted
+by shared service/code changes. First supplied flow returned order o64, then
+an HTTP 502 and FIXTURE status; its final frame cannot prove live behavior.
+Second probe waited for connection=live and backend=mock, received o2, then
+Vite navigation destroyed its execution context. Neither order remained in
+the subsequent engine snapshot, consistent with a reset but not proof of its
+cause. Sent to art lead and engine lead for a stable 30-second mock window.
+
+The off/on performance probe measured the off case at 382 calls, 54,454
+triangles, six units/eight targets; on evaluation then lost raidScene during
+reload. No comparable performance claim follows from this partial result.
+All mutations targeted 4619/4618, never the real demo. Awaiting the FX tuning
+commit and stable live flow; Analyst requires both reviewers and look-dir
+screenshots before the 16:25 default-on cutoff.

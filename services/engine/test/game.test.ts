@@ -8,10 +8,14 @@ let proposeGate: Promise<void> | null = null; // when set, /propose waits for it
 let spawnGate: Promise<void> | null = null; // when set, bridge POST /units waits for it (slow registration)
 const calls: { url: string; body: any }[] = [];
 let sessionGen = 0; // bridge POST /units answers a fresh sessionId each time
+let brainResetGate: Promise<void> | null = null; // when set, brain POST /reset waits for it (slow reset)
+const sendStatuses: number[] = []; // bridge POST /units/:id/send answers these statuses first (then 200)
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
   if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
+  if (String(url).endsWith("/reset") && brainResetGate) await brainResetGate;
+  if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
   if (String(url).endsWith("/units") && init?.method === "POST") {
     const id = `s${++sessionGen}`;
     return new Response(JSON.stringify({ sessionId: id, sessionUrl: `http://qm.test/c/${id}` }), { status: 200 });
@@ -180,7 +184,7 @@ test("E9 control groups and team orders; E13 Barracks spawn", () => {
   const sp = spawnUnit({ class: "scout", team: 5 }) as { ok: boolean; unit: any };
   expect(sp.ok).toBe(true);
   expect(sp.unit).toMatchObject({ class: "scout", model: "gpt-6-luna", effort: "low", team: 5, status: "idle" });
-  expect(Math.max(Math.abs(sp.unit.pos.x - 20), Math.abs(sp.unit.pos.y - 20))).toBe(1);
+  expect(sp.unit.pos).toEqual({ x: 20, y: 22 }); // Barracks door row, outside its 3 x 3 footprint
   expect(store.state.teams.find((t) => t.id === 5)).toMatchObject({ color: "#888888", members: [sp.unit.id] });
   expect(spawnUnit({ class: "wizard" }).ok).toBe(false);
 });
@@ -376,4 +380,86 @@ test("bridge reconnect re-registers idle units with fresh sessions; units mid-or
   expect(unit("u1").qm.sessionUrl).toBe(`http://qm.test/c/${unit("u1").qm.sessionId}`);
   expect(recentEvents().some((e: any) => e.type === "unit.updated" && e.unit.id === "u1" && e.unit.qm.sessionId === unit("u1").qm.sessionId)).toBe(true);
   expect(order(o.id).status).toBe("active");
+});
+
+test("a direct message re-registers the unit after a bridge 404 and retries once", async () => {
+  const { messageUnit } = game;
+  game.resyncUnits((await import("../src/config.ts")).BRIDGE_URL);
+  await Bun.sleep(20);
+  calls.length = 0;
+  sendStatuses.push(404);
+  expect(await messageUnit("u6", { text: "status?" })).toEqual({ ok: true });
+  expect(calls.map((c) => c.url.replace(/^http:\/\/[^/]+/, ""))).toEqual(["/units/u6/send", "/units", "/units/u6/send"]);
+  sendStatuses.push(404, 404);
+  const r = await messageUnit("u6", { text: "again?" });
+  expect(r.ok).toBe(false);
+  sendStatuses.length = 0;
+});
+
+test("P1: a reset in flight kills a trio run: a planner reply during brain /reset starts and sends nothing", async () => {
+  const { useFlow } = await import("../src/flowlink.ts");
+  const { handle } = await import("../src/app.ts");
+  useFlow(await import("../src/workflow.ts"));
+  expect(game.setTeamWorkflow(1, { preset: "trio" }).ok).toBe(true);
+  expect(createOrders({ teamId: 1, targetId: "t101" }).ok).toBe(true);
+  const o1 = store.state.orders.find((o) => o.source === "workflow" && o.status === "active")!;
+  const planner = unit(o1.unitId);
+  for (let i = 0; i < 40 && planner.status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  expect(calls.some((c) => c.url.endsWith(`/units/${planner.id}/send`) && c.body.orderId === o1.id)).toBe(true);
+
+  let open!: () => void;
+  brainResetGate = new Promise((r) => (open = r));
+  calls.length = 0;
+  const seq0 = recentEvents().at(-1)!.seq;
+  const reset = resetWorld();
+  await Bun.sleep(10);
+  onBridgeEvent({ type: "reply", unitId: planner.id, orderId: o1.id, text: "1. plan the fix" });
+  for (let i = 0; i < 40; i++) tick();
+  const post = (path: string, body: unknown) => handle(new Request(`http://127.0.0.1:4610${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+  expect((await post("/api/orders", { unitIds: ["u6"], targetId: "t102" })).status).toBe(409);
+  expect((await post("/api/reset", {})).status).toBe(409);
+  await Bun.sleep(20);
+  open();
+  brainResetGate = null;
+  expect((await reset).ok).toBe(true);
+  await Bun.sleep(20);
+
+  expect(calls.filter((c) => c.url.endsWith("/send"))).toEqual([]);
+  const after = recentEvents().filter((e: any) => e.seq > seq0).map((e: any) => e.type);
+  expect(after.filter((t: string) => t.startsWith("workflow.") || t === "order.updated" || t === "unit.moved")).toEqual([]);
+  expect(store.state.orders).toEqual([]);
+  expect(store.state.workflowRuns).toEqual([]);
+  expect((await post("/api/orders", { unitIds: ["u6"], targetId: "t102" })).status).toBe(200);
+});
+
+test("spawn tiles: builtins at the Barracks door, forged at the Forge door, never on buildings or zone walls", () => {
+  const { spawnUnit } = game;
+  const onBuilding = (p: any) => store.state.buildings.some((b) => Math.abs(b.x - p.x) <= 1 && Math.abs(b.y - p.y) <= 1);
+  const onWall = (p: any) => store.state.components.some(({ zone: z }) => p.x >= z.x && p.x < z.x + z.w && p.y >= z.y && p.y < z.y + z.h
+    && (p.x === z.x || p.x === z.x + z.w - 1 || p.y === z.y || p.y === z.y + z.h - 1));
+  store.state.unitTypes.push({ id: "forge-scribe", name: "Scribe", source: "forge", status: "ready", progress: 1, stage: "ready", model: "river-1" });
+  const forged = (spawnUnit({ class: "forge-scribe" }) as any).unit;
+  expect(forged.pos).toEqual({ x: 3, y: 22 });
+  const spawned = Array.from({ length: 12 }, () => (spawnUnit({ class: "knight" }) as any).unit);
+  const tiles = new Set(spawned.map((u) => `${u.pos.x},${u.pos.y}`));
+  expect(tiles.size).toBe(12);
+  for (const u of [forged, ...spawned]) expect(onBuilding(u.pos) || onWall(u.pos)).toBe(false);
+  expect(spawned.every((u) => Math.abs(u.pos.x - 20) <= 4 && u.pos.y >= 19)).toBe(true);
+
+  // A unit left inside a footprint (old spawn) or on a wall steps off on the next tick and says so.
+  unit("u6").pos = { x: 19, y: 19 };
+  unit("u5").pos = { x: 1, y: 3 };
+  tick();
+  expect(onBuilding(unit("u6").pos) || onWall(unit("u6").pos)).toBe(false);
+  expect(onBuilding(unit("u5").pos) || onWall(unit("u5").pos)).toBe(false);
+  expect(recentEvents().filter((e: any) => e.type === "unit.moved").slice(-2).map((e: any) => e.unitId).sort()).toEqual(["u5", "u6"]);
+
+  // Order destinations next to a target skip zone walls.
+  for (const t of store.state.targets) {
+    const o = orderFor(["u4"], t.id);
+    for (let i = 0; i < 60 && unit("u4").status === "moving"; i++) tick();
+    expect(onWall(unit("u4").pos) || onBuilding(unit("u4").pos)).toBe(false);
+    game.cancelOrder(o.id);
+  }
 });

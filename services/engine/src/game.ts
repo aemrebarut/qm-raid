@@ -31,6 +31,9 @@ type ProposeContext = { units: unknown[]; targets: unknown[]; memory: string };
 const proposals = new Map<string, { proposal: Proposal; context: ProposeContext }>();
 let nextOrder = 1;
 let nextUnit = 1;
+// True while POST /api/reset runs: the old world is already dead and nothing may start, walk or send.
+let resetting = false;
+export const isResetting = () => resetting;
 const TEAM_COLORS = ["#d64545", "#3b7dd8", "#3fa34d", "#d4a017"];
 const TEAM_NAMES = ["Red", "Blue", "Green", "Gold"];
 
@@ -75,6 +78,7 @@ async function loadWorld(): Promise<void> {
   const stats = await getJson<{ pages: number }>(`${BRAIN_URL}/stats`, 2000);
   if (stats && typeof stats.pages === "number") state.memory.pages = stats.pages;
   nextUnit = state.units.length + 1;
+  unblockUnits(false); // the snapshot after load carries the positions
   // nextOrder is never reset: order ids stay unique across /api/reset, so late pre-reset replies cannot match.
 }
 
@@ -120,7 +124,7 @@ function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string
     `Component: ${t.component}`,
     `Customers: ${t.customers.join(", ")}`,
     `GBrain pages: ${pages.join(", ")}`,
-    `Lumen is a synthetic product with no code checkout; GBrain is your only source. 1) Recall first: call the gbrain recall tool with componentId ${t.component}, targetId ${t.id} and unitId ${u.id}, and search GBrain for house rules and past learnings on this component. 2) Decide the fix and say it in 3 to 5 sentences, naming any rule you applied. 3) Remember: call the gbrain remember tool with slug ${learningSlug}, targetId ${t.id}, unitId ${u.id} and one or two sentences of what you learned. Reply in at most 4 sentences.`,
+    `Lumen is a synthetic product with no code checkout; GBrain is your only source. 1) Recall first: call the gbrain recall tool with componentId ${t.component}, targetId ${t.id} and unitId ${u.id}, and search GBrain for house rules and past learnings on this component. 2) Decide the fix and say it in 3 to 5 sentences, naming any rule you applied. Name the slug of every past learning you applied. 3) Remember: call the gbrain remember tool with slug ${learningSlug}, targetId ${t.id}, unitId ${u.id} and one or two sentences of what you learned. Reply in at most 4 sentences.`,
   ].join("\n");
 }
 
@@ -411,7 +415,7 @@ function destFor(u: Unit, t: Target): Pos {
     for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++) {
       if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
       const p = { x: t.pos.x + dx, y: t.pos.y + dy };
-      if (p.x < 0 || p.y < 0 || p.x >= GRID || p.y >= GRID || taken.has(`${p.x},${p.y}`)) continue;
+      if (p.x < 0 || p.y < 0 || p.x >= GRID || p.y >= GRID || taken.has(`${p.x},${p.y}`) || blockedTile(p)) continue;
       cands.push(p);
     }
     if (cands.length) {
@@ -423,7 +427,9 @@ function destFor(u: Unit, t: Target): Pos {
 }
 
 function tick(): void {
+  if (resetting) return;
   const now = Date.now();
+  unblockUnits(true);
   for (const o of S().orders) if (o.status === "proposed" && o.vetoDeadline !== null && o.vetoDeadline <= now) resolveProposal(o, "expired");
   for (const u of S().units) {
     if (u.status !== "moving") continue;
@@ -512,6 +518,7 @@ export function cancelOrder(id: string): Result {
 // ---------- team workflows (hooks for workflow.ts, team workflow routes) ----------
 
 function startWorkflowOrder(unitId: string, targetId: string, brief: NodeBrief): string | null {
+  if (resetting) return null;
   const u = unitById(unitId);
   const t = targetById(targetId);
   if (!u || !t) return null;
@@ -542,7 +549,6 @@ linkWorkflows({
   setTargetStatus,
 });
 
-const PRESETS = ["solo", "pair", "trio", "fanout", "custom"];
 
 export function setTeamWorkflow(id: number, body: any): Result {
   const team = teamById(id);
@@ -553,7 +559,7 @@ export function setTeamWorkflow(id: number, body: any): Result {
     const err = flow.validateWorkflow(body.workflow, team.members);
     if (err) return fail(err);
     w = body.workflow;
-  } else if (typeof body.preset === "string" && PRESETS.includes(body.preset) && body.preset !== "custom") {
+  } else if (typeof body.preset === "string" && body.preset !== "custom") { // workflow.ts knows the presets
     const res = flow.presetWorkflow(body.preset, team.members);
     if ("error" in res) return fail(res.error);
     w = res;
@@ -581,19 +587,54 @@ export async function messageUnit(id: string, body: any): Promise<Result> {
   if (!u) return fail("unknown unit", 404);
   if (!body || typeof body.text !== "string" || !body.text.trim()) return fail("text required");
   if (!(await ensureSpawned(u))) return fail(`bridge unavailable at ${bridgeFor(u)}`, 502);
-  const status = await sendToBridge(u, { text: body.text });
+  const alive = () => !resetting && unitById(id) === u;
+  if (!alive()) return fail("unit retired or reset running", 409);
+  let status = await sendToBridge(u, { text: body.text });
+  if (status === 404 && alive()) {
+    // Bridge restarted and forgot the unit: spawn again and retry once (as dispatchOrder).
+    runtime(u.id).spawned = false;
+    if (!(await ensureSpawned(u))) return fail(`bridge unavailable at ${bridgeFor(u)}`, 502);
+    if (!alive()) return fail("unit retired or reset running", 409);
+    status = await sendToBridge(u, { text: body.text });
+  }
   if (status < 200 || status >= 300) return fail(`bridge send failed (status ${status})`, 502);
   return { ok: true };
 }
 
-function freeTileNear(p: Pos): Pos {
-  const taken = new Set(S().units.map((u) => `${u.pos.x},${u.pos.y}`));
-  for (let ring = 1; ring <= 4; ring++)
-    for (let dx = -ring; dx <= ring; dx++) for (let dy = -ring; dy <= ring; dy++) {
+// No unit stands on a building (3 x 3 footprint around its tile, as the board draws it) or a zone wall (zone border).
+function blockedTile(q: Pos): boolean {
+  if (S().buildings.some((b) => Math.abs(b.x - q.x) <= 1 && Math.abs(b.y - q.y) <= 1)) return true;
+  return S().components.some(({ zone: z }) =>
+    q.x >= z.x && q.x < z.x + z.w && q.y >= z.y && q.y < z.y + z.h &&
+    (q.x === z.x || q.x === z.x + z.w - 1 || q.y === z.y || q.y === z.y + z.h - 1));
+}
+
+// Nearest tile to p (p itself first) that is on the map, not blocked, and free of other units and targets.
+function freeTileNear(p: Pos, self?: Unit): Pos {
+  const taken = new Set([...S().units.filter((u) => u !== self).map((u) => u.pos), ...S().targets.map((t) => t.pos)].map((q) => `${q.x},${q.y}`));
+  for (let ring = 0; ring <= 6; ring++)
+    for (let dy = ring; dy >= -ring; dy--) for (let dx = -ring; dx <= ring; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
       const q = { x: p.x + dx, y: p.y + dy };
-      if (q.x >= 0 && q.y >= 0 && q.x < GRID && q.y < GRID && !taken.has(`${q.x},${q.y}`)) return q;
+      if (q.x >= 0 && q.y >= 0 && q.x < GRID && q.y < GRID && !taken.has(`${q.x},${q.y}`) && !blockedTile(q)) return q;
     }
   return { ...p };
+}
+
+// New units appear at the door (front row, +y) of their building: forged types at the Forge, builtins at the Barracks.
+function spawnTile(forged: boolean): Pos {
+  const kind = forged ? "river" : "barracks";
+  const b = S().buildings.find((x) => x.kind === kind) ?? (forged ? { x: 3, y: 20 } : { x: 20, y: 20 });
+  return freeTileNear({ x: b.x, y: Math.min(GRID - 1, b.y + 2) });
+}
+
+// Units left on a building or wall tile (old spawns, a changed world) step off to the nearest free tile.
+function unblockUnits(announce: boolean): void {
+  for (const u of S().units) {
+    if (u.status === "moving" || !blockedTile(u.pos)) continue;
+    u.pos = freeTileNear(u.pos, u);
+    if (announce) emit("unit.moved", { unitId: u.id, pos: u.pos });
+  }
 }
 
 function setTeam(u: Unit, team: number | null, changed: Set<Team>): void {
@@ -630,11 +671,10 @@ export function spawnUnit(body: any): Result {
   if (body.team !== undefined && body.team !== null && !validTeamId(body.team)) return fail("team must be 1..9 or null");
   while (unitById(`u${nextUnit}`)) nextUnit++;
   const id = `u${nextUnit++}`;
-  const barracks = S().buildings.find((b) => b.kind === "barracks") ?? { x: 20, y: 20 };
   const u: Unit = {
     id, name: typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 40) : `${c.name} ${id.slice(1)}`,
     class: cls, model: c.model, effort: c.effort, role: "worker", team: null, status: "idle",
-    pos: freeTileNear({ x: barracks.x, y: barracks.y }), orderId: null, qm: { sessionId: null, sessionUrl: null },
+    pos: spawnTile(!!forged), orderId: null, qm: { sessionId: null, sessionUrl: null },
   };
   S().units.push(u);
   const changed = new Set<Team>();
@@ -721,21 +761,33 @@ export function patchTeam(id: number, body: any): Result {
 
 // E14: brain /reset, fresh world, bridge sessions deleted and registered again, orders/teams/memory/stats cleared.
 export async function resetWorld(): Promise<Result> {
-  const oldUnits = [...S().units];
-  const forged = S().unitTypes.filter((t) => t.source === "forge");
-  for (const r of rt.values()) if (r.animTimer) clearTimeout(r.animTimer);
-  rt.clear();
-  history.clear();
-  proposals.clear();
-  briefs.clear();
-  if (BRAIN_RESET) {
-    const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
-    if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
+  if (resetting) return fail("reset already running", 409);
+  resetting = true;
+  try {
+    const old = S();
+    const oldUnits = [...old.units];
+    const forged = old.unitTypes.filter((t) => t.source === "forge");
+    // Before the first await: drop every order and run of the old world (no cancel, so workflow.ts starts nothing).
+    // A late reply, a workflow step, the tick or a pending dispatch then finds no live order and sends nothing.
+    old.orders = [];
+    old.workflowRuns = [];
+    for (const u of oldUnits) u.orderId = null;
+    for (const r of rt.values()) if (r.animTimer) clearTimeout(r.animTimer);
+    rt.clear();
+    history.clear();
+    proposals.clear();
+    briefs.clear();
+    if (BRAIN_RESET) {
+      const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
+      if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
+    }
+    await Promise.all(oldUnits.map((u) => deleteOnBridge(u)));
+    await loadWorld();
+    S().unitTypes = [...S().unitTypes, ...forged];
+    emit("state.snapshot", { state: S() });
+  } finally {
+    resetting = false;
   }
-  await Promise.all(oldUnits.map((u) => deleteOnBridge(u)));
-  await loadWorld();
-  S().unitTypes = [...S().unitTypes, ...forged];
-  emit("state.snapshot", { state: S() });
   for (const u of S().units) void ensureSpawned(u);
   void pollForge();
   return { ok: true };
@@ -816,7 +868,7 @@ export function adjustOrder(id: string, body: any): Result {
 
 let proposing = false;
 async function autopilotTick(): Promise<void> {
-  if (proposing) return;
+  if (proposing || resetting) return;
   const teams = S().teams.filter((t) => t.autopilot && !t.workflow); // workflow teams are driven by their run
   if (!teams.length) return;
   const units = [...new Set(teams.flatMap((t) => t.members))].map(unitById).filter((u): u is Unit => !!u && u.status === "idle" && !u.orderId);
@@ -836,7 +888,8 @@ async function autopilotTick(): Promise<void> {
       logOnce("proposer", `proposer unavailable at ${PROPOSER_URL} (status ${res.status})`);
       return;
     }
-    // Re-check against the live world: orders may have been given while the proposer was thinking.
+    // Re-check against the live world: orders may have been given (or a reset started) while the proposer was thinking.
+    if (resetting) return;
     const busy = new Set(S().orders.filter((o) => o.status === "active" || o.status === "proposed").map((o) => o.targetId));
     for (const p of res.data!.proposals!) {
       const u = p && typeof p.unitId === "string" ? unitById(p.unitId) : undefined;

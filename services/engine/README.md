@@ -35,4 +35,6 @@ Errors are `{ok: false, error}` with 400 (bad input), 404 (unknown id), 502 (dep
 - GBrain tool activity (tool name contains `gbrain`): contains `link` -> `memory.link`, contains put/remember/write/capture/add_page -> `memory.remember`, else `memory.recall`; the unit shows `recalling` / `remembering` for 1.5 s.
 - Bridge events (re)connect: every idle unit on that bridge is re-registered (`POST /units`, idempotent) and gets fresh `qm` session links via `unit.updated`, so a bridge restart needs no reset. Units mid-order re-register lazily (send 404 -> POST /units -> retry).
 - Team workflows: an order for a team with a workflow starts a run; each node is a `workflow` order whose prompt adds `Role: <role>. <instructions>` and `Previous work:`. Autopilot skips such teams.
+- Spawn: builtin classes appear at the Barracks door (the row in front of its 3 x 3 footprint), forged types at the Forge door. No unit spawns, stops or waits on a building footprint or a zone wall (zone border); a unit found on one steps off on the next tick and at reset.
+- Reset: every order and workflow run is dropped before the first await, so a late reply or a workflow step cannot send work into the dying world; writes during a reset get 409.
 - Dependencies down: log once a minute, retry every 2 s, keep serving.

@@ -3,7 +3,7 @@ import { BRAIN_URL, CORS_ORIGINS } from "./config.ts";
 import { listenerCount, recentEvents, store } from "./store.ts";
 import { sseResponse } from "./sse.ts";
 import { forgeProxy } from "./forge.ts";
-import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
+import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
 
 // Only listed browser origins get CORS headers; any other page can neither read nor change engine state.
 function corsHeaders(req: Request): Record<string, string> {
@@ -47,6 +47,8 @@ async function route(req: Request): Promise<Response> {
   // Browsers send Origin on every cross-site POST/PATCH/DELETE, even bodyless no-cors ones; curl and services send none.
   const origin = req.headers.get("origin");
   if (m !== "GET" && origin && !CORS_ORIGINS.includes(origin)) return json({ ok: false, error: "origin not allowed" }, 403);
+  // A reset replaces the world: a write during it would land in the dying one (forged types live in the Forge and survive).
+  if (m !== "GET" && isResetting() && p !== "/api/forge/types") return json({ ok: false, error: "reset in progress" }, 409);
 
   if (m === "GET") {
     if (p === "/health") return json({ ok: true, service: "engine" });

@@ -25,6 +25,8 @@ export interface BuildingView {
   top: THREE.Vector3;
   /** Forge only: show work in progress (0..1) with a stage label, or null when idle. */
   setWork(progress: number | null, label?: string): void;
+  /** Frees what disposeTree cannot reach (art model materials); call before disposeTree(group). */
+  dispose(): void;
 }
 
 export function buildBuilding(b: Building): BuildingView {
@@ -43,7 +45,7 @@ export function buildBuilding(b: Building): BuildingView {
   ring.visible = false;
   group.add(ring);
 
-  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork"> & { setWork?: BuildingView["setWork"]; top?: THREE.Vector3; door?: THREE.Vector3; glow?: (on: boolean) => void };
+  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork" | "dispose"> & { setWork?: BuildingView["setWork"]; dispose?: () => void; top?: THREE.Vector3; door?: THREE.Vector3; glow?: (on: boolean) => void };
   if (artOn("buildings")) view = artBuilding(group, b.kind);
   else {
     group.add(mesh(new THREE.BoxGeometry(2.9, 0.1, 2.9), mat("#8f887b"), 0, 0.05, 0, false));
@@ -61,6 +63,7 @@ export function buildBuilding(b: Building): BuildingView {
   };
   return {
     setWork: () => {},
+    dispose: () => {},
     ...view,
     // World-space points go after the spread: view.top is local to the building.
     id: b.id,
@@ -91,6 +94,7 @@ function artBuilding(group: THREE.Group, kind: Building["kind"]) {
     pulse: () => a.pulse(),
     glow: (on: boolean) => a.glow(on),
     setWork(progress: number | null, label = "") { a.setWork(progress); banner?.set(progress, label); },
+    dispose: () => a.dispose(),
   };
 }
 

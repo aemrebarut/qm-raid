@@ -88,7 +88,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       }
       setRouter(makeRouter(s.components, s.buildings));
       setFootprints(s.buildings.map((b) => ({ x: b.x, y: b.y })));
-      for (const b of buildings.values()) { buildingsG.remove(b.group); disposeTree(b.group); }
+      for (const b of buildings.values()) { buildingsG.remove(b.group); b.dispose(); disposeTree(b.group); }
       buildings.clear();
       for (const b of s.buildings) {
         const v = buildBuilding(b);
@@ -247,7 +247,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     if (!v) return;
     const tip = () => v.staffTip();
     v.flashRaise("recall");
-    fx.beam(libOrb, tip, "#4aa3ff", 2.4, 0.13);
+    if (fx.recallBeam) fx.recallBeam(libOrb, tip, { ground: 0 });
+    else fx.beam(libOrb, tip, "#4aa3ff", 2.4, 0.13);
     const n = Math.max(1, Math.min(3, slugs.length));
     for (let i = 0; i < n; i++) {
       fx.page(libOrb, tip, 0.15 + i * 0.3, i === 0 ? () => fx.burst(tip(), "#6fb6ff", 0.9, 0.6) : undefined);
@@ -298,6 +299,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     const first = s.units.find((u) => u.id === bus.selection.units[0]);
     const color = teamColor(s, first?.team ?? null) ?? "#9dff7a";
     const p = tv.group.position.clone().setY(0.12);
+    if (fx.orderPing) { fx.orderPing(p, color); return; }
     fx.burst(p, color, 1.6, 0.7);
     fx.after(0.18, () => fx.burst(p, color, 1.1, 0.6));
   }
@@ -408,7 +410,10 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       else if (!hit && bus.selection.units.length) {
         // No move orders in this game: a red ping says "pick an enemy camp".
         const g = iso.groundAt(toNdc(e));
-        if (g) fx.burst(g.setY(0.05), "#ff5a4a", 0.7, 0.45);
+        if (g) {
+          if (fx.orderPing) fx.orderPing(g.setY(0.05), "#ff5a4a", 0.7);
+          else fx.burst(g.setY(0.05), "#ff5a4a", 0.7, 0.45);
+        }
       }
       return;
     }
@@ -548,7 +553,10 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     flow.tick(t, units);
     if (forgeBusy && (forgeSparkT -= dt) <= 0) {
       forgeSparkT = 0.12;
-      for (const b of buildings.values()) if (b.kind === "river") fx.sparksAt(b.top, 3, "#ff9a3c");
+      for (const b of buildings.values()) if (b.kind === "river") {
+        if (fx.forgeSparks) fx.forgeSparks(b.top, 0.4);
+        else fx.sparksAt(b.top, 3, "#ff9a3c");
+      }
     }
     TargetView.detail = iso.camera.zoom >= 1.3;
     fx.tick(dt);
@@ -570,6 +578,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     window.removeEventListener("focusin", onFocusIn, true);
     for (const v of units.values()) v.dispose();
     for (const v of targets.values()) v.dispose();
+    for (const b of buildings.values()) { b.dispose(); disposeTree(b.group); }
     renderer.dispose();
     canvas.remove();
     box.remove();
@@ -591,6 +600,10 @@ function artFx(): FxApi {
     after: (delay, fn) => { a.after(delay, fn); },
     scroll: (from, to, opts, onArrive) => { a.scroll(from, to, opts, onArrive); },
     portal: (p, color, dur) => { a.portal(p, color, dur); },
+    recallBeam: (from, to, opts) => { a.recallBeam(from, to, opts); },
+    orderPing: (p, color, size) => { a.orderPing(p, color, size); },
+    flag: (p, color, opts) => { a.flag(p, color, opts); },
+    forgeSparks: (p, intensity) => { a.forgeSparks(p, intensity); },
   };
 }
 

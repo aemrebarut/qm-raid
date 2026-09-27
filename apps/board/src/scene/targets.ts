@@ -156,8 +156,9 @@ export class TargetView {
     this.group.position.copy(tileToWorld(t.pos.x, t.pos.y));
     const resolved = t.status === "resolved";
     if (this.art) {
-      if (resolved && was !== "resolved") this.art.defeat(); // stays in the resolved look
-      else if (!resolved) this.art.setState(t.status === "engaged" ? "engaged" : "open");
+      // A live resolve plays the collapse; a snapshot that is already resolved goes straight to the resolved look.
+      if (resolved) { if (was !== "resolved") this.art.defeat(); else this.art.setState("resolved"); }
+      else this.art.setState(t.status === "engaged" ? "engaged" : "open");
       this.engagedRing.visible = t.status === "engaged";
       this.tag.material.opacity = resolved ? 0.5 : 1;
       return;

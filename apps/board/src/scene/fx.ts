@@ -84,7 +84,13 @@ const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** What the scene uses from an effects layer (Fx here, or packages/art ArtFx through an adapter). */
-export type FxApi = Pick<Fx, "group" | "tick" | "beam" | "page" | "orb" | "burst" | "text" | "sparksAt" | "after" | "scroll" | "portal">;
+export type FxApi = Pick<Fx, "group" | "tick" | "beam" | "page" | "orb" | "burst" | "text" | "sparksAt" | "after" | "scroll" | "portal"> & {
+  // Richer effects only the art layer has; the scene falls back to the basic ones without them.
+  recallBeam?(from: Pt, to: Pt, opts?: { dur?: number; color?: THREE.ColorRepresentation; ground?: number }): void;
+  orderPing?(p: THREE.Vector3, color?: THREE.ColorRepresentation, size?: number): void;
+  flag?(p: THREE.Vector3, color?: string, opts?: { dur?: number; height?: number }): void;
+  forgeSparks?(p: THREE.Vector3, intensity?: number): void;
+};
 
 export class Fx {
   readonly group = new THREE.Group();

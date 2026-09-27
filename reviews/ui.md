@@ -225,3 +225,9 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - ?art=off: placeholder unit/camp picks and Forge opening pass; screenshot art-off-fallback.png inspected. Both screenshots are temporary under /tmp/raid-ui-review. Both browser scripts ended and closed their browsers.
 - PASS sent to Analyst, raid-art-plan, raid-look-dir and raid-ui-scene. Reviewer did not change demo defaults; the Analyst still requires art reviewer and visual director acceptance.
 - a194cfc GBrain lock passes the regression (checked, disabled, no phantom dirty state, plugins PATCH retains gbrain). Latest board validation: 20 tests / 119 assertions, typecheck and production build pass (71 modules, nonblocking chunk-size warning).
+
+## Orders bar polish: 54b37bb
+
+- Accepted with no new actionable finding. Focused checks pass structured proposal title and full tooltip, stable children on unchanged state, icon aria labels, Adjust command toggle, run's reached-node fallback after team workflow removal, terminal status pill with stable sub-line, and CommandHint naming the pending implementer role.
+- Existing run-card tests still pass current-order cancellation, current-member selection, 8-second live/loaded completion expiry, 5-minute alert expiry and dismissal persistence. Board smoke: 20 tests / 119 assertions and typecheck pass. No browser launched for this small DOM change.
+- Post-capture cleanup read showed every unit idle with no order and no running workflow; the earlier review trio was absent. No cancellation was issued. Capture-hold wrapper completed and released its lock. All reviewer browsers and mutation scripts are closed.

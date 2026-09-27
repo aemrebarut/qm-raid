@@ -595,7 +595,7 @@ export class ArtFx {
    * verdict colours the ribbon and landing burst: "approve" green, "changes" red, anything else gold.
    * label: optional floating text at the receiver ("changes requested", "plan", ...).
    */
-  handoffScroll(from: Pt, to: Pt, opts: { verdict?: string; label?: string; dur?: number; onArrive?: () => void; color?: THREE.ColorRepresentation; arc?: number } = {}) {
+  handoffScroll(from: Pt, to: Pt, opts: { verdict?: string; label?: string; dur?: number; onArrive?: () => void; color?: THREE.ColorRepresentation; arc?: number; size?: number } = {}) {
     const ribbonColor = opts.verdict === "approve" ? FX_COLORS.approve : opts.verdict === "changes" ? FX_COLORS.changes : opts.color ?? "#e2b33c";
     const g = new THREE.Group();
     const paperGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 10).rotateZ(Math.PI / 2);
@@ -610,6 +610,7 @@ export class ArtFx {
     scroll.add(new THREE.Mesh(paperGeo, paperM), new THREE.Mesh(knobGeo, knobM), new THREE.Mesh(ribbonGeo, ribbonM), new THREE.Mesh(sealGeo, sealM));
     const halo = glowSprite(ribbonColor, 0.7, 0.8);
     g.add(halo, scroll);
+    g.scale.setScalar(opts.size ?? 1);
     g.renderOrder = 12;
     let t = 0;
     scroll.onBeforeRender = () => {}; // groups do not render; animate through the paper mesh instead
@@ -637,7 +638,8 @@ export class ArtFx {
    */
   scroll(from: Pt, to: Pt, opts: { color?: THREE.ColorRepresentation; dur?: number } = {}, onArrive?: () => void) {
     const dist = at(from).distanceTo(at(to));
-    this.handoffScroll(from, to, { color: opts.color, dur: opts.dur ?? 1.4, arc: 1.2 + dist * 0.12, onArrive });
+    // size 1.8: about 0.7 wide, readable at whole-map zoom (matches the board placeholder sprite)
+    this.handoffScroll(from, to, { color: opts.color, dur: opts.dur ?? 1.4, arc: 1.2 + dist * 0.12, size: 1.8, onArrive });
   }
 }
 

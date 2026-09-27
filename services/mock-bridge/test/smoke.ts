@@ -1,9 +1,10 @@
 // Smoke test against a running mock-bridge: bun test/smoke.ts
-// Env: MOCK_URL (default http://127.0.0.1:4615), MOCK_SPEED (must match the server's, default 1).
+// Env: MOCK_URL (default http://127.0.0.1:4615), MOCK_SPEED (default: the server's speed from GET /debug/config).
 import type { BridgeEvent } from "../../../contract/types.ts";
 
 const URL_ = process.env.MOCK_URL ?? "http://127.0.0.1:4615";
-const SPEED = Number(process.env.MOCK_SPEED ?? 1);
+const serverSpeed = await fetch(URL_ + "/debug/config").then((r) => r.json()).then((d) => d?.config?.speed).catch(() => undefined);
+const SPEED = Number(process.env.MOCK_SPEED ?? serverSpeed ?? 1);
 const run = Date.now().toString(36);
 let failures = 0;
 const check = (ok: boolean, what: string) => { console.log(`${ok ? "ok  " : "FAIL"} ${what}`); if (!ok) failures++; };

@@ -9,7 +9,7 @@ MOCK_SPEED=5 bun run dev        # scripts play 5x faster (tests)
 MOCK_FAIL=0.1 bun run dev       # 10% of orders end in a terminal error event
 MOCK_NO_GBRAIN=1 bun run dev    # no gbrain tool calls (exercises the engine's brain fallback)
 MOCK_SCRIPT=demo bun run dev    # demo story: wave 1 learns a house rule, wave 2 recalls it
-bun test/smoke.ts               # against the running service (set MOCK_SPEED to match the server)
+bun test/smoke.ts               # against the running service (MOCK_URL; speed read from the server, MOCK_SPEED overrides)
 ```
 Env (defaults): `PORT` (4615), `MOCK_SPEED` (1), `MOCK_FAIL` (0), `MOCK_NO_GBRAIN` (off), `MOCK_SCRIPT` (default | demo), `MOCK_REVIEW` (loop | approve | changes, workflow reviewer verdicts), `MOCK_MCP_NAMES` (0.25 = 1 in 4 runs report gbrain tools with MCP names: `mcp__gbrain__search`, `mcp__gbrain__get_page`, `mcp__gbrain__put_page`, `mcp__gbrain__add_link`).
 

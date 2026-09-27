@@ -1,6 +1,6 @@
 # Team Art plan (raid-art-plan, lead)
 
-Status 15:37: A1 done (TEST.md "A1 art", 92e2b75). In the board behind the flag (`?art=on`, or localStorage `raid.art` = on | off | comma list of units,targets,buildings,terrain,zones,props,lighting,fx; default off until A3 passes review): units, buildings, lighting, fx (scene 4caaa56). Ready and waiting for the scene: targets aaed54f, terrain 9b0cac8, zones 923edce. Extra: `unitPortrait` (HUD portraits from the real model, df4ea8b) for raid-look-hud. Budgets agreed with raid-ui-scene: unit 12 draws, target 12, building 40, terrain+zones+props 150; art objects add no pick meshes; no allocation in tick; dispose frees per-instance materials. Board check: `node packages/art/scripts/shots/flow.mjs` (headless, orders u1 on 4618 through the 4619 board, three screenshots).
+Status 16:05: A1, A2 and A3 done (TEST.md "A1 art" 92e2b75, "A2 art" 733d453, "A3 art" a6b8640). raid-art-rev A2 and A3 PASS (025a267, ee2da61), raid-ui-rev A3 PASS, Look shots green (0ca3483). Art is ON BY DEFAULT on the boards since raid-ui-scene a456886 (16:00); `?art=off` or localStorage `raid.art=off` is the instant fallback, `?art=` or `raid.art` also takes a comma list of units,targets,buildings,terrain,zones,props,lighting,fx. In the board: units, targets, buildings, terrain, zones, props, lighting, fx (scene 4caaa56, 74466f8, a727e52, cdd1e5e). A4 now: colour-only polish, pitch shots, freeze 16:40. Extra: `unitPortrait` (HUD portraits from the real model, df4ea8b) for raid-look-hud. Budgets agreed with raid-ui-scene: unit 12 draws, target 12, building 40, terrain+zones+props 150; art objects add no pick meshes; no allocation in tick; dispose frees per-instance materials. Board check: `node packages/art/scripts/shots/flow.mjs` (headless, orders u1 on 4618 through the 4619 board, three screenshots).
 
 Goal: the board looks like a finished Age of Empires style game, with original procedural low-poly assets. `packages/art` is a library of three.js factories with no game logic; raid-ui-scene swaps its placeholders for them one by one behind a flag, so the board never breaks mid-swap.
 
@@ -22,7 +22,7 @@ The scene keeps everything with game meaning: positions, routing, picking volume
 - `buildBuilding` builds `makeBuilding(kind)` (gbrain -> library, river -> forge), uses its `anchor`, `door`, `top` (local, the scene adds the group position), `pulse`, `glow`, `setWork`.
 - Terrain and zones: `makeTerrain({size, seed, paths, blocked})`, `makeZone(zoneSpec)`, `makeProps({seed, spots})` in world coordinates; the scene computes paths, gates and blocked tiles as today.
 - Lighting: `lighting(scene, renderer, {mapSize: 24})` replaces the scene's hemisphere and sun. Effects: `ArtFx` is a drop-in superset of scene `Fx` (same beam, fly, page, orb, burst, text, sparksAt, after) plus recallBeam, rememberOrb, selectionRing, orderPing, dust, flag, forgeSparks, sparkle.
-- Flag: the scene reads `localStorage["raid.art"]` (default on once A2 passes review; `raid.art=off` falls back to placeholders) per area, so each swap can be reverted in one line.
+- Flag: the scene reads `?art=` then `localStorage["raid.art"]` per area (default on since a456886 after A3 passed review; `off` falls back to placeholders), so each swap can be reverted in one line.
 
 ## A1 (15:35): showroom on 4620 with the first hero assets
 raid-art-plan

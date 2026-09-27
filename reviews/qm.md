@@ -177,3 +177,11 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Exact-commit isolated fixture verifies an observer receives live activity, replies and pings without counting as terminal delivery. With only observers connected, the reply stays in persisted undelivered state; a second observer receives no replay and leaves that state intact. A normal engine client receives the backlog and clears it. With the engine connected, live replies reach all streams without creating a backlog.
 - test/watch-orders.ts fixture verifies the request uses observe=1, handles an event split across chunks, reports recall/remember on success, flags missing tools and errors, and filters unrelated unit prefixes. demo-dry.ts now uses observe=1 too; its two prior test-script findings remain open.
 - Future reviewer attachments to real 4614 use /events?observe=1. No live attachment was used for this review. Fixtures: /tmp/raid-qm-review-860550b/src/check.ts and watch-check.ts.
+
+## 2026-09-27 15:35 PDT: a0ee5da dry-run fixes accepted
+
+- Followed the planner's updated instruction to verify with fake HTTP only before the demo hold; no live run, brain writes, forget calls or service restart.
+- **Resolved d4d1a26 P1:** a synthetic remember of a foreign engine learning now prints NOT forgotten and sends no /forget for it. A successful two-wave fixture forgets exactly its two generated slugs.
+- **Resolved d4d1a26 P2:** terminal-error, foreign-slug-only, missing-page, and thrown-page-request fixtures all exit 1; the successful two-wave fixture exits 0. Every case attempts DELETE for both run-specific unit ids in finally. Citation is explicitly informational under the updated acceptance criteria.
+- Updated watcher fixture passes remembered/cited slug reporting and the persisted send-relative timing fields. Repeated 860550b observer isolation fixture passes: observer-only terminals remain durable, late observers get no replay, and an engine client gets the backlog.
+- Fixtures: /tmp/raid-qm-review-a0ee5da/test/check.ts (success, failure, foreign, missing-page, throw), test/watch-check.ts; /tmp/raid-qm-review-860550b/src/check.ts. No remaining findings from this review batch.

@@ -1,0 +1,12 @@
+qm/
+node_modules/
+dist/
+.env
+*.pglite
+data/*.jsonl
+.env*
+!.env.example
+.venv/
+__pycache__/
+*.log
+.DS_Store

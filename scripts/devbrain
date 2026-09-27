@@ -1,0 +1,13 @@
+#!/bin/sh
+# Shared codebase-map brain for the build agents (separate from the game brain).
+# PGLite is single-writer, so every call takes a short mkdir lock.
+# Usage: scripts/devbrain <gbrain args...>   e.g. scripts/devbrain put code/server-engine < page.md
+export GBRAIN_HOME="$HOME/Workspace/qm-raid-devbrain/home"
+LOCK="$HOME/Workspace/qm-raid-devbrain/.cli.lock"
+i=0
+until mkdir "$LOCK" 2>/dev/null; do
+  i=$((i+1)); [ "$i" -gt 120 ] && { echo "devbrain: lock busy for 60s; remove $LOCK if stale" >&2; exit 1; }
+  sleep 0.5
+done
+trap 'rmdir "$LOCK"' EXIT INT TERM
+cd "$HOME/Workspace/qm-raid-devbrain" && gbrain "$@"

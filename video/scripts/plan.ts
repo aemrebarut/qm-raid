@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 type Ev = { t: number; name: string; x?: number; y?: number; [k: string]: unknown };
 type Seg = { from: number; to: number; rate: number };
-type FxRule = { kind: string; text?: string; lead?: number; noXY?: boolean; pos?: { x: number; y: number } };
+type FxRule = { kind: string; text?: string; lead?: number; noXY?: boolean; pos?: { x: number; y: number }; hold?: number };
 type Rule = {
   target: number;
   // event name (or prefix ending in *) -> seconds kept at 1x before and after it
@@ -59,7 +59,7 @@ const RULES: Record<string, Rule> = {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
       // bottom left over the map (about 820 x 430), clear of the real Forge card on the right and of the frame edge;
       // no mascot here, it covered the final values (rev)
-      card: { kind: "scoreRace", pos: { x: 60, y: 600 }, lead: 0.3, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" },
+      card: { kind: "scoreRace", pos: { x: 60, y: 600 }, lead: 0.3, hold: 2.5, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" },
       spawned: { kind: "forgedBurst", text: "$name", noXY: true }, // event xy is the Train button at the edge
     },
     caps: { forge_open: "The Forge: describe a new unit type", card: "River-trained vs base model, held-out test orders", spawned: "River-trained unit, straight to work" },
@@ -184,7 +184,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
       for (const f of ([] as FxRule[]).concat(rule.fx[fk])) {
         const text = f.text === "$name" ? String(e.unitName ?? e.typeName ?? "") : f.text;
         const xy = f.pos ?? (f.noXY ? {} : { x: e.x, y: e.y });
-        fx.push({ at: round(Math.max(title, at + (f.lead ?? 0)), 2), kind: f.kind, ...(text ? { text } : {}), ...xy });
+        fx.push({ at: round(Math.max(title, at + (f.lead ?? 0)), 2), kind: f.kind, ...(text ? { text } : {}), ...xy, ...(f.hold ? { hold: f.hold } : {}) });
       }
     }
     const ck = match(rule.caps, e.name);

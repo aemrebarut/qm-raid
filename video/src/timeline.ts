@@ -19,7 +19,7 @@ export const TRANSITION_FRAMES = 8;
 export type Segment = { from: number; to: number; rate: number; src?: string; zoom?: { s: number; x: number; y: number }; label?: string };
 export type Caption = { at: number; dur: number; text: string };
 // Fx cues placed at capture markers, output seconds relative to the clip start.
-export type FxCue = { at: number; kind: string; text?: string; x?: number; y?: number };
+export type FxCue = { at: number; kind: string; text?: string; x?: number; y?: number; hold?: number };
 
 export type ClipDef = {
   id: string;

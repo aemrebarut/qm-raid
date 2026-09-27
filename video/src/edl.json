@@ -330,7 +330,8 @@
         "kind": "scoreRace",
         "text": "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders",
         "x": 60,
-        "y": 600
+        "y": 600,
+        "hold": 2.5
       },
       {
         "at": 14.91,

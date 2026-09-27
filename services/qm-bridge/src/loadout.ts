@@ -4,13 +4,13 @@
 import type { CatalogItem, Loadout } from "../../../contract/types.ts";
 import { PORTAL_URL } from "./qm.ts";
 
-export const GBRAIN = "gbrain"; // always on: the bridge's agents use it for recall and remember
+export const GBRAIN = "gbrain"; // locked on for every unit (Analyst): the Library, the core of the game
 const MAX_INSTRUCTIONS = 4000; // stored
 const HEADER_INSTRUCTIONS = 800; // restated in every order header
 
 const FALLBACK: CatalogItem[] = [
   { id: "raid-board", name: "raid-board", description: "Work as a unit on the QM Raid board.", kind: "skill" },
-  { id: GBRAIN, name: "GBrain", description: "Shared game brain: recall house rules and past learnings, remember what you learn.", kind: "plugin" },
+  { id: GBRAIN, name: "GBrain", description: "The Library: always on", kind: "plugin" },
 ];
 
 const ids = (v: unknown): string[] =>
@@ -23,7 +23,7 @@ export function normalizeLoadout(v: unknown): Loadout | null {
   return {
     instructions: typeof o.instructions === "string" ? o.instructions.trim().slice(0, MAX_INSTRUCTIONS) : "",
     skills: ids(o.skills),
-    plugins: ids(o.plugins),
+    plugins: [...new Set([GBRAIN, ...ids(o.plugins)])], // GBrain is always present, even when a PATCH omits it
   };
 }
 
@@ -126,7 +126,9 @@ export async function fetchCatalog(): Promise<CatalogItem[]> {
   } catch {
     // no MCP list route on this QM: GBrain only
   }
-  if (!plugins.some((p) => p.id === GBRAIN)) plugins.unshift(FALLBACK[1]!);
+  // GBrain is locked on: always listed first with the Library hint, whatever QM calls it.
+  const others = plugins.filter((p) => p.id !== GBRAIN);
+  plugins.splice(0, plugins.length, FALLBACK[1]!, ...others);
   // Board skill first, then alphabetical.
   skills.sort((a, b) => (a.id === "raid-board" ? -1 : b.id === "raid-board" ? 1 : a.id.localeCompare(b.id)));
   return [...skills, ...plugins];

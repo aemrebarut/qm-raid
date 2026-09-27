@@ -60,6 +60,7 @@ test("GET retries once on 5xx", async () => {
 
 test("loadout: normalize, marker turn and order-header lines", () => {
   expect(normalizeLoadout("x")).toBeNull();
+  expect(normalizeLoadout({ instructions: "x", skills: [], plugins: [] })!.plugins).toEqual(["gbrain"]); // locked on
   const l = normalizeLoadout({ instructions: "  Always write the test first.  ", skills: ["raid-board", "raid-board", 3, ""], plugins: ["gbrain"] })!;
   expect(l).toEqual({ instructions: "Always write the test first.", skills: ["raid-board"], plugins: ["gbrain"] });
   expect(loadoutMarker(l)).toContain("Loadout changed. Standing orders from now on: Always write the test first.");
@@ -88,6 +89,7 @@ test("catalog: QM skills (by name) plus GBrain when QM lists no MCP servers; fix
   const items = await fetchCatalog();
   expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(["skill:raid-board", "skill:memory", "plugin:gbrain"]);
   expect(items[1]!.description).toBe("Search your memory.");
+  expect(items[2]!.description).toBe("The Library: always on");
   globalThis.fetch = (async () => {
     throw new Error("ECONNREFUSED");
   }) as unknown as typeof fetch;

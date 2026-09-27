@@ -83,7 +83,7 @@ export const CUES: Record<string, Cue> = {
   calloutRiver: { frames: 48, C: callout("river", "THE FORGE"), note: "River blue, Forge card" },
   pagePop: { frames: 36, C: ({ text, x = 960, y = 540 }) => React.createElement(PlusPop, { from: 0, x, y, text: text ?? "+1 page", duration: 36 }), note: "memory landed" },
   approvedStamp: { frames: 48, C: ({ text, x, y }) => React.createElement(Stamp, { from: 0, text: text ?? "APPROVED!", x, y, duration: 48 }), note: "reviewer verdict" },
-  forgedBurst: { frames: 60, C: ({ text, x, y }) => React.createElement(ForgedBurst, { from: 0, name: text, x, y, duration: 60 }), note: "text = unit name" },
+  forgedBurst: { frames: 60, C: ({ text, x, y }) => React.createElement(ForgedBurst, { from: 0, name: text?.replace(/\s+\d+$/, ""), x, y, duration: 60 }), note: "text = unit name; a trailing unit index ('Refund Ranger 8') is dropped" },
   scoreRace: { frames: 84, C: ({ text, x, y }) => React.createElement(ScoreRace, { from: 0, x, y, duration: 84, ...scoreText(text) }), note: "text '0.917 vs 0.557|Held-out review orders' (trained first); x,y top-left" },
   comboOrders: { frames: 45, C: combo("3 ORDERS"), note: "text '7 ORDERS'; x,y right edge/top" },
   comboTokens: { frames: 45, C: combo("12480 TOKENS"), note: "text '12480 TOKENS'" },

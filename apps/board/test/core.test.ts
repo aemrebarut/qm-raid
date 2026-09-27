@@ -76,3 +76,15 @@ test("unit.retired removes the unit and drops it from selection", async () => {
   expect(store.team(1)!.members).not.toContain("u1");
   expect(bus.selection.units).toEqual(["u2"]);
 });
+
+test("snapshot backfills empty feeds from memory ops and replies", () => {
+  const store = createStore(fixtureState());
+  const snap = fixtureState();
+  snap.orders[0]!.status = "done";
+  snap.orders[0]!.reply = "Fixed it";
+  store.apply({ seq: 1, ts: 1, type: "state.snapshot", state: snap });
+  expect(store.feed("u1").map((f) => f.kind)).toEqual(["recall", "reply"]);
+  expect(store.feed("u3").map((f) => f.kind)).toEqual(["remember"]);
+  store.apply({ seq: 2, ts: 2, type: "state.snapshot", state: snap }); // no duplicates on a second snapshot
+  expect(store.feed("u1").length).toBe(2);
+});

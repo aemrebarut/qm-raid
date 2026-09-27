@@ -73,6 +73,23 @@ export function createStore(initial: State): Store {
     if (global.length > FEED_CAP) global.splice(0, global.length - FEED_CAP);
   };
 
+  // After a page reload the engine does not replay history: seed empty feeds from the snapshot
+  // (memory ops and finished orders' replies) so panels are not blank.
+  const backfill = () => {
+    if (global.length) return;
+    const entries: FeedEntry[] = [];
+    for (const m of state.memory.recent) {
+      if (!m.unitId || m.op === "link") continue;
+      entries.push({ ts: m.ts, unitId: m.unitId, kind: m.op, text: m.summary || m.slugs.join(", "), slugs: m.slugs });
+    }
+    const last = entries.length ? Math.max(...entries.map((e) => e.ts)) : Date.now();
+    for (const o of state.orders) {
+      if (o.status === "done" && o.reply) entries.push({ ts: last, unitId: o.unitId, kind: "reply", text: o.reply });
+    }
+    entries.sort((a, b) => a.ts - b.ts);
+    for (const e of entries) pushFeed(e);
+  };
+
   const unit = (id: string | null | undefined) => (id ? state.units.find((u) => u.id === id) : undefined);
 
   function reduce(ev: EngineEvent): void {
@@ -82,6 +99,7 @@ export function createStore(initial: State): Store {
         // Contract says {state}; tolerate a flattened snapshot too.
         const snap = (ev as any).state ?? ev;
         state = normalize(snap as State);
+        backfill();
         return;
       }
       case "unit.spawned":
@@ -152,6 +170,7 @@ export function createStore(initial: State): Store {
     getState: () => state,
     setState(s) {
       state = normalize(s);
+      backfill();
       safe(subs, state);
     },
     apply(ev) {

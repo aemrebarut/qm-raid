@@ -10,12 +10,12 @@ Coordinates: the map is a 24 x 24 tile grid, integers `x` (east) and `y` (south)
   "units": [{"id": "u1", "name": "Ada", "class": "knight", "model": "claude-opus-5-5", "effort": "high", "role": "worker",
              "team": 1, "status": "idle", "pos": {"x": 12, "y": 14}, "orderId": null,
              "qm": {"sessionId": null, "sessionUrl": null}}],
-  "targets": [{"id": "t12", "issue": 12, "title": "Retry double-charges a card", "component": "billing", "kind": "bug",
+  "targets": [{"id": "t12", "issue": "LUM-12", "title": "Retry double-charges a card", "component": "billing", "kind": "bug",
                "severity": 3, "status": "open", "pos": {"x": 4, "y": 3}, "customers": ["customers/acme-robotics"]}],
   "teams": [{"id": 1, "name": "Red", "color": "#d64545", "autopilot": false, "members": ["u1"]}],
   "orders": [{"id": "o1", "unitId": "u1", "targetId": "t12", "status": "active", "source": "user",
               "vetoDeadline": null, "reply": null}],
-  "memory": {"pages": 42, "recent": [{"ts": "2026-09-27T15:01:00-07:00", "unitId": "u1", "op": "recall", "slugs": ["components/billing"], "summary": "..."}]},
+  "memory": {"pages": 42, "recent": [{"ts": 1790546460000, "unitId": "u1", "op": "recall", "slugs": ["components/billing"], "summary": "..."}]},
   "stats": {"spentUsd": 0.0, "tokens": 0},
   "backend": "mock"
 }
@@ -23,7 +23,7 @@ Coordinates: the map is a 24 x 24 tile grid, integers `x` (east) and `y` (south)
 Enums. unit.status: idle, moving, recalling, working, remembering, waiting_approval, error. unit.class: knight, ranger, scout, oracle (oracle = the River model, later). order.status: proposed, active, done, cancelled, failed. order.source: user, autopilot. target.status: open, engaged, resolved. target.kind: bug, feature.
 
 ## GET /api/events (Server-Sent Events)
-Each message is `data: <json>` with `{"seq": n, "ts": "<iso>", "type": "<type>", ...payload}`. On connect the server first sends `state.snapshot` with the full state.
+Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type>", ...payload}`. On connect the server first sends `state.snapshot` with the full state.
 - `state.snapshot` {state}
 - `unit.spawned` {unit} · `unit.updated` {unit} · `unit.moved` {unitId, pos} · `unit.status` {unitId, status}
 - `unit.activity` {unitId, kind: "message"|"tool"|"thinking"|"error", text, tool?: string, args?: object}
@@ -39,6 +39,8 @@ Each message is `data: <json>` with `{"seq": n, "ts": "<iso>", "type": "<type>",
 - `POST /api/orders/:id/cancel` · `POST /api/orders/:id/go` · `POST /api/orders/:id/adjust` {unitId?, targetId?}
 - `POST /api/teams` {id, members} (control group assign) · `PATCH /api/teams/:id` {autopilot?, name?}
 - `POST /api/reset` resets the demo world
+- Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page/:slug`, `GET /api/brain/stats` pass through to the brain service unchanged
+- Types: `contract/types.ts` is authoritative where an example disagrees. Timestamps are epoch milliseconds everywhere; issue ids are strings like "LUM-12".
 
 ## Microservices (every component is its own service or package; they talk only over HTTP)
 

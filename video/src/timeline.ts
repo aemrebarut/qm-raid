@@ -35,6 +35,8 @@ export type ClipDef = {
 
 import edl from "./edl.json";
 
+export const CAMERA = Boolean((edl as { camera?: boolean }).camera);
+
 // Planned edit per clip from scripts/plan.ts (capture markers); overrides the defaults below.
 export type Planned = {
   src: string;
@@ -75,7 +77,7 @@ export const INTRO_FRAMES = INTRO_SECONDS * FPS;
 
 // Hero source: the dedicated hero capture if planned, else a busy moment of the orders clip.
 export const hero = (): { src: string; from: number } | null => {
-  const h = (edl as Record<string, { src?: string; from?: number }>).hero;
+  const h = (edl as unknown as Record<string, { src?: string; from?: number }>).hero;
   if (h?.src) return { src: h.src, from: h.from ?? 0.5 };
   const o = planned.orders;
   if (!o) return null;

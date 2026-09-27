@@ -1,4 +1,5 @@
 {
+  "camera": true,
   "orders": {
     "id": "orders",
     "src": "clips/orders.mp4",
@@ -13,9 +14,7 @@
       }
     ],
     "voSwap": {},
-    "voAdd": [
-      "vo_orders_qm"
-    ],
+    "voAdd": [],
     "voDrop": [],
     "segments": [
       {
@@ -1022,13 +1021,6 @@
         "text": "More monsters!",
         "x": 960,
         "y": 135
-      },
-      {
-        "at": 7.03,
-        "kind": "callout",
-        "text": "AUTOPILOT|15 s veto ring",
-        "x": 1755,
-        "y": 18
       },
       {
         "at": 12.77,

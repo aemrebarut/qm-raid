@@ -1,5 +1,6 @@
 import { AbsoluteFill, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
-import { ClipDef, FPS, clipFrames, segFrames } from "../timeline";
+import { CAMERA, ClipDef, FPS, clipFrames, segFrames } from "../timeline";
+import { Camera } from "./Camera";
 import { theme } from "../theme";
 import { FxLayer, punch } from "./FxLayer";
 import { LowerThird } from "./LowerThird";
@@ -61,11 +62,15 @@ const Placeholder: React.FC<{ c: ClipDef }> = ({ c }) => (
   </AbsoluteFill>
 );
 
+const Cam: React.FC<{ c: ClipDef; children: React.ReactNode }> = ({ c, children }) =>
+  CAMERA ? <Camera c={c}>{children}</Camera> : <>{children}</>;
+
 export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
   const frame = useCurrentFrame();
   let at = 0;
   return (
     <AbsoluteFill style={{ background: theme.night }}>
+      <Cam c={c}>
       <AbsoluteFill style={{ transform: punch(frame, c.fx) }}>
       {c.src && c.segments.length ? (
         c.segments.map((g, i) => {
@@ -86,6 +91,7 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
         <Placeholder c={c} />
       )}
       </AbsoluteFill>
+      </Cam>
       <FxLayer cues={c.fx} />
       {c.captions.map((k, i) => (
         <Sequence key={`cap${i}`} from={Math.round(k.at * FPS)} durationInFrames={Math.round(k.dur * FPS)}>

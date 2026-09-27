@@ -75,7 +75,7 @@ const RULES: Record<string, Rule> = {
     hold: { new_issue: [0.6, 0.6], camp_spawned: [0.3, 1.6], autopilot_on: [0.3, 1], proposal: [0.3, 1.8], proposed: [0.3, 1.8], veto: [0.4, 1.6], order_cancelled: [0.2, 0.8], autopilot_go: [0.3, 1.6], order_active: [0.2, 1.2] },
     fx: {
       camp_spawned: [{ kind: "callout", text: "NEW ISSUE|a new camp" }, { kind: "mascotShock", text: "More monsters!", lead: 0.4 }],
-      proposed: { kind: "callout", text: "AUTOPILOT|15 s veto ring" },
+      // no AUTOPILOT callout: its anchor is the HUD badge at y 18 and the title ran off the frame (rev P1); the caption says it
       order_cancelled: [{ kind: "punchIn" }, { kind: "mascotSmug", text: "Not that one." }],
       autopilot_go: { kind: "callout", text: "LET IT RIDE|order goes" },
     },
@@ -260,12 +260,15 @@ function insertIntercut(m: Planned, q: Planned, after: string) {
   m.seconds = round(m.seconds + dt, 2);
   // the QM narration line starts with the intercut
   m.voAnchor[`vo_${m.id}_qm`] = round(at + 0.2, 2);
-  m.voAdd = [...m.voAdd, `vo_${m.id}_qm`];
+  // the QM line runs longer than the intercut and lands back on the map; opt in with --qm-vo
+  if (process.argv.includes("--qm-vo")) m.voAdd = [...m.voAdd, `vo_${m.id}_qm`];
 }
 
 const dir = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? join(import.meta.dir, "../public/clips");
 const edlPath = join(import.meta.dir, "../src/edl.json");
 const edl: Record<string, unknown> = {};
+// --camera: v2 camera layer (drift, punch-ins on action points, zoom blur on RTS <-> QM cuts)
+edl.camera = process.argv.includes("--camera");
 // --real: skip mock captures (the final take). Loadout always comes from the approved mock close-up.
 const realOnly = process.argv.includes("--real");
 const LOADOUT_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/mock-loadout");

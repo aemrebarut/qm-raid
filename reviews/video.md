@@ -175,3 +175,11 @@ Inspected 37 frames every 2 seconds, plus full-size opening, Forge overlay and L
 Finding: around 44-47 seconds the four-row ScoreRace panel extends below the frame, while the cheering mascot and speech bubble cover the final score values. Move/shrink the panel upward and move or omit the Forge mascot so all four final numbers remain readable. Additional crop note: Loadout's save button is below the frame; a wider save shot would show the action. Sent to raid-video and Analyst. Evidence `/tmp/raid-video-rev/take1-qm-raid-demo-8658ec2ee2/` and `/tmp/raid-video-rev/take1-audio-8658ec2ee2/`; manifest/EDL/placement snapshots retained in `/tmp/raid-video-rev/insurance-*`.
 
 VERDICT: CHANGES: keep the Forge score overlay within frame and unobscured.
+
+## V15: corrected insurance cut (16:24 PDT)
+
+`take1b/qm-raid-demo.mp4`, SHA256 `1a7eaf17cebed2f23856799fda2bfae8172edcaaba06e56c4328548a1acc1a55`: stable 72.896 second 1080p/30 H.264 with stereo 48 kHz AAC. Inspected 37 frames every 2 seconds and full-size corrected Forge overlay. All four score values are inside the frame and unobscured; Loadout Apply is visible in the wider save shot. Thumbnail hash is unchanged and matches the real gameplay opening. All 14 voice clips align within 43 ms, no overlaps; decoded review audio is identical to V14. No remaining P1 found in this insurance cut. This is not a final-cut approval and does not cover absent QM intercuts, Teams or Autopilot. Sent to raid-video and Analyst.
+
+Evidence `/tmp/raid-video-rev/take1b-qm-raid-demo-1a7eaf17ce/`, `/tmp/raid-video-rev/take1b-audio-1a7eaf17ce/`, snapshots `/tmp/raid-video-rev/insurance-b-*`.
+
+VERDICT: APPROVED

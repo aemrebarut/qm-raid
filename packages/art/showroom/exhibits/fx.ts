@@ -54,7 +54,7 @@ const memory: Exhibit = {
     lib.object3d.position.set(-1, 0, -1);
     s.root.add(lib.object3d);
     const u = unit("knight", BLUE, 1.3, 1.3, new THREE.Vector3(-1, 0, -1));
-    s.root.add(u.object3d, put(contactShadow(0.3), 1.3, 0.012, 1.3));
+    s.root.add(u.object3d); // makeUnit brings its own contact shadow
     const libPt = () => lib.anchor.getWorldPosition(new THREE.Vector3());
     const tip = () => u.staffTip(new THREE.Vector3());
     const recall = () => {
@@ -105,7 +105,7 @@ const orders: Exhibit = {
     us.forEach((u, i) => {
       u.object3d.add(rings[i].object3d);
       rings[i].object3d.scale.setScalar(1 / 1.5); // the ring lives inside the unit's 1.5 board scale
-      s.root.add(u.object3d, put(contactShadow(0.28), u.object3d.position.x, 0.012, u.object3d.position.z));
+      s.root.add(u.object3d);
     });
     rings[0].set({ selected: true, color: RED });
     rings[1].set({ selected: true, color: RED });
@@ -200,7 +200,7 @@ const handoff: Exhibit = {
     const planner = unit("oracle", RED, -1.2, 0.9, c);
     const impl = unit("knight", RED, 0, -1.1, c);
     const rev = unit("ranger", RED, 1.2, 0.9, c);
-    for (const u of [planner, impl, rev]) s.root.add(u.object3d, put(contactShadow(0.28), u.object3d.position.x, 0.012, u.object3d.position.z));
+    s.root.add(planner.object3d, impl.object3d, rev.object3d);
     const tip = (u: UnitHandle) => () => u.staffTip(new THREE.Vector3());
     const pass = (a: UnitHandle, b: UnitHandle, verdict: string | undefined, label: string, then?: () => void) => {
       a.play("cast");

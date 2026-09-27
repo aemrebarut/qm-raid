@@ -149,9 +149,23 @@ Inspected both diffs and the installed River SDK sampling signature. No new acti
 - Offline execution of `c225ce0` units: PASS. An injected provider timeout selects the dry template, emits a labeled fallback reply with the original orderId, emits nonterminal error activity, and clears the unit's active order. All Brain calls were stubbed.
 - `cd services/forge && bun run smoke:bridge`: PASS against the owner-restarted service, reported PID 39865. No ready dry type was available at selection time, so the smoke used the existing `forge-refund-ranger` checkpoint for one direct status reply and deleted its test unit. No training, Brain write, engine request, or real-type deletion was performed.
 
+## 2026-09-27: Order/chat isolation and progress replay `38f0358`
+
+Inspected the full commit and confirmed no Forge/River working-tree differences during validation. Runtime service reported PID 81061. The original P1 direct-message interruption and P2 completed-during-downtime replay findings are resolved:
+
+- `BRAIN_URL=http://127.0.0.1:9 bun run test:units`: PASS, order A and concurrent chat both reply and orderId clears. Additional isolated probes PASS for order failure plus successful chat, order B superseding A while chat completes independently, and DELETE suppressing both pending replies. Brain requests were stubbed in those probes.
+- `bun run test:progress`: PASS for dead PID with a ready checkpoint/score, dead PID mid-run, and a live tail reaching ready. Startup now hands every unfinished type to the replay function.
+- `bun run smoke && bun run smoke:bridge`: PASS. The types smoke used `dryRun: true` and observed template progress for `forge-smoke-ranger`. The bridge selected existing `forge-refund-ranger` for a direct status reply and deleted its test unit. No real training, shared-engine request, or Brain write was made.
+
+**P2: startup replay can persist only a prefix of the type store.** `services/forge/src/server.ts:42-50` starts follow while still populating the map. For a dead child with an empty or missing progress file, `followProgress` reaches its final save without awaiting. That save contains only records inserted so far. Reproduced by executing the committed load function and real followProgress against a temporary store containing an unfinished dead type followed by a ready demo type: both remain in memory, but types.json contains only the dead type. The next restart loses the ready type metadata. Populate the entire map before starting followers, or suppress saves until loading finishes. This is a separate startup edge case from the completed-log replay fixed here.
+
+**P2: the offline units test reaches the shared Brain by default.** `services/forge/test/units.ts:5-7` imports createUnits before assigning BRAIN_URL. The imported module captures the default 4616 URL during module evaluation, so the subsequent assignment to port 9 has no effect. With fetch intercepted, the unmodified test requested both `http://127.0.0.1:4616/recall` and `/remember`. The real Brain accepts the unknown t1 target as a general learning and would persist the fixture's lesson/unit. Stub fetch, or set the environment before a dynamic import. The reviewer ran the test with an external BRAIN_URL override, then reproduced the URL issue with intercepted requests, so no shared Brain cleanup is needed for this review.
+
+Both new P2 findings sent to `raid-river` in Herdr session `default`; the Analyst was informed of the P1 closure and remaining issues.
+
 ## Lane review queue
 
 - `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved.
-- `raid-river`: reviewed through `890e335`, including `b2f8b5e`, `2c8b600`, `bc79ea1`, and `c225ce0`. Open: P1 direct-message interruption; P2 finished-pipeline recovery, unavailable judge grades, and final-verdict validation. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-river`: reviewed through `38f0358`. Original P1 direct-message interruption and P2 completed-pipeline replay are resolved. Open P2s: partial-store save during startup, offline units-test Brain access, unavailable judge grades, and final-verdict validation. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

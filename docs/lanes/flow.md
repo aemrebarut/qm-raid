@@ -7,6 +7,6 @@ Spec: docs/CONTRACT.md "Team workflows" and contract/types.ts (Workflow, Workflo
 # Feature: spawn new issues (Emre, 15:35)
 Spec: docs/CONTRACT.md `POST /api/targets`, brain `POST /issues`, event `target.spawned`.
 - raid-gbrain: brain `POST /issues` plus a pool of about 15 extra synthetic Lumen issues (spread over components, each touching a house rule or a customer), reset with /reset.
-- raid-eng-impl: engine `POST /api/targets` (free tile in the zone, LUM id sequence, brain call, event; if the brain is down, create the target locally and log it).
+- raid-eng-impl: engine `POST /api/targets` (free tile in the zone, then brain `POST /issues` with pos; the brain allocates the LUM and target ids; emit target.spawned with the returned Target; if the brain is down answer 503 and create nothing).
 - raid-ui-plan: `apps/board/src/hud/newIssue.ts` (new file you own): a compact spawn dialog opened by hotkey N and by a top-bar button: Random (one click) or a short form (title, component, kind, severity). raid-look-hud adds the top-bar button hook and styles it; raid-ui-scene plays a spawn effect (ground crack or portal, the camp rises) on target.spawned.
 - Due 16:05, tested on 4619 against 4618.

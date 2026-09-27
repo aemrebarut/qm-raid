@@ -35,6 +35,16 @@ async function listPages(): Promise<PageRow[]> {
 // Learnings written by this process, so recall finds them before gbrain's idle sweep turns their wikilinks into links.
 const recentLearnings: { slug: string; component: string; issue: string }[] = [];
 
+// Library panel node types, from the slug prefix (gbrain types lump components and rules together as concept).
+const PREFIX_TYPES: Record<string, string> = {
+  components: "component", rules: "rule", issues: "issue", companies: "company",
+  people: "person", learnings: "learning", units: "unit",
+};
+function nodeType(p: PageRow): string {
+  if (p.slug === "lumen") return "product";
+  return PREFIX_TYPES[p.slug.split("/")[0]] ?? p.type;
+}
+
 let graphCache: { nodes: any[]; edges: any[] } | null = null;
 
 async function graph() {
@@ -46,7 +56,7 @@ async function graph() {
     const links = await tool<Link[]>("get_links", { slug: p.slug });
     for (const l of links) if (known.has(l.to_slug)) edges.push({ from: l.from_slug, to: l.to_slug, type: l.link_type });
   }
-  graphCache = { nodes: pages.map((p) => ({ id: p.slug, type: p.type, title: p.title })), edges };
+  graphCache = { nodes: pages.map((p) => ({ id: p.slug, type: nodeType(p), title: p.title })), edges };
   return graphCache;
 }
 

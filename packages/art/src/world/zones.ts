@@ -122,7 +122,7 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
   const towerBaseGeo = own(worldUV(xf(new THREE.CylinderGeometry(0.37, 0.4, 0.16, 10), [0, 0.08, 0]), 1));
   const towerRoofGeo = own(merge([xf(new THREE.ConeGeometry(0.42, 0.62, 10), [0, 0.95 + 0.31, 0]), xf(new THREE.CylinderGeometry(0.43, 0.43, 0.04, 10), [0, 0.96, 0])]));
   const finialGeo = own(xf(new THREE.ConeGeometry(0.035, 0.18, 5), [0, 1.66, 0]));
-  const GT_H = 1.4; // gate opening clears a 1.2 tall unit
+  const GT_H = 1.75; // lintel underside 1.41, portcullis teeth 1.32: clears a 1.2 tall unit
   const gateTowerGeo = own(worldUV(merge([xf(B(0.46, GT_H, 0.46), [0, GT_H / 2, 0]), xf(B(0.54, 0.14, 0.54), [0, 0.07, 0])]), 1));
   const gateRoofGeo = own(xf(new THREE.ConeGeometry(0.4, 0.5, 4), [0, GT_H + 0.25, 0], [0, Math.PI / 4, 0]));
   const lintelGeo = own(worldUV(merge([
@@ -130,8 +130,9 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
     xf(B(0.2, 0.13, WALL_T + 0.14), [-0.3, GT_H, 0]), xf(B(0.2, 0.13, WALL_T + 0.14), [0, GT_H, 0]), xf(B(0.2, 0.13, WALL_T + 0.14), [0.3, GT_H, 0]),
   ]), 1));
   const portGeo = own(merge([
-    ...[-0.5, -0.25, 0, 0.25, 0.5].map((x) => xf(B(0.035, 0.24, 0.035), [x * 0.95, GT_H - 0.42, 0])),
-    xf(B(1, 0.03, 0.035), [0, GT_H - 0.48, 0]), xf(B(1, 0.03, 0.035), [0, GT_H - 0.36, 0]),
+    // raised portcullis: only its teeth show under the lintel
+    ...[-0.5, -0.25, 0, 0.25, 0.5].map((x) => xf(B(0.035, 0.1, 0.035), [x * 0.95, GT_H - 0.38, 0])),
+    xf(B(1, 0.03, 0.035), [0, GT_H - 0.35, 0]),
   ]));
   const bannerGeo = own(new THREE.PlaneGeometry(0.34, 0.68, 1, 3).translate(0, -0.34, 0));
   const flagGeo = own(new THREE.PlaneGeometry(0.5, 0.3, 3, 1).translate(0.25, -0.15, 0));
@@ -352,19 +353,18 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
   }
 
   const rot = new THREE.Matrix4();
+  const bannerMesh = meshes.get(banners), flagMesh = meshes.get(flags);
+  const wavers = waving.map((w) => ({ ...w, im: meshes.get(w.batch)! })).filter((w) => w.im);
   return {
     object3d: group,
     tick(t) {
-      const touched = new Set<THREE.InstancedMesh>();
-      for (const w of waving) {
-        const im = meshes.get(w.batch);
-        if (!im) continue;
+      for (const w of wavers) {
         const a = Math.sin(t * (w.flag ? 3.1 : 1.6) + w.phase) * (w.flag ? 0.35 : 0.08);
         rot.makeRotationFromEuler(_e.set(w.flag ? 0 : a, w.flag ? a : 0, 0));
-        im.setMatrixAt(w.index, _m.multiplyMatrices(w.base, rot));
-        touched.add(im);
+        w.im.setMatrixAt(w.index, _m.multiplyMatrices(w.base, rot));
       }
-      for (const im of touched) im.instanceMatrix.needsUpdate = true;
+      if (bannerMesh) bannerMesh.instanceMatrix.needsUpdate = true;
+      if (flagMesh) flagMesh.instanceMatrix.needsUpdate = true;
     },
     dispose() {
       for (const im of meshes.values()) im.dispose();

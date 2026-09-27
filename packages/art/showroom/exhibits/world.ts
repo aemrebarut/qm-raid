@@ -2,8 +2,7 @@
 import * as THREE from "three";
 import type { Exhibit } from "../../src/types";
 import { makeBuilding, type BuildingKind } from "../../src/world/buildings";
-import { makeTerrain } from "../../src/world/terrain";
-import { makeZones } from "../../src/world/zones";
+import { makeWorld } from "../../src/world/world";
 import type { ZoneSpec } from "../../src/types";
 
 function building(kind: BuildingKind, title: string): Exhibit {
@@ -45,26 +44,23 @@ function gateOf(z: { x: number; y: number; w: number; h: number }): NonNullable<
   return dy > 0 ? { side: "s", x: clampX(cx - 0.5), y: z.y + z.h } : { side: "n", x: clampX(cx - 0.5), y: z.y - 1 };
 }
 const terrain: Exhibit = {
-  name: "Map: terrain and zones (24 x 24)",
+  name: "Map: makeWorld (terrain, zones, farms)",
   area: "world",
   span: 34,
   turntable: false,
   make() {
-    const blocked: [number, number][] = [];
-    for (const z of ZONES) for (let i = z.x - 1; i <= z.x + z.w; i++) for (let j = z.y - 1; j <= z.y + z.h; j++) blocked.push([i, j]);
-    for (const [bx, by] of [LIB, [5, 11], [18, 11]]) for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) blocked.push([bx + i, by + j]);
-    const paths: [number, number][][] = [
-      ...ZONES.map((z): [number, number][] => { const g = gateOf(z); const ew = g.side === "e" || g.side === "w"; return [[g.x, g.y], ew ? [LIB[0], g.y] : [g.x, LIB[1]], LIB]; }),
-      [[5, 11], LIB], [[18, 11], LIB],
-    ];
-    const t = makeTerrain({ size: 24, seed: 3, paths, blocked }, { margin: 5 });
     const camps: [number, number][] = ZONES.map((z) => [Math.floor(z.x + z.w / 2), Math.floor(z.y + z.h / 2)]);
-    const zs = makeZones(ZONES.map((z, i) => ({ ...z, color: COLORS[i], gate: gateOf(z) })), { blocked: camps });
-    const wrap = new THREE.Group(); // terrain is in world coords 0..24; centre it on the cell
-    t.object3d.position.set(-12, 0.012, -12); // just above the showroom plate (no z-fighting)
-    zs.object3d.position.set(-12, 0.012, -12);
-    wrap.add(t.object3d, zs.object3d);
-    return { object3d: wrap, tick: (tt, dt) => { t.tick(tt, dt); zs.tick(tt, dt); }, dispose: () => { t.dispose(); zs.dispose(); } };
+    const w = makeWorld({
+      size: 24, seed: 3, margin: 5,
+      library: { x: LIB[0], y: LIB[1] },
+      buildings: [{ x: 5, y: 11 }, { x: 18, y: 11 }],
+      zones: ZONES.map((z, i) => ({ ...z, color: COLORS[i], gate: gateOf(z) })),
+      blocked: camps,
+    });
+    const wrap = new THREE.Group(); // world coords 0..24; centre it on the cell, just above the showroom plate
+    w.object3d.position.set(-12, 0.012, -12);
+    wrap.add(w.object3d);
+    return { object3d: wrap, tick: (t, dt) => w.tick(t, dt), dispose: () => w.dispose() };
   },
 };
 

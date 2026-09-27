@@ -208,6 +208,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
+        if (!alive(u) || u.active?.send !== s) break; // deleted, replaced or finished elsewhere: drop the stream
         buf += dec.decode(value, { stream: true });
         let i: number;
         while ((i = buf.indexOf("\n\n")) >= 0) {
@@ -257,6 +258,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
     } catch (err) {
       console.warn(`[qm-bridge] ${u.id} run ${runId} stream: ${String((err as Error)?.message ?? err)}`);
     }
+    if (!alive(u) || u.active?.send !== s) return;
     // Stream ended (finished or dropped): check the run itself.
     try {
       const run = await getRun(runId);
@@ -410,17 +412,11 @@ const server = Bun.serve({
 
     if (parts[0] === "units" && parts[1]) {
       const id = decodeURIComponent(parts[1]);
-      let u = units.get(id);
+      const u = units.get(id);
       if (!u && m === "DELETE") return json({ ok: true });
-      if (!u) {
-        // Unknown unit (for example after a bridge restart): adopt it with a fresh session instead of failing the order.
-        try {
-          u = await createUnit({ id });
-          console.log(`[qm-bridge] adopted unknown unit ${id}`);
-        } catch (err) {
-          return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
-        }
-      }
+      // Unknown unit: 404, so the engine re-POSTs its full SpawnRequest (model, effort, team) and retries.
+      // Restarts do not lose units: the map is restored from .state/units.json.
+      if (!u) return json({ ok: false, error: "unknown unit" }, 404);
       if (m === "POST" && parts[2] === "send") {
         const b = await body<Send>(req);
         if (!b.text || typeof b.text !== "string") return json({ ok: false, error: "text required" }, 400);

@@ -1,7 +1,8 @@
 // Right side panel: the selected unit (details, order, live feed, reply, message box) or target.
 import { api, type Building, type Bus, type FeedEntry, type Order, type Selection, type State, type Store, type Target, type Unit } from "../core";
 import { BarracksPanel } from "./barracks";
-import { clear, h, put, safeColor, safeUrl, timeOf } from "./dom";
+import { slugChips } from "./chips";
+import { clear, h, put, RowList, safeColor, safeUrl, timeOf } from "./dom";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
 
@@ -22,6 +23,7 @@ export class SidePanel {
   private sent = new Map<string, FeedItem[]>(); // the user's own messages, merged into the feed
   private feed = h("ol", { class: "hud-feed" });
   private feedWrap = h("section", { class: "hud-section" }, h("h3", null, "Activity"), this.feed);
+  private feedRows = new RowList<FeedItem>(this.feed, (it) => feedRow(it, this.bus));
   private msg = new MessageBox((text) => this.send(text));
   private sel: Selection = { units: [], target: null, building: null, focus: null };
   private state: State | null = null;
@@ -142,12 +144,12 @@ export class SidePanel {
     this.feedFor = id;
     const top = this.feed.scrollTop;
     const stick = fresh || top + this.feed.clientHeight >= this.feed.scrollHeight - 8;
-    clear(this.feed);
     const log = this.store.feed(id);
     this.feedLast = log.at(-1);
     const items: FeedItem[] = [...log, ...(this.sent.get(id) ?? [])].sort((a, b) => a.ts - b.ts).slice(-FEED_SHOWN);
+    if (fresh) this.feedRows.reset();
+    this.feedRows.set(items);
     if (!items.length) this.feed.append(h("li", { class: "hud-hint" }, "Nothing yet."));
-    for (const it of items) this.feed.append(feedRow(it));
     this.feed.scrollTop = stick ? this.feed.scrollHeight : top;
   }
 
@@ -316,12 +318,12 @@ export function classGlyph(cls: string): string {
   return ({ knight: "♞", ranger: "\u{1F3F9}", scout: "\u{1F9ED}", oracle: "\u{1F52E}" } as Record<string, string>)[cls] ?? "⚒";
 }
 
-function feedRow(it: FeedItem) {
+function feedRow(it: FeedItem, bus?: Bus) {
   return h("li", { class: `hud-feed-${it.kind}` },
     h("span", { class: "hud-feed-time" }, timeOf(it.ts)),
     h("span", { class: "hud-feed-icon" }, KIND_ICON[it.kind] ?? "•"),
     it.tool ? h("code", null, it.tool) : null,
-    h("span", { class: "hud-feed-text" }, it.text),
+    h("span", { class: "hud-feed-text" }, it.text, bus ? slugChips(it.slugs, bus) : null),
   );
 }
 

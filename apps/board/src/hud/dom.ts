@@ -55,3 +55,31 @@ export function timeOf(ts: string | number | undefined): string {
 export function safeColor(c: string | null | undefined, fallback = "#8a7a5c"): string {
   return c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : fallback;
 }
+
+/**
+ * Keeps el's children in sync with items (newest last), reusing row nodes: in the usual case old rows
+ * drop off the front and new ones append, so rows (and chips in them) never move under the cursor.
+ */
+export class RowList<T> {
+  private shown: T[] = [];
+  constructor(private el: HTMLElement, private row: (item: T) => HTMLElement) {}
+
+  set(items: T[]): void {
+    const shown = this.shown;
+    const keep = shown.length ? items.indexOf(shown[shown.length - 1]) + 1 : 0;
+    const drop = shown.length - keep;
+    const prefixOk = keep > 0 && drop >= 0 && items.slice(0, keep).every((it, i) => it === shown[drop + i]);
+    if (prefixOk && this.el.children.length === shown.length) {
+      for (let i = 0; i < drop; i++) this.el.firstElementChild?.remove();
+      for (const it of items.slice(keep)) this.el.append(this.row(it));
+    } else {
+      this.el.replaceChildren(...items.map((it) => this.row(it)));
+    }
+    this.shown = items.slice();
+  }
+
+  reset(): void {
+    this.shown = [];
+    clear(this.el);
+  }
+}

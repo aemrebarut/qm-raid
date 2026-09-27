@@ -292,3 +292,15 @@
 .hud-portrait[style*="--forge-hue"] { background: radial-gradient(circle at 35% 30%, hsl(var(--forge-hue) 70% 92%), hsl(var(--forge-hue) 45% 58%)); }
 .hud-error { padding: 5px 8px; background: rgba(179,38,30,.12); border: 1px solid rgba(179,38,30,.5); color: #7a1c14; overflow-wrap: anywhere; }
 .hud-error h3 { color: #b3261e; border-color: rgba(179,38,30,.4); }
+
+/* Brain page chips in feeds (open the Library overlay on that page) */
+.hud-chips { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: 4px; vertical-align: baseline; }
+.hud-chip {
+  font: inherit; font-size: 11px; line-height: 1.3; cursor: pointer; padding: 0 5px; border-radius: 8px;
+  color: #1f4f80; background: rgba(95,168,255,.18); border: 1px solid rgba(31,79,128,.45); pointer-events: auto;
+}
+.hud-chip:hover { background: rgba(95,168,255,.35); }
+.hud-chip-more { font-size: 11px; color: #6a5a40; }
+.hud-gfeed .hud-chip { color: #cfe6ff; background: rgba(20,40,70,.65); border-color: rgba(159,208,255,.6); text-shadow: none; }
+.hud-gfeed .hud-chip-more { color: #c9b78f; }
+.hud-gfeed .hud-chips { flex-wrap: nowrap; }

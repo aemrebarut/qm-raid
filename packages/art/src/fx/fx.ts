@@ -186,10 +186,11 @@ export class ArtFx {
   beam(from: Pt, to: Pt, color: THREE.ColorRepresentation, dur = 1.8, width = 0.09) {
     const streak = streakTexture().clone();
     streak.needsUpdate = true;
-    const core = new THREE.Color(color).lerp(new THREE.Color("#ffffff"), 0.7); // #4aa3ff -> ~#cfe9ff
+    const core = new THREE.Color(color).lerp(new THREE.Color("#ffffff"), 0.55); // #4aa3ff -> light blue, never white
     const outerR = Math.min(0.125, width * 0.95), innerR = Math.min(0.04, Math.max(0.03, width * 0.28));
     const outer = new THREE.Mesh(beamGeo(), additive(color, streak, 0.35));
-    const inner = new THREE.Mesh(beamGeo(), additive(core, undefined, 0.55));
+    // The core is alpha-blended, not additive: overlapping beams over bright cobbles stay blue instead of summing to white.
+    const inner = new THREE.Mesh(beamGeo(), new THREE.MeshBasicMaterial({ color: core, transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false }));
     const endGlow = glowSprite(color, 0.45, 0.6);
     const startGlow = glowSprite(color, 0.5, 0.4);
     const g = new THREE.Group();
@@ -218,7 +219,7 @@ export class ArtFx {
         streak.repeat.set(1, len * 0.8);
         streak.offset.y += dt * 2.5; // cylinder v runs bottom to top; the beam points from a to b, so streaks flow to b
         (outer.material as THREE.MeshBasicMaterial).opacity = 0.35 * fade;
-        (inner.material as THREE.MeshBasicMaterial).opacity = 0.55 * fade;
+        (inner.material as THREE.MeshBasicMaterial).opacity = 0.75 * fade;
         endGlow.position.copy(b);
         endGlow.material.opacity = 0.6 * fade;
         endGlow.scale.setScalar(0.42 + Math.sin(secs * 12) * 0.05);
@@ -269,8 +270,9 @@ export class ArtFx {
 
   /** Blue page icon flying from the Library to a unit. */
   page(from: Pt, to: Pt, delay = 0, onArrive?: () => void) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: pageTexture(), transparent: true, depthTest: false, toneMapped: false }));
-    s.scale.set(0.34, 0.42, 1);
+    // Small and blue-tinted: several recalls fire at once and white pages along the beams read as a slab.
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: pageTexture(), color: "#cfe3ff", transparent: true, depthTest: false }));
+    s.scale.set(0.22, 0.27, 1);
     s.renderOrder = 12;
     this.after(delay, () => this.fly(s, from, to, 1.1, 1.6, onArrive, "#6fb6ff"));
   }

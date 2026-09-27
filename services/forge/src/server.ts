@@ -47,6 +47,33 @@ function load() {
   } catch (e) { console.error("[forge] load failed", e); }
 }
 
+// One-screen eval for the Forge panel: trained vs base per metric on the same held-out orders and short prompt.
+// Metrics come straight from runs/<id>/eval.json and model.json; the sample is the first held-out order (not picked).
+function evalSummary(t: ForgeType) {
+  const dir = join(RUNS_DIR, t.id);
+  const read = (f: string) => { try { return JSON.parse(readFileSync(join(dir, f), "utf8")); } catch { return null; } };
+  const e = read("eval.json"), m = read("model.json");
+  if (!e || !m || t.model?.startsWith("dry-run:")) return null;
+  const r = (x: unknown) => (typeof x === "number" ? Math.round(x * 1000) / 1000 : null);
+  const metrics = [
+    { key: "style", label: "House style (rubric)", trained: r(e.trained), base: r(e.base) },
+    ...(Array.isArray(e.metrics) ? e.metrics.map((x: any) => ({ key: x.key, label: x.label, trained: r(x.trained), base: r(x.base) })) : []),
+    { key: "grounded", label: `Groundedness (${e.judge ?? "judge"})`, trained: r(e.trainedGrounded), base: r(e.baseGrounded) },
+  ];
+  const overall = (who: "trained" | "base") => {
+    const v = metrics.map((x) => x[who]);
+    return v.every((x) => typeof x === "number") ? r((v as number[]).reduce((a, b) => a + b, 0) / v.length) : null;
+  };
+  const row = e.rows?.[0];
+  return {
+    typeId: t.id, name: t.name, status: t.status, baseModel: m.base_model, evalOrders: e.n ?? e.rows?.length ?? 0,
+    metrics: [...metrics, { key: "overall", label: "Overall (evalScore)", trained: t.evalScore ?? overall("trained"), base: overall("base") }],
+    training: { examples: m.train_examples, steps: m.steps, epochs: m.epochs, lossStart: r(m.losses?.[0]), lossEnd: r(m.losses?.at(-1)),
+      trainSeconds: r(m.seconds), sessionWaitSeconds: r(m.sessionWait), modelLoadSeconds: r(m.modelLoad), evalSeconds: r(e.seconds) },
+    sample: row ? { order: String(row.order).split("\n")[0].slice(0, 200), trained: String(row.trained).slice(0, 500), base: String(row.base).slice(0, 500) } : null,
+  };
+}
+
 // Always prefixed so a forged type can never collide with builtin classes (knight, ranger, scout, oracle).
 function slugify(name: string): string {
   const base = "forge-" + (name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "type");
@@ -162,6 +189,12 @@ Bun.serve({
         types.delete(t.id);
         save();
         return json({ ok: true });
+      }
+      if (req.method === "GET" && path.startsWith("/types/") && path.endsWith("/eval")) {
+        const t = types.get(decodeURIComponent(path.slice(7, -5)));
+        if (!t) return json({ ok: false, error: "no such type" }, 404);
+        const e = evalSummary(t);
+        return e ? json(e) : json({ ok: false, error: t.dryRun || t.model?.startsWith("dry-run:") ? "dry run: no eval" : "no eval yet" }, 404);
       }
       if (req.method === "GET" && path.startsWith("/types/")) {
         const t = types.get(decodeURIComponent(path.slice(7)));

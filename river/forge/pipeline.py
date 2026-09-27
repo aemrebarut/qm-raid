@@ -109,7 +109,8 @@ def main() -> int:
         from forge import train as river_train
         model = river_train.sft(args, train, out, emit)
         score, base_score = river_train.evaluate(args, evalset, model, out, emit)
-        emit(status="ready", progress=1.0, stage=f"ready: eval {score:.2f} vs base {base_score:.2f}", model=model, evalScore=score)
+        emit(status="ready", progress=1.0, stage=f"ready: eval {score:.2f} vs base {base_score:.2f}", model=model, evalScore=score,
+             baseModel=args.base_model)
         return 0
     except Exception as e:  # report and exit non-zero; the service marks the type failed
         log(f"failed: {type(e).__name__}: {e}")

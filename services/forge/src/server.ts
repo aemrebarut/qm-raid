@@ -3,11 +3,14 @@
 // Later milestones: forge units implement the Bridge API on this same port.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createModelServer } from "./model";
+import { createUnits } from "./units";
 
 type Status = "generating" | "training" | "evaluating" | "ready" | "failed";
 interface ForgeType {
   id: string; name: string; description: string; status: Status; progress: number; stage: string;
   examples: number; evalScore: number | null; model: string | null; createdAt: number;
+  baseModel: string | null; // internal: River base model of the checkpoint, used to serve forge units
 }
 
 const PORT = Number(process.env.FORGE_PORT ?? 4612);
@@ -49,7 +52,7 @@ function slugify(name: string): string {
 }
 
 function publicType(t: ForgeType) {
-  const { createdAt, ...rest } = t;
+  const { createdAt, baseModel, ...rest } = t;
   return rest;
 }
 
@@ -76,7 +79,7 @@ async function runPipeline(t: ForgeType) {
       if (!line) continue;
       try {
         const u = JSON.parse(line);
-        for (const k of ["status", "progress", "stage", "examples", "evalScore", "model"] as const) {
+        for (const k of ["status", "progress", "stage", "examples", "evalScore", "model", "baseModel"] as const) {
           if (k in u) (t as any)[k] = u[k];
         }
       } catch { console.error("[forge] bad pipeline line", line.slice(0, 200)); }
@@ -96,13 +99,22 @@ const json = (body: unknown, status = 200) =>
 
 load();
 
+const modelServer = createModelServer(RIVER_DIR);
+const units = createUnits({
+  types: () => [...types.values()].map((t) => ({ id: t.id, name: t.name, description: t.description, status: t.status, model: t.model, baseModel: t.baseModel ?? null })),
+  ask: (r) => modelServer.ask(r),
+});
+
 Bun.serve({
   hostname: "127.0.0.1",
   port: PORT,
+  idleTimeout: 255, // SSE on /events; pings every 15 s
   async fetch(req) {
     const url = new URL(req.url);
     const path = url.pathname;
     try {
+      const bridge = await units.handle(req, url);
+      if (bridge) return bridge;
       if (req.method === "GET" && path === "/health") return json({ ok: true, service: "forge", mode: MODE });
       if (req.method === "GET" && path === "/types") return json([...types.values()].map(publicType));
       if (req.method === "POST" && path === "/types") {
@@ -111,7 +123,8 @@ Bun.serve({
         const description = String(body.description ?? "").trim();
         if (!name || !description) return json({ ok: false, error: "name and description are required" }, 400);
         const t: ForgeType = { id: slugify(name), name: name.slice(0, 60), description: description.slice(0, 600),
-          status: "generating", progress: 0, stage: "queued", examples: 0, evalScore: null, model: null, createdAt: Date.now() };
+          status: "generating", progress: 0, stage: "queued", examples: 0, evalScore: null, model: null, createdAt: Date.now(),
+          baseModel: null };
         types.set(t.id, t);
         save();
         runPipeline(t).catch((e) => { Object.assign(t, { status: "failed", stage: String(e).slice(0, 160) }); save(); });

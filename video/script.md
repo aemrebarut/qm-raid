@@ -30,7 +30,7 @@ Words: 180 spoken, 80 s of speech in 110 s; every clip keeps at least 4 s withou
 | vo_teams_2 | handoff | 43.52 | 6.47 | Right-click a camp, and the scrolls fly. The reviewer checks the work against the house rules. |
 | vo_teams_3 | verdict | 51.28 | 3.12 | Verdict: approved! The camp falls. |
 | vo_teams_2b (alt) | handoff | 43.52 | 6.82 | Right-click a camp, and the scrolls fly. The reviewer is a Rule Warden, forged by River. |
-| vo_teams_3b (alt) | verdict | 51.28 | 4.52 | Verdict: changes! Back to the anvil, implementer. |
+| vo_teams_3b (alt) | verdict | 51.28 | 3.98 | Verdict: changes! Back to the anvil, implementer. |
 | vo_teams_qm (alt) | qm_cut | 35 | 4.78 | Same trio, inside QM: every handoff is a real conversation. |
 
 ## Clip 3 The Forge (River AI) 0:55 to 1:15 (20 s slot, 14.2 s speech, 34 words)

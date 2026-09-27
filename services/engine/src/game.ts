@@ -97,7 +97,7 @@ function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string
     `Component: ${t.component}`,
     `Customers: ${t.customers.join(", ")}`,
     `GBrain pages: ${pages.join(", ")}`,
-    `Lumen is a synthetic product with no code checkout; GBrain is your only source. 1) Recall first: read the pages above and search GBrain for house rules and past learnings on this component. 2) Decide the fix and say it in 3 to 5 sentences, naming any rule you applied. 3) Remember: write one GBrain page ${learningSlug} (type learning) with what you learned, linking [[components/${t.component}]] and [[issues/${issue}]]. Reply in at most 4 sentences.`,
+    `Lumen is a synthetic product with no code checkout; GBrain is your only source. 1) Recall first: call the gbrain recall tool with componentId ${t.component}, targetId ${t.id} and unitId ${u.id}, and search GBrain for house rules and past learnings on this component. 2) Decide the fix and say it in 3 to 5 sentences, naming any rule you applied. 3) Remember: call the gbrain remember tool with slug ${learningSlug}, targetId ${t.id}, unitId ${u.id} and one or two sentences of what you learned. Reply in at most 4 sentences.`,
   ].join("\n");
 }
 
@@ -109,7 +109,7 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   r.gbrainCalls = 0;
   r.gbrainReads = 0;
   r.gbrainWrites = 0;
-  r.learningSlug = `learnings/${t.issue.toLowerCase()}-${u.id}-${Date.now()}`;
+  r.learningSlug = `learnings/${t.issue}-${u.id}-${Date.now()}`.toLowerCase();
   const req = { text: orderPrompt(u, o, t, r.learningSlug), orderId: o.id, targetId: t.id, componentId: t.component };
   if (!(await ensureSpawned(u))) return failOrder(o, `bridge unavailable at ${bridgeFor(u)}`);
   let status = await sendToBridge(u, req);
@@ -242,11 +242,15 @@ function classifyGbrain(tool: string): "link" | "remember" | "recall" {
   return "recall";
 }
 
+// Explicit slugs first, then the raid-gbrain facade ids (componentId, targetId), else slugs named in the query.
 function slugsFrom(args: any): string[] {
-  const s = argStrings(args, ["slugs", "slug", "page", "from", "to"]);
-  if (s.length) return [...new Set(s)];
-  const q = argStrings(args, ["query", "q"])[0] ?? "";
-  return [...new Set(q.match(/[a-z]+\/[a-z0-9][a-z0-9._-]*/gi) ?? [])];
+  const out = argStrings(args, ["slugs", "slug", "page", "from", "to"]);
+  const cid = argStrings(args, ["componentId"])[0];
+  if (cid) out.push(`components/${cid}`);
+  const t = targetById(argStrings(args, ["targetId"])[0] ?? "");
+  if (t) out.push(`issues/${t.issue.toLowerCase()}`, ...t.customers.map((c) => `companies/${c}`));
+  if (!out.length) out.push(...(argStrings(args, ["query", "q"])[0] ?? "").match(/[a-z]+\/[a-z0-9][a-z0-9._-]*/gi) ?? []);
+  return [...new Set(out)];
 }
 
 function handleGbrainTool(u: Unit, tool: string, args: any, text: string, orderId: string | undefined): void {

@@ -14,6 +14,12 @@ const fail = (status: number, error: string): Fail => ({ ok: false, status, erro
 const EFFORTS = ["low", "medium", "high"];
 const MAX_INSTRUCTIONS = 4000;
 const MAX_IDS = 40;
+// GBrain is locked on for every unit (Analyst): plugins always include it, a PATCH without it keeps it, and the catalog
+// marks it locked. CatalogItem has no field for that, so the hint leads the description.
+const GBRAIN = "gbrain";
+const LOCK_HINT = "The Library: always on.";
+const withGbrain = (plugins: string[]) => (plugins.includes(GBRAIN) ? plugins : [GBRAIN, ...plugins]);
+const lockedGbrain = (desc: string): string => (desc.startsWith(LOCK_HINT) ? desc : `${LOCK_HINT} ${desc}`.trim());
 
 export async function getCatalog(unitId?: string | null): Promise<{ ok: true; items: CatalogItem[] } | Fail> {
   let base = BRIDGE_URL;
@@ -30,8 +36,10 @@ export async function getCatalog(unitId?: string | null): Promise<{ ok: true; it
   const items: CatalogItem[] = [];
   for (const x of r.items as any[]) {
     if (!x || typeof x.id !== "string" || !x.id || (x.kind !== "skill" && x.kind !== "plugin")) continue;
-    items.push({ id: x.id, name: typeof x.name === "string" && x.name ? x.name : x.id, description: typeof x.description === "string" ? x.description : "", kind: x.kind });
+    const description = typeof x.description === "string" ? x.description : "";
+    items.push({ id: x.id, name: typeof x.name === "string" && x.name ? x.name : x.id, description: x.id === GBRAIN ? lockedGbrain(description) : description, kind: x.kind });
   }
+  if (!items.some((i) => i.id === GBRAIN)) items.push({ id: GBRAIN, name: "GBrain", description: lockedGbrain("Team memory: recall pages and learnings, remember what you learned."), kind: "plugin" });
   return { ok: true, items };
 }
 
@@ -43,15 +51,15 @@ export type LoadoutPatch = { instructions?: unknown; skills?: unknown; plugins?:
 
 // reRegister (from game.ts, optional): on a bridge 404 (the bridge never had the unit, or restarted and forgot it) it
 // runs once and the PATCH is retried. It must force a fresh POST /units even when the engine believes the unit is
-// registered (plain ensureSpawned is a no-op then). The retried PATCH carries the full merged loadout, so the unit's
-// saved loadout is back on the bridge too. Still 404 after that -> 502.
+// registered (plain ensureSpawned is a no-op then). The retried PATCH always carries the full merged loadout, even for
+// a model- or effort-only change, so the unit's saved loadout is back on the fresh session too. Still 404 -> 502.
 export async function patchLoadout(unitId: string, body: unknown, reRegister?: (u: Unit) => Promise<boolean>): Promise<{ ok: true; unit: Unit; notes?: string[] } | Fail> {
   const u = store.state.units.find((x) => x.id === unitId);
   if (!u) return fail(404, `unknown unit ${unitId}`);
   if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "json body required");
   const b = body as LoadoutPatch;
   const cur = isLoadout(u.loadout) ? u.loadout : defaultLoadout();
-  const next: Loadout = { instructions: cur.instructions, skills: [...cur.skills], plugins: [...cur.plugins] };
+  const next: Loadout = { instructions: cur.instructions, skills: [...cur.skills], plugins: withGbrain([...cur.plugins]) };
   if (b.instructions !== undefined) {
     if (typeof b.instructions !== "string" || b.instructions.length > MAX_INSTRUCTIONS) return fail(400, `instructions must be a string of at most ${MAX_INSTRUCTIONS} characters`);
     next.instructions = b.instructions;
@@ -60,7 +68,7 @@ export async function patchLoadout(unitId: string, body: unknown, reRegister?: (
     if (b[k] === undefined) continue;
     const v = ids(b[k]);
     if (!v) return fail(400, `${k} must be an array of at most ${MAX_IDS} ids`);
-    next[k] = v;
+    next[k] = k === "plugins" ? withGbrain(v) : v;
   }
   if (b.model !== undefined && (typeof b.model !== "string" || !b.model.trim() || b.model.length > 80)) return fail(400, "model must be a non-empty string");
   if (b.effort !== undefined && !EFFORTS.includes(b.effort as string)) return fail(400, "effort must be low, medium or high");
@@ -74,7 +82,12 @@ export async function patchLoadout(unitId: string, body: unknown, reRegister?: (
   const base = bridgeFor(u);
   const url = `${base}/units/${encodeURIComponent(u.id)}`;
   let r = await sendJson<any>("PATCH", url, req, 20000);
-  if (r.status === 404 && reRegister && store.state.units.includes(u) && (await reRegister(u))) r = await sendJson<any>("PATCH", url, req, 20000);
+  let sentLoadout = loadoutChanged;
+  if (r.status === 404 && reRegister && store.state.units.includes(u) && (await reRegister(u))) {
+    // the bridge forgot the unit: its new session has the default loadout, so restore the whole merged one
+    r = await sendJson<any>("PATCH", url, { ...req, loadout: next }, 20000);
+    sentLoadout = true;
+  }
   // reset or retire during the await: the unit object is no longer in the live state
   if (!store.state.units.includes(u)) return fail(409, "unit is gone (engine reset or retired) while applying the loadout");
   if (r.status === 404) {
@@ -91,7 +104,7 @@ export async function patchLoadout(unitId: string, body: unknown, reRegister?: (
     return fail(r.status >= 400 && r.status < 500 ? r.status : 400, error);
   }
   // store what the bridge applied when it says so, else what we asked for
-  if (loadoutChanged) u.loadout = isLoadout(r.data?.loadout) ? { instructions: r.data.loadout.instructions, skills: ids(r.data.loadout.skills)!, plugins: ids(r.data.loadout.plugins)! } : next;
+  if (sentLoadout) u.loadout = isLoadout(r.data?.loadout) ? { instructions: r.data.loadout.instructions, skills: ids(r.data.loadout.skills)!, plugins: withGbrain(ids(r.data.loadout.plugins)!) } : next;
   if (req.model !== undefined) u.model = typeof r.data?.model === "string" && r.data.model ? r.data.model : req.model;
   if (req.effort !== undefined) u.effort = typeof r.data?.effort === "string" && EFFORTS.includes(r.data.effort) ? r.data.effort : req.effort;
   emit("unit.updated", { unit: u });
@@ -106,5 +119,5 @@ export async function reapplyLoadout(u: Unit): Promise<void> {
   if (!isLoadout(l)) return;
   const d = defaultLoadout();
   if (l.instructions === d.instructions && l.skills.length === 0 && l.plugins.join(",") === d.plugins.join(",")) return;
-  await sendJson("PATCH", `${bridgeFor(u)}/units/${encodeURIComponent(u.id)}`, { loadout: l }, 20000);
+  await sendJson("PATCH", `${bridgeFor(u)}/units/${encodeURIComponent(u.id)}`, { loadout: { ...l, plugins: withGbrain(l.plugins) } }, 20000);
 }

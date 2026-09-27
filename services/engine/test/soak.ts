@@ -1,12 +1,14 @@
 // Autopilot soak on the TEST engine (4618, mock backend), owner raid-eng-mock. Never point it at 4610 (real QM).
-//   bun test/soak.ts [minutes, default 3] [--seed N] [--no-reset]
+//   bun test/soak.ts [minutes, default 3] [--seed N] [--no-reset] [--shared]
 // Turns autopilot on for every team and answers each proposal at random (go / cancel / adjust / let expire).
 // POST /api/reset at the start and whenever every target is resolved (4618 has BRAIN_RESET=0: engine state only).
 // Asserts: engine healthy; no unit non-idle without an active or proposed order for > 30 s; no active order whose unit
 // idles for > 30 s or that runs > 90 s; no proposed order lingering > 3 s past its deadline; when a proposal is created
 // no other active or proposed order holds its target (engine invariant); no target in two active orders (holds here
 // because the soak never sends team orders or adjusts onto a held target); SSE seq strictly increasing; every
-// resolution appears in the test veto log. The test engine runs under bun --watch: a restart (SSE reconnect) starts
+// resolution appears in the test veto log exactly once: an extra row (duplicate or unexplained) is a violation, since
+// the soak runs under the exclusive 4618 lock; --shared (other clients may veto on the same engine) only reports extras.
+// The test engine runs under bun --watch: a restart (SSE reconnect) starts
 // seq and order ids over and drops open proposals, so it is handled like a reset and reported, not failed.
 // Env: ENGINE_URL (http://127.0.0.1:4618), VETO_LOG (/tmp/engplan/vetoes-test.jsonl).
 const E = (process.env.ENGINE_URL ?? "http://127.0.0.1:4618").replace(/\/$/, "");
@@ -17,6 +19,7 @@ const opt = (name: string) => { const i = argv.indexOf(name); return i >= 0 ? ar
 const MINUTES = Number(argv.find((a) => /^\d+(\.\d+)?$/.test(a) && argv[argv.indexOf(a) - 1] !== "--seed") ?? 3);
 const SEED = Number(opt("--seed") ?? Date.now() % 100000);
 const RESET = !argv.includes("--no-reset");
+const SHARED = argv.includes("--shared");
 
 // seeded PRNG (mulberry32) so a failing run can be replayed with --seed
 let seedState = SEED >>> 0;
@@ -239,9 +242,10 @@ for (const p of [...pending.values()].filter((p) => p.expect === "any")) {
 for (const p of [...pending.values()].filter((p) => p.expect === "pending")) violate(`proposal ${p.order.id} never resolved`);
 const dropped = [...pending.values()].filter((p) => p.expect === "dropped").length;
 const extra = [...pool.values()].reduce((a, b) => a + b, 0);
+if (extra && !SHARED) for (const [k, n] of pool) if (n > 0) violate(`${n} extra veto row(s) for ${k} (unit|target|action): duplicate or unexplained resolution`);
 
 console.log(`\nsoak ${MINUTES} min, seed ${SEED}: events ${eventsSeen}, snapshots ${snapshots}, restarts ${restarts}, proposals ${counts.proposals} (go ${counts.go}, cancel ${counts.cancel}, adjust ${counts.adjust}, expire ${counts.expire}, raced ${counts.raced}, dropped by reset ${dropped}), resets ${counts.resets}`);
-console.log(`veto log: ${rows.length} new rows, ${matched} matched${extra ? `, ${extra} extra (other clients?)` : ""}`);
+console.log(`veto log: ${rows.length} new rows, ${matched} matched${extra ? `, ${extra} extra${SHARED ? " (--shared: reported only)" : " (violation)"}` : ""}`);
 if (violations.length) { console.log(`\n${violations.length} violation(s):`); for (const v of violations.slice(0, 40)) console.log(`  ${v}`); }
 console.log(violations.length ? "\nsoak: FAIL" : "\nsoak: PASS");
 process.exit(violations.length ? 1 : 0);

@@ -54,13 +54,38 @@ test("catalog: main bridge by default, invalid items dropped", async () => {
   expect(r.ok).toBe(true);
   expect(calls[0]!.url).toBe(`${BRIDGE_URL}/catalog`);
   expect((r as any).items.map((i: any) => i.id)).toEqual(["debug", "gbrain"]);
+  expect((r as any).items[1].description).toBe("The Library: always on. memory");
+});
+
+test("catalog: GBrain is always listed and marked locked, even if the bridge leaves it out", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => json({ items: [{ id: "debug", name: "Debug", kind: "skill", description: "bisect" }] })) as unknown as typeof fetch;
+  const r = await getCatalog();
+  globalThis.fetch = orig;
+  expect((r as any).items.at(-1)).toMatchObject({ id: "gbrain", name: "GBrain", kind: "plugin" });
+  expect((r as any).items.at(-1).description.startsWith("The Library: always on.")).toBe(true);
+});
+
+test("patch: GBrain is locked on (a PATCH without it keeps it; a bridge answer without it is corrected)", async () => {
+  const u = unit();
+  await patchLoadout(u.id, { plugins: ["github"] });
+  expect(calls[0]!.body.loadout.plugins).toEqual(["gbrain", "github"]);
+  expect(u.loadout?.plugins).toEqual(["gbrain", "github"]);
+  await patchLoadout(u.id, { plugins: [] });
+  expect(calls[1]!.body.loadout.plugins).toEqual(["gbrain"]);
+  expect(u.loadout?.plugins).toEqual(["gbrain"]);
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => json({ ok: true, loadout: { instructions: "", skills: [], plugins: ["github"] } })) as unknown as typeof fetch;
+  await patchLoadout(u.id, { plugins: ["github"] });
+  globalThis.fetch = orig;
+  expect(u.loadout?.plugins).toEqual(["gbrain", "github"]);
 });
 
 test("catalog: a unit's own bridge (forged class -> the Forge), unknown unit 404", async () => {
   store.state.units.push({ ...unit(), id: "uf", class: "refund-ranger" });
   const r = await getCatalog("uf");
   expect(calls[0]!.url).toBe(`${FORGE_URL}/catalog`);
-  expect((r as any).items).toEqual([{ id: "gbrain", name: "GBrain", kind: "plugin", description: "team memory" }]);
+  expect((r as any).items).toEqual([{ id: "gbrain", name: "GBrain", kind: "plugin", description: "The Library: always on. team memory" }]);
   const b = await getCatalog(unit().id);
   expect(calls[1]!.url).toBe(`${BRIDGE_URL}/catalog`);
   expect(b.ok).toBe(true);
@@ -104,7 +129,8 @@ test("patch: forge unit goes to the Forge and passes its notes on", async () => 
   const r = await patchLoadout("uf", { instructions: "Be brief.", plugins: [] });
   expect(calls[0]!.url).toBe(`${FORGE_URL}/units/uf`);
   expect(r).toMatchObject({ ok: true, notes: ["skills are not used by forge units"] });
-  expect(store.state.units.find((x) => x.id === "uf")!.loadout).toEqual({ instructions: "Be brief.", skills: [], plugins: [] });
+  expect(calls[0]!.body.loadout.plugins).toEqual(["gbrain"]); // GBrain stays on for forge units too
+  expect(store.state.units.find((x) => x.id === "uf")!.loadout).toEqual({ instructions: "Be brief.", skills: [], plugins: ["gbrain"] });
 });
 
 test("patch: bad input -> 400 and no bridge call", async () => {
@@ -153,6 +179,19 @@ test("patch: the bridge forgot the unit (restart) -> forced re-register, PATCH r
   expect(u.loadout?.skills).toEqual(["debug"]);
 });
 
+test("patch: model/effort-only change on a forgotten unit -> the retry restores the full saved loadout (rev race probe)", async () => {
+  mode = "registry";
+  const u = unit();
+  u.loadout = { instructions: "Review every change.", skills: ["debug"], plugins: ["gbrain", "github"] };
+  const r = await patchLoadout(u.id, { effort: "high" }, forceRegister);
+  expect(r.ok).toBe(true);
+  expect(calls.map((c) => `${c.method} ${c.url.replace(BRIDGE_URL, "")}`)).toEqual([`PATCH /units/${u.id}`, "POST /units", `PATCH /units/${u.id}`]);
+  expect(calls[0]!.body).toEqual({ effort: "high" }); // a registered unit gets only the change
+  expect(calls[2]!.body).toEqual({ effort: "high", loadout: { instructions: "Review every change.", skills: ["debug"], plugins: ["gbrain", "github"] } });
+  expect(u.loadout).toEqual({ instructions: "Review every change.", skills: ["debug"], plugins: ["gbrain", "github"] });
+  expect(u.effort).toBe("high");
+});
+
 test("patch: a re-register callback that does not re-POST (plain ensureSpawned on a registered unit) -> 502, nothing stored", async () => {
   mode = "registry";
   const u = unit();
@@ -173,8 +212,8 @@ test("patch: bridge 404 without a re-register callback -> 502 after one PATCH", 
 test("patch: a bridge that answers only {ok} -> the requested values are stored", async () => {
   mode = "echoOnly";
   const u = unit();
-  await patchLoadout(u.id, { plugins: [], model: "gpt-6-luna" });
-  expect(u.loadout).toEqual({ instructions: "", skills: [], plugins: [] });
+  await patchLoadout(u.id, { plugins: ["github"], model: "gpt-6-luna" });
+  expect(u.loadout).toEqual({ instructions: "", skills: [], plugins: ["gbrain", "github"] });
   expect(u.model).toBe("gpt-6-luna");
 });
 

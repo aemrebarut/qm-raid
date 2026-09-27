@@ -153,3 +153,8 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Exact-commit synthetic spend checks pass integer conservation (one token across three units), deletion before a poll (30 tokens split only between two live units), single-flight polling, and ignoring a lower token counter before the next increase. The original overlapping-poll and per-share rounding findings are resolved.
 - **P2 remains, server.ts usage interval around await orgSpend:** eligible ids are captured before the awaited HTTP request. Delete one of two units while that request is pending, then resolve a 10-token delta: it emits five tokens for the deleted id and five for the survivor. The engine discards the deleted share, losing half the total. Refilter live units after orgSpend resolves, before dividing and emitting; absorb the delta if no eligible units remain.
 - Fixture: /tmp/raid-qm-review-f8585e4/src/check.ts. This check made no real QM requests.
+
+## 2026-09-27 15:28 PDT: normal QM chat UI accepted
+
+- Opened the live check's exact /s/cba4f6c7-bd61-42f3-b86c-63cffefa2eea URL in a separate Chrome tab. The normal QM web UI renders the titled conversation and lists it in Personal. Accessibility inspection and a screenshot show the intro, New round marker, order header, Gbrain Recall tool entry, and "continuity verified." reply in the same chat.
+- b251ab1 continuity acceptance is complete, including UI rendering. No browser message was submitted and no engine unit was changed. The earlier Orca desktop driver could not focus the Chrome window; the available native CUA app driver completed this read-only check.

@@ -292,7 +292,8 @@ async function createIssue(b: any) {
   if (!b.title) {
     const pool: PoolIssue[] = JSON.parse(readFileSync(POOL_FILE, "utf8"));
     const used = new Set(existing.map((r) => dropPrefix(r.title)));
-    const next = pool.find((p) => !used.has(p.title));
+    // Prefer an unused pool issue of the requested component (the engine's tile is in that zone), else any.
+    const next = pool.find((p) => !used.has(p.title) && (!b.component || p.component === b.component)) ?? pool.find((p) => !used.has(p.title));
     if (!next) throw new HttpError(409, "issue pool exhausted; POST /reset refills it");
     spec = { ...next, component: b.component ?? next.component };
   } else {

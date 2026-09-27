@@ -82,7 +82,11 @@ if (process.env.SMOKE_WRITE === "1") {
     const B = await post("/issues", { pos: { x: 18, y: 12 }, title: "Smoke spawned issue", component: "search", kind: "feature", severity: 1, customers: ["kestrel-labs", "nope"] });
     const b = B.target;
     const bOk = b.component === "search" && b.kind === "feature" && b.severity === 1 && b.customers.join() === "kestrel-labs" && b.title === "Smoke spawned issue";
-    const bad = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pos: { x: 1, y: 1 }, title: "x", component: "nope" }) });
+    // Random spawn with a component draws that component's pool issue.
+    const C = (await post("/issues", { pos: { x: 18, y: 13 }, component: "search" })).target;
+    const cOk = C.component === "search" && /search|autocomplete|reindex|archived/i.test(C.title);
+    await post("/forget", { slug: `issues/lum-${C.id.slice(1)}` });
+        const bad = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pos: { x: 1, y: 1 }, title: "x", component: "nope" }) });
     const noPos = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     for (const x of par) await post("/forget", { slug: `issues/lum-${x.target.id.slice(1)}` });
     await post("/forget", { slug: l.slug });
@@ -91,8 +95,8 @@ if (process.env.SMOKE_WRITE === "1") {
     await post("/forget", { slug: `issues/lum-${b.id.slice(1)}` });
     const again = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
     await post("/forget", { slug: `issues/lum-${again.id.slice(1)}` });
-    const ok = n > 109 && shapeOk && worldOk && recallOk && linkOk && uniqueOk && bOk && bad.status === 400 && noPos.status === 400 && again.title === a.title;
-    if (!ok) console.log("  ", JSON.stringify({ a, shapeOk, worldOk, recallOk, linkOk, ids, bOk, bad: bad.status, noPos: noPos.status, again: again?.title }));
+    const ok = n > 109 && shapeOk && worldOk && recallOk && linkOk && uniqueOk && bOk && cOk && bad.status === 400 && noPos.status === 400 && again.title === a.title;
+    if (!ok) console.log("  ", JSON.stringify({ a, shapeOk, worldOk, recallOk, linkOk, ids, bOk, cOk, bad: bad.status, noPos: noPos.status, again: again?.title }));
     return ok;
   });
 }

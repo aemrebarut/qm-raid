@@ -355,8 +355,14 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     }
   });
   canvas.addEventListener("dblclick", (e) => {
-    // Double-click a unit: select its whole team
+    // Double-click a unit: select its whole team. Double-click a camp: select the units working it.
     const hit = pick(e);
+    if (hit?.kind === "target") {
+      const s = store.getState();
+      const ids = s.orders.filter((o) => o.targetId === hit.id && o.status === "active").map((o) => o.unitId);
+      if (ids.length) bus.select(ids);
+      return;
+    }
     if (hit?.kind !== "unit") return;
     const u = store.getState().units.find((x) => x.id === hit.id);
     if (u?.team == null) return;

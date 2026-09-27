@@ -22,6 +22,8 @@ export class IsoCamera {
     DIST * Math.cos(ELEV) * Math.cos(AZIM),
   );
   private readonly ray = new THREE.Raycaster();
+  /** Bumped on every camera change (pan, zoom, resize), for listeners like a minimap frame. */
+  version = 0;
   private readonly ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   constructor() {
@@ -39,6 +41,7 @@ export class IsoCamera {
     this.camera.top = VIEW_H / 2;
     this.camera.bottom = -VIEW_H / 2;
     this.camera.updateProjectionMatrix();
+    this.version++;
   }
 
   /** Zoom so the whole map diamond fits the viewport (never zooms in past 1). */
@@ -58,6 +61,17 @@ export class IsoCamera {
     this.camera.position.copy(t).add(this.offset);
     this.camera.lookAt(t);
     this.camera.updateMatrixWorld();
+    this.version++;
+  }
+
+  /** Ground corners of the view in tile coordinates (top-left, top-right, bottom-right, bottom-left). */
+  viewCorners(): { x: number; y: number }[] {
+    const out: { x: number; y: number }[] = [];
+    for (const [nx, ny] of [[-1, 1], [1, 1], [1, -1], [-1, -1]]) {
+      const g = this.groundAt(new THREE.Vector2(nx, ny));
+      if (g) out.push({ x: g.x, y: g.z });
+    }
+    return out;
   }
 
   private worldPerPixel() {

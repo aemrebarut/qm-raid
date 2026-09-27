@@ -13,20 +13,30 @@ export interface OrderInfo {
   role: "planner" | "implementer" | "reviewer" | string; // workflow role; "implementer" for plain orders
   reviewChange: string | null; // latest "VERDICT: CHANGES: <what>" in the previous work (implementer on a changes loop)
   reviews: number;              // verdict lines already in the previous work (earlier reviews of this run)
+  previous: Prev[];             // the "Previous work:" entries, latest last
 }
+export type Prev = { role: string; unitId: string; name: string | null; reply: string };
 
 // Workflow prompts (engine game.ts briefText) are the order prompt, then a line "Role: <role>. <instructions>", then
 // "Previous work:" with "- <role> (<unitId>): <reply>" lines, latest last. The role comes only from the Role line before
 // "Previous work:": an implementer on a changes loop gets the reviewer's "VERDICT: CHANGES:" reply in that block.
 // No Role line = a plain order (implementer).
-export function roleOf(text: string): { role: string; reviewChange: string | null; reviews: number } {
+export function roleOf(text: string): { role: string; reviewChange: string | null; reviews: number; previous: Prev[] } {
   const cut = text.search(/^Previous work:/m);
   const head = cut >= 0 ? text.slice(0, cut) : text;
   const tail = cut >= 0 ? text.slice(cut) : "";
   const role = head.match(/^Role: (\w+)\./m)?.[1]?.toLowerCase() ?? "implementer";
   const changes = [...tail.matchAll(/VERDICT:\s*CHANGES:\s*([^\n]+)/gi)].map((m) => m[1]!.trim()).filter((c) => c && !/^<.*>$/.test(c));
   const reviews = [...tail.matchAll(/VERDICT:\s*(APPROVED|CHANGES)/gi)].length;
-  return { role, reviewChange: changes.at(-1) ?? null, reviews };
+  // entries are "- <role> (<unitId>): <reply>"; a reply may run over several lines
+  const previous: Prev[] = [];
+  for (const part of tail.split(/^- (?=[^\n()]+ \([^\n()]+\): )/m).slice(1)) {
+    const m = part.match(/^([^\n()]+) \(([^\n()]+)\): ([\s\S]*)$/);
+    if (!m) continue;
+    const reply = m[3]!.trim();
+    previous.push({ role: m[1]!.trim().toLowerCase(), unitId: m[2]!.trim(), name: reply.match(/^([A-Z][\w .'-]{0,40}?): /)?.[1] ?? null, reply });
+  }
+  return { role, reviewChange: changes.at(-1) ?? null, reviews, previous };
 }
 
 const COMPONENTS = ["billing", "auth", "onboarding", "search"];
@@ -112,6 +122,14 @@ export function buildScript(unitId: string, unitName: string, req: SendRequest, 
       ? planScript(unitId, unitName, o, req.orderId!, rand)
     : o.role === "reviewer" && !failed
       ? reviewScript(unitId, unitName, o, req.orderId!, verdict, rand)
+    : o.role === "judge" && !failed
+      ? judgeScript(unitId, unitName, o, req.orderId!, review === "changes" ? "changes" : "approved", rand)
+    : o.role === "scout" && !failed
+      ? scoutScript(unitId, unitName, o, req.orderId!, opts.learnings ?? [], opts.now ?? Date.now(), rand)
+    : o.role === "tester" && !failed
+      ? testerScript(unitId, unitName, o, req.orderId!, rand)
+    : o.role === "herald" && !failed
+      ? heraldScript(unitId, unitName, o, req.orderId!, rand)
     : opts.demo && !failed && !opts.noGbrain
       ? demoScript(unitId, unitName, o, req.orderId!, opts.learnings ?? [], opts.now ?? Date.now(), rand)
       : orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
@@ -218,6 +236,115 @@ function reviewScript(unitId: string, unitName: string, o: OrderInfo, orderId: s
     : `${unitName}: reviewed ${issue} again. The change follows the ${comp} house rule and the tests cover it.\nVERDICT: APPROVED`;
   seq.push([1.0, { type: "reply", unitId, orderId, text }]);
   return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
+}
+
+// Customer-facing wording for the herald (what broke, what we fixed, what the customer needs to do).
+const CUSTOMER: Record<string, { broke: string; fixed: string; action: string }> = {
+  billing: { broke: "a payment retry could charge the same invoice twice", fixed: "retries now reuse the original payment reference, so a retry can never create a second charge", action: "Nothing. Any duplicate charge is refunded automatically within 5 business days." },
+  auth: { broke: "sign-in could reject valid logins when your identity provider's clock ran slightly ahead of ours", fixed: "we now allow a small clock difference, as the token standard recommends", action: "Nothing. Anyone who was locked out can sign in again now." },
+  onboarding: { broke: "team invites could time out and never arrive", fixed: "invites are now queued and delivered in the background", action: "Please resend any invite that did not arrive (Settings, Team); it should land within a minute." },
+  search: { broke: "search could show cached results from another workspace for a short time", fixed: "every search, cached results included, is now limited to your own workspace", action: "Nothing. We cleared the search cache." },
+};
+const titleCase = (id: string) => id.replace(/^companies\//, "").split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+type Seq = Array<[number, BridgeEvent]>;
+const act = (unitId: string, orderId: string) => (kind: "message" | "tool" | "thinking", text: string, tool?: string, args?: unknown): BridgeEvent =>
+  tool ? { type: "activity", unitId, orderId, kind, text, tool, args } : { type: "activity", unitId, orderId, kind, text };
+function finish(seq: Seq, unitId: string, orderId: string, text: string, totalMs: number, tokens: number): Step[] {
+  seq.push([0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  seq.push([1.0, { type: "reply", unitId, orderId, text }]);
+  return seq.map(([p, event]) => ({ at: Math.round(p * totalMs), event }));
+}
+
+// Workflow scout (recon): investigate only. Reproduce, point to the code, list the rules and learnings; remembers the recon.
+function scoutScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, learnings: Learning[], now: number, rand: () => number): Step[] {
+  const comp = o.component ?? "core", f = flavorFor(o.component), issue = o.issue ?? "the issue", a = act(unitId, orderId);
+  const issueSlug = o.issue ? `issues/${o.issue.toLowerCase()}` : null;
+  const prior = learnings.filter((l) => l.component === comp).at(-1);
+  const learnSlug = o.learningSlug ?? `learnings/${slugify(o.issue ?? comp)}-${slugify(unitId)}-${now}`;
+  const rules = f.ruleSlug ? `${f.ruleSlug} (${f.rule})` : `the ${comp} house rule (${f.rule})`;
+  const seq: Seq = [
+    [0.04, a("thinking", `Recon on ${issue} "${o.title ?? comp}": find it, do not fix it.`)],
+    [0.14, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall", { query: `${comp} ${o.title ?? ""}`.trim(), slugs: [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : []), ...(issueSlug ? [issueSlug] : []), ...o.customers, ...(prior ? [prior.slug] : [])] })],
+    [0.26, a("tool", `Searching GBrain for ${comp} house rules and past learnings`, "gbrain.search", { query: `${comp} house rules learnings`, slugs: [...(f.ruleSlug ? [f.ruleSlug] : []), ...(prior ? [prior.slug] : [])] })],
+    [0.40, a("tool", `Reading ${f.file}`, "read_file", { path: f.file })],
+    [0.54, a("tool", `Reproducing with ${f.test}`, "run_tests", { path: f.test })],
+    [0.64, a("message", `Reproduced: ${f.symptom ?? `the ${comp} edge case fails`}. The cause is in ${f.file}.`)],
+    [0.82, a("tool", `Remembering the recon for ${issue}`, "gbrain.remember", { slug: learnSlug, text: `Recon ${issue}: reproduced in ${f.test}; cause in ${f.file}; applies ${f.ruleSlug ?? `the ${comp} rule`}.`, links: [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), ...(f.ruleSlug ? [f.ruleSlug] : []), `units/${unitId}`] })],
+  ];
+  const text = `${unitName}: recon for ${issue}. Reproduced: ${f.symptom ?? `the ${comp} edge case fails`} (${f.test}). The code is in ${f.file}. Rules that apply: ${rules}. Past learnings: ${prior ? `${prior.slug} from ${prior.unitName}` : `none on ${comp} yet`}. Not fixed; over to the implementer.`;
+  return finish(seq, unitId, orderId, text, 5500 + Math.floor(rand() * 1500), 1500 + Math.floor(rand() * 2500));
+}
+
+// Workflow tester (testfirst): write the failing regression test and the acceptance check; no fix.
+function testerScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, rand: () => number): Step[] {
+  const comp = o.component ?? "core", f = flavorFor(o.component), issue = o.issue ?? "the issue", a = act(unitId, orderId);
+  const name = `${(o.issue ?? comp).toLowerCase()}: ${f.change ? f.change.replace(/^add a regression test that /, "") : `the ${comp} edge case holds`}`;
+  const check = `bun test ${f.test} passes, including "${name}"${f.ruleSlug ? `, and the fix follows ${f.ruleSlug}` : ""}`;
+  const seq: Seq = [
+    [0.05, a("thinking", `Test first for ${issue}: pin the bug down before anyone fixes it.`)],
+    [0.18, a("tool", `Recalling the ${comp} house rules`, "gbrain.recall", { query: `${comp} ${o.title ?? ""}`.trim(), slugs: [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : []), ...(o.issue ? [`issues/${o.issue.toLowerCase()}`] : [])] })],
+    [0.34, a("tool", `Reading ${f.test}`, "read_file", { path: f.test })],
+    [0.52, a("tool", `Writing the regression test in ${f.test}`, "edit_file", { path: f.test })],
+    [0.68, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
+    [0.80, a("message", `The new test fails as expected: ${f.symptom ?? `the ${comp} edge case fails`}.`)],
+  ];
+  const text = `${unitName}: failing test for ${issue} in ${f.test}: "${name}". It fails today (${f.symptom ?? "the bug reproduces"}). Acceptance check: ${check}. Not fixed; over to the implementer.`;
+  return finish(seq, unitId, orderId, text, 5000 + Math.floor(rand() * 1500), 1500 + Math.floor(rand() * 2000));
+}
+
+// Workflow herald: the customer update after approval, in the house tone.
+function heraldScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, rand: () => number): Step[] {
+  const comp = o.component ?? "core", issue = o.issue ?? "the issue", a = act(unitId, orderId);
+  const c = CUSTOMER[comp] ?? { broke: o.title ? o.title.charAt(0).toLowerCase() + o.title.slice(1) : `an issue in ${comp}`, fixed: "we fixed the cause and added a test so it stays fixed", action: "Nothing." };
+  const names = o.customers.map(titleCase);
+  const to = names.length ? names.join(", ") : "affected customers";
+  const seq: Seq = [
+    [0.05, a("thinking", `Writing the customer update for ${issue} to ${to}.`)],
+    [0.18, a("tool", `Recalling ${issue} and the affected customers`, "gbrain.recall", { query: `${issue} customers ${comp}`, slugs: [...(o.issue ? [`issues/${o.issue.toLowerCase()}`] : []), ...o.customers] })],
+    ...o.customers.slice(0, 3).map((slug, i) => [0.30 + i * 0.08, a("tool", `Reading ${slug}`, "gbrain.get_page", { slug })] as [number, BridgeEvent]),
+    [0.62, a("tool", "Searching GBrain for the house tone for customer updates", "gbrain.search", { query: "house tone customer update", slugs: [] })],
+    [0.80, a("message", `Update drafted for ${to}: plain words, no blame, one clear next step.`)],
+  ];
+  const text = [
+    `${unitName}: customer update for ${issue}, to ${to}.`,
+    `Subject: Fixed: ${o.title ?? `${comp} issue ${issue}`}`,
+    names.length === 1 ? `Hi ${names[0]} team,` : "Hi there,",
+    `What broke: ${c.broke}.`,
+    `What we fixed: ${c.fixed}.`,
+    `What you need to do: ${c.action}`,
+    "Thanks for your patience; reply to this email if anything still looks off.",
+  ].join("\n");
+  return finish(seq, unitId, orderId, text, 5000 + Math.floor(rand() * 1500), 1200 + Math.floor(rand() * 1800));
+}
+
+// Workflow judge (duel): compare the two latest implementer replies, pick one; ends with the verdict line.
+function judgeScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, verdict: "approved" | "changes", rand: () => number): Step[] {
+  const comp = o.component ?? "core", f = flavorFor(o.component), issue = o.issue ?? "the issue", a = act(unitId, orderId);
+  const byUnit = new Map<string, Prev>();
+  for (const p of o.previous) if (p.role !== "judge" && p.role !== "reviewer" && !/VERDICT:/i.test(p.reply)) byUnit.set(p.unitId, p);
+  const rivals = [...byUnit.values()].slice(-2);
+  const label = (p?: Prev) => (p ? p.name ?? p.unitId : "the implementer");
+  const score = (p: Prev) => (f.ruleSlug && p.reply.includes(f.ruleSlug) ? 2 : 0) + (/regression test|test/i.test(p.reply) ? 1 : 0) + (/learnings\//.test(p.reply) ? 1 : 0);
+  const [x, y] = rivals;
+  const winner = !y ? x : score(y) > score(x!) ? y : score(x!) > score(y) ? x : rand() < 0.5 ? x : y;
+  const loser = winner === x ? y : x;
+  const seq: Seq = [
+    [0.05, a("thinking", `Judging the ${issue} duel${rivals.length === 2 ? `: ${label(x)} vs ${label(y)}` : ""}.`)],
+    [0.18, a("tool", `Recalling the ${comp} house rules`, "gbrain.recall", { query: `${comp} house rules`, slugs: [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : [])] })],
+    ...(f.ruleSlug ? [[0.30, a("tool", `Reading ${f.ruleSlug}`, "gbrain.get_page", { slug: f.ruleSlug })] as [number, BridgeEvent]] : []),
+    [0.44, a("tool", `Reading both diffs in ${f.file}`, "read_file", { path: f.file })],
+    [0.60, a("tool", `Running ${f.test} on both branches`, "run_tests", { path: f.test })],
+    [0.80, a("message", verdict === "changes" ? `Neither fix is acceptable yet: ${f.change ?? `cover the ${comp} edge case with a test`}.` : `${label(winner)} wins: it follows the rule (${f.rule}).`)],
+  ];
+  const text = verdict === "changes"
+    ? `${unitName}: compared both fixes for ${issue} against the ${comp} house rules. Neither proves the rule yet.\nVERDICT: CHANGES: ${f.change ?? `add a regression test for the ${comp} edge case in ${f.test}`}`
+    : [
+        `${unitName}: compared both fixes for ${issue} against the ${comp} house rules.`,
+        `${label(winner)} wins: it follows the rule (${f.rule}) and proves it in ${f.test}.`,
+        loser ? `${label(loser)}'s fix also passes, but it relies less clearly on the house rule.` : `Only one fix arrived, and it holds up.`,
+        `VERDICT: APPROVED (winner: ${label(winner)})`,
+      ].join("\n");
+  return finish(seq, unitId, orderId, text, 5000 + Math.floor(rand() * 1500), 1800 + Math.floor(rand() * 2500));
 }
 
 // Demo story (MOCK_SCRIPT=demo), the safety net when QM is down. Wave 1 on a component: recall finds no learning,

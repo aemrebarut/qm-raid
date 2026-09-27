@@ -84,6 +84,13 @@ await post(`/units/${N}/send`, { text: flow("oN", REVIEW, [pPlan, pImpl, pChange
 await setConfig({ review: "changes" });
 await post(`/units/${O}/send`, { text: flow("oO", REVIEW, [pPlan, pImpl, pChanges, pImpl]), orderId: "oO", targetId: "t12", componentId: "billing" });
 await setConfig({ review: saved.review ?? "loop" });
+// more presets (recon, testfirst, herald, duel): scout, tester, herald, judge
+const P = `smokeP-${run}`, Q = `smokeQ-${run}`, R = `smokeR-${run}`, S = `smokeS-${run}`;
+const pDuel = [`- implementer (${M}): ${M}: fixed LUM-12. I made the retry reuse inv_<invoiceId>, added a regression test, and saved learnings/lum-12-x-1.`, `- implementer (${N}): ${N}: fixed LUM-12.\nI patched the retry loop.`];
+await post(`/units/${P}/send`, { text: flow("oP", "Role: scout. Recall first. Investigate only: reproduce, point to the code, list the house rules and past learnings that apply. Do not fix.", []), orderId: "oP", targetId: "t12", componentId: "billing" });
+await post(`/units/${Q}/send`, { text: flow("oQ", "Role: tester. Recall first. Write the failing regression test and the exact acceptance check. Do not fix.", []), orderId: "oQ", targetId: "t12", componentId: "billing" });
+await post(`/units/${R}/send`, { text: flow("oR", "Role: herald. Write the customer update for the affected customers in the house tone: what broke, what we fixed, what they need to do.", [pImpl, `- reviewer (${L}): ${L}: fine.\nVERDICT: APPROVED`]), orderId: "oR", targetId: "t12", componentId: "billing" });
+await post(`/units/${S}/send`, { text: flow("oS", "Role: judge. Compare both fixes against the house rules. Pick the better one, say why in two lines, and end with VERDICT: APPROVED (winner: <name>) or VERDICT: CHANGES: <what> if neither is acceptable.", pDuel), orderId: "oS", targetId: "t12", componentId: "billing" });
 // config is read at send time, so each of these orders gets its own mode
 await setConfig({ noGbrain: true });
 await post(`/units/${F}/send`, { text: prompt("oF"), orderId: "oF", componentId: "billing" });
@@ -112,7 +119,7 @@ const deadline = Date.now() + 12000 / SPEED + 1000;
 const done = (id: string) => events.some((e) => e.ev.unitId === id && (e.ev.type === "reply" || e.ev.type === "error"));
 const orderDone = (id: string, oid: string) => events.some((e) => e.ev.unitId === id && e.ev.type === "reply" && (e.ev as any).orderId === oid);
 const deadline2 = deadline + 8000 / SPEED;
-while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J) && [K, L, M, N, O].every(done))) {
+while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J) && [K, L, M, N, O, P, Q, R, S].every(done))) {
   if (!jSent && done(I)) await sendJ();
   await Bun.sleep(100);
 }
@@ -163,10 +170,15 @@ check(lastLine(replyOf(N)) === "VERDICT: APPROVED", "workflow reviewer, second r
 const mReply = replyOf(M) ?? "";
 check(!/VERDICT:/.test(mReply) && mReply.includes("add a retry test with the same inv_1 key") && of(M).some((x) => x.type === "activity" && x.tool === "gbrain.remember"), "workflow implementer with the reviewer's CHANGES in its previous work is not a reviewer and applies the change");
 check(/^VERDICT: CHANGES: /.test(lastLine(replyOf(O))), "review: changes forces VERDICT: CHANGES (needs_human tests)");
+const pEv = of(P), qEv = of(Q), rReply = replyOf(R) ?? "", sReply = replyOf(S) ?? "";
+check(/recon for LUM-12/.test(replyOf(P) ?? "") && /rules\/billing-idempotency/.test(replyOf(P) ?? "") && !pEv.some((x) => x.type === "activity" && x.tool === "edit_file") && pEv.some((x) => x.type === "activity" && x.tool === "run_tests"), "workflow scout: reproduces, names the code and rules, no edits");
+check(/failing test for LUM-12/.test(replyOf(Q) ?? "") && /Acceptance check: /.test(replyOf(Q) ?? "") && qEv.some((x) => x.type === "activity" && x.tool === "edit_file" && /test/.test((x as any).args?.path ?? "")) && !qEv.some((x) => x.type === "activity" && x.tool === "edit_file" && !/test/.test((x as any).args?.path ?? "")), "workflow tester: failing test and acceptance check, edits only the test file");
+check(/Acme Robotics/.test(rReply) && /What broke: /.test(rReply) && /What we fixed: /.test(rReply) && /What you need to do: /.test(rReply) && !/VERDICT/.test(rReply) && of(R).some((x) => x.type === "activity" && x.tool === "gbrain.get_page" && (x as any).args?.slug === "companies/acme-robotics"), "workflow herald: customer update (what broke, what we fixed, what to do), reads the company page");
+check(lastLine(sReply) === `VERDICT: APPROVED (winner: ${M})` && sReply.includes(N), `workflow judge: ${lastLine(sReply)}`);
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;
 check(JSON.stringify(restored) === JSON.stringify(saved), "config restored");
 
-for (const id of [A, B, D, E, F, G, H, I, J, K, L, M, N, O]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
+for (const id of [A, B, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
 ac.abort();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

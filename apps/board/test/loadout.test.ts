@@ -84,3 +84,23 @@ test("loadout: a late reply for another unit and engine updates during edits lea
     expect(patches[1].body).toEqual({ instructions: "Draft after the update" }); // effort came from the engine, not the draft
   } finally { (globalThis as any).fetch = orig; }
 });
+
+test("loadout: GBrain is locked on, and plugins sent always include it", async () => {
+  const orig = (globalThis as any).fetch;
+  try {
+    const { store, view, patches, tick } = await setup();
+    store.apply({ seq: 7, ts: Date.now(), type: "unit.updated", unit: { ...store.unit("u3")!, loadout: { instructions: "", skills: [], plugins: [] } } });
+    view.show("u3");
+    await tick();
+    const row = (name: string) => [...view.root.querySelectorAll(".ldo-item")].find((l) => l.textContent!.includes(name))!;
+    const gb = row("GBrain").querySelector("input") as any;
+    expect(gb.checked).toBe(true);
+    expect(gb.disabled).toBe(true);
+    expect(row("GBrain").textContent).toContain("The Library: always on");
+    expect(view.dirty).toBe(false); // an engine loadout without gbrain is not a pending change
+    const lin = row("Linear").querySelector("input") as any;
+    lin.checked = true; lin.dispatchEvent(new (globalThis as any).window.Event("change"));
+    view.apply();
+    expect(patches[0].body).toEqual({ plugins: ["gbrain", "linear"] });
+  } finally { (globalThis as any).fetch = orig; }
+});

@@ -16,6 +16,8 @@ export const ORDERS: { label: string; line: string }[] = [
   { label: "Brief", line: "Keep replies under 120 words: what you found, what you changed, what is left." },
 ];
 const CATALOG_TTL_MS = 30_000;
+/** GBrain is the Library, the core of the game: always on for every unit (Analyst, 15:5x). */
+const LOCKED_PLUGIN = "gbrain";
 
 interface Draft { instructions: string; skills: string[]; plugins: string[]; model: string; effort: string }
 
@@ -34,6 +36,8 @@ const CSS = `
 .ldo-list { display: grid; gap: 2px; }
 .ldo-item { display: grid; grid-template-columns: 16px 1fr; gap: 0 8px; align-items: start; padding: 4px; border-radius: 3px; cursor: pointer; }
 .ldo-item:hover { background: rgba(255, 255, 255, .04); }
+.ldo-locked { cursor: default; }
+.ldo-locked:hover { background: none; }
 .ldo-item input { margin: 2px 0 0; accent-color: #d9b56f; }
 .ldo-name { color: #f3e7c9; }
 .ldo-desc { grid-column: 2; color: #9a927f; font-size: 11px; }
@@ -57,7 +61,7 @@ function draftOf(u: Unit): Draft {
   return {
     instructions: u.loadout?.instructions ?? "",
     skills: [...(u.loadout?.skills ?? [])],
-    plugins: [...(u.loadout?.plugins ?? [])],
+    plugins: [...new Set([...(u.loadout?.plugins ?? []), LOCKED_PLUGIN])],
     model: u.model,
     effort: u.effort,
   };
@@ -251,18 +255,21 @@ export class LoadoutView {
     const items = this.catalog ?? [];
     const list = (kind: CatalogItem["kind"], picked: string[], el: HTMLElement) => {
       const known = items.filter((i) => i.kind === kind);
-      const extra = picked.filter((id) => !known.some((i) => i.id === id)).map((id) => ({ id, name: id, description: "Not in the catalog", kind }));
+      const extra = picked.filter((id) => !known.some((i) => i.id === id))
+        .map((id) => ({ id, name: id === LOCKED_PLUGIN ? "GBrain" : id, description: "Not in the catalog", kind }));
       const all = [...known, ...extra];
       if (!all.length) { el.replaceChildren(h("p", { class: "ldo-empty" }, this.catalogErr ? `Catalog unavailable: ${this.catalogErr}` : this.catalog ? "None available" : "Loading")); return; }
       el.replaceChildren(...all.map((i) => {
-        const box = h("input", { type: "checkbox", checked: picked.includes(i.id) }) as HTMLInputElement;
+        const locked = kind === "plugin" && i.id === LOCKED_PLUGIN;
+        const box = h("input", { type: "checkbox", checked: locked || picked.includes(i.id), disabled: locked }) as HTMLInputElement;
         box.addEventListener("change", () => {
           const at = picked.indexOf(i.id);
           if (box.checked && at < 0) picked.push(i.id);
           if (!box.checked && at >= 0) picked.splice(at, 1);
           this.edited();
         });
-        return h("label", { class: "ldo-item", title: i.id }, box, h("span", { class: "ldo-name" }, i.name), h("span", { class: "ldo-desc" }, i.description));
+        return h("label", { class: locked ? "ldo-item ldo-locked" : "ldo-item", title: i.id }, box, h("span", { class: "ldo-name" }, i.name),
+          h("span", { class: "ldo-desc" }, locked ? "The Library: always on" : i.description));
       }));
     };
     list("skill", this.draft.skills, this.skills);

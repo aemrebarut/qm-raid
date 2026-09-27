@@ -4,9 +4,9 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 // Fake main bridge and Forge: GET /catalog, PATCH /units/:id. Records every call.
 type Call = { method: string; url: string; body: any };
 let calls: Call[] = [];
-let mode: "ok" | "down" | "500" | "400" | "404once" | "echoOnly" = "ok";
+let mode: "ok" | "down" | "500" | "400" | "registry" | "echoOnly" = "ok";
+let known = new Set<string>(); // mode "registry": units the fake bridge knows (POST /units adds, PATCH on others is 404)
 let gate: Promise<void> | null = null;
-let seen404 = false;
 const realFetch = globalThis.fetch;
 const json = (d: unknown, status = 200) => new Response(JSON.stringify(d), { status, headers: { "content-type": "application/json" } });
 const fakeFetch = (async (url: string, init?: RequestInit) => {
@@ -22,9 +22,10 @@ const fakeFetch = (async (url: string, init?: RequestInit) => {
       ? [{ id: "gbrain", name: "GBrain", kind: "plugin", description: "team memory" }]
       : [{ id: "debug", name: "Debug", kind: "skill", description: "bisect" }, { id: "gbrain", name: "GBrain", kind: "plugin", description: "memory" }, { id: "bad", kind: "other" }, { name: "no id", kind: "skill" }] });
   }
+  if (method === "POST" && String(url).endsWith("/units")) { known.add(body.id); return json({ sessionId: `s-${body.id}`, sessionUrl: null }); }
   if (method === "PATCH") {
     if (mode === "400") return json({ ok: false, error: "unknown skill nope" }, 400);
-    if (mode === "404once" && !seen404) { seen404 = true; return json({ ok: false, error: "unknown unit" }, 404); }
+    if (mode === "registry" && !known.has(String(url).split("/units/")[1]!)) return json({ ok: false, error: "unknown unit" }, 404);
     if (mode === "echoOnly") return json({ ok: true });
     if (forge) return json({ ok: true, loadout: body.loadout ?? { instructions: "", skills: [], plugins: ["gbrain"] }, typeId: "refund-ranger", notes: ["skills are not used by forge units"] });
     return json({ ok: true, loadout: body.loadout, model: body.model ?? "mock", effort: body.effort ?? "medium", applied: "live" });
@@ -45,7 +46,7 @@ const updates = (id: string) => recentEvents().filter((e: any) => e.type === "un
 beforeEach(() => {
   globalThis.fetch = fakeFetch;
   store.state = fixtureState();
-  calls = []; mode = "ok"; gate = null; seen404 = false;
+  calls = []; mode = "ok"; gate = null; known = new Set();
 });
 
 test("catalog: main bridge by default, invalid items dropped", async () => {
@@ -137,14 +138,36 @@ test("patch: bridge down or 5xx -> 503, nothing stored", async () => {
   }
 });
 
-test("patch: bridge 404 (not registered yet) -> ensureSpawned, then one retry", async () => {
-  mode = "404once";
+// A forced re-register as game.ts must provide it: a fresh POST /units even if the engine thinks the unit is registered.
+const forceRegister = async (u: any) => (await realFetchLike(`${BRIDGE_URL}/units`, u)) === 200;
+const realFetchLike = async (url: string, u: any) => (await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: u.id, name: u.name, model: u.model, effort: u.effort, role: u.role, team: u.team }) })).status;
+
+test("patch: the bridge forgot the unit (restart) -> forced re-register, PATCH retried with the full loadout", async () => {
+  mode = "registry"; // the bridge knows nobody: it restarted after the engine registered the unit
   const u = unit();
-  let spawned = 0;
-  const r = await patchLoadout(u.id, { skills: ["debug"] }, async () => { spawned++; return true; });
+  u.loadout = { instructions: "Be brief.", skills: [], plugins: ["gbrain"] };
+  const r = await patchLoadout(u.id, { skills: ["debug"] }, forceRegister);
   expect(r.ok).toBe(true);
-  expect(spawned).toBe(1);
+  expect(calls.map((c) => `${c.method} ${c.url.replace(BRIDGE_URL, "")}`)).toEqual([`PATCH /units/${u.id}`, "POST /units", `PATCH /units/${u.id}`]);
+  expect(calls[2]!.body).toEqual({ loadout: { instructions: "Be brief.", skills: ["debug"], plugins: ["gbrain"] } }); // saved loadout restored too
+  expect(u.loadout?.skills).toEqual(["debug"]);
+});
+
+test("patch: a re-register callback that does not re-POST (plain ensureSpawned on a registered unit) -> 502, nothing stored", async () => {
+  mode = "registry";
+  const u = unit();
+  const r = await patchLoadout(u.id, { skills: ["debug"] }, async () => true);
+  expect(r).toMatchObject({ ok: false, status: 502 });
   expect(calls.filter((c) => c.method === "PATCH").length).toBe(2);
+  expect(calls.filter((c) => c.method === "POST").length).toBe(0);
+  expect(u.loadout?.skills).toEqual([]);
+});
+
+test("patch: bridge 404 without a re-register callback -> 502 after one PATCH", async () => {
+  mode = "registry";
+  const r = await patchLoadout(unit().id, { effort: "low" });
+  expect(r).toMatchObject({ ok: false, status: 502 });
+  expect(calls.length).toBe(1);
 });
 
 test("patch: a bridge that answers only {ok} -> the requested values are stored", async () => {

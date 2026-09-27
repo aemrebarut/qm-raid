@@ -41,9 +41,11 @@ const isLoadout = (v: any): v is Loadout => !!v && typeof v.instructions === "st
 
 export type LoadoutPatch = { instructions?: unknown; skills?: unknown; plugins?: unknown; model?: unknown; effort?: unknown };
 
-// ensureSpawned (from game.ts, optional): units register with the bridge lazily, so a 404 from the bridge registers
-// the unit and retries once.
-export async function patchLoadout(unitId: string, body: unknown, ensureSpawned?: (u: Unit) => Promise<boolean>): Promise<{ ok: true; unit: Unit; notes?: string[] } | Fail> {
+// reRegister (from game.ts, optional): on a bridge 404 (the bridge never had the unit, or restarted and forgot it) it
+// runs once and the PATCH is retried. It must force a fresh POST /units even when the engine believes the unit is
+// registered (plain ensureSpawned is a no-op then). The retried PATCH carries the full merged loadout, so the unit's
+// saved loadout is back on the bridge too. Still 404 after that -> 502.
+export async function patchLoadout(unitId: string, body: unknown, reRegister?: (u: Unit) => Promise<boolean>): Promise<{ ok: true; unit: Unit; notes?: string[] } | Fail> {
   const u = store.state.units.find((x) => x.id === unitId);
   if (!u) return fail(404, `unknown unit ${unitId}`);
   if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "json body required");
@@ -72,9 +74,14 @@ export async function patchLoadout(unitId: string, body: unknown, ensureSpawned?
   const base = bridgeFor(u);
   const url = `${base}/units/${encodeURIComponent(u.id)}`;
   let r = await sendJson<any>("PATCH", url, req, 20000);
-  if (r.status === 404 && ensureSpawned && store.state.units.includes(u) && (await ensureSpawned(u))) r = await sendJson<any>("PATCH", url, req, 20000);
+  if (r.status === 404 && reRegister && store.state.units.includes(u) && (await reRegister(u))) r = await sendJson<any>("PATCH", url, req, 20000);
   // reset or retire during the await: the unit object is no longer in the live state
   if (!store.state.units.includes(u)) return fail(409, "unit is gone (engine reset or retired) while applying the loadout");
+  if (r.status === 404) {
+    const why = `the bridge at ${base} does not know unit ${u.id}${reRegister ? " even after re-registering it" : ""}; loadout not applied`;
+    logOnce(`loadout404:${base}`, why);
+    return fail(502, why);
+  }
   if (r.status === 0 || r.status >= 500) {
     logOnce(`loadout:${base}`, `loadout PATCH failed at ${base} (status ${r.status})`);
     return fail(503, `bridge unavailable at ${base}`);

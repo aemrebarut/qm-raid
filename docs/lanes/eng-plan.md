@@ -79,6 +79,7 @@ raid-eng-rev
 - K9. autopilot reasons mention the memory text when it names the component or a learning ("team learned the idempotency rule").
 
 - E17. `BRAIN_RESET` env (default 1; 0 = reset skips brain /reset). Stats from bridge `usage`. Exact demo reset (units at spawn positions, all targets open, default teams, autopilot off, memory.recent empty; vetoes log kept).
+- E18. Restart safety: snapshot state + order counter to `data/engine-state-<PORT>.json` (debounced, atomic), restore on boot when < 2 h old (active orders stay active; qm-bridge re-follows runs), reset overwrites, `STATE_FILE=0` disables. Message send retries once after a 404 re-spawn.
 - K10. `services/engine/test/soak.ts` on 4618: autopilot on for all teams N minutes with random go/cancel/adjust/expire; engine healthy, no stuck units, no double engagement, seq increasing, every resolution in the test veto log.
 - K11. `services/engine/test/demo.e2e.ts` on 4618 with mock script demo: wave 1 learns the rule, wave 2 recalls the exact slug (brain /page returns it via E16), one proposal vetoed, one gone; passes twice in a row.
 

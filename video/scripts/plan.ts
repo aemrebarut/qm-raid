@@ -27,7 +27,7 @@ const CAP_DUR = 2.6;
 
 const RULES: Record<string, Rule> = {
   orders: {
-    target: 15,
+    target: 22,
     hold: { select: [1.2, 1.2], order: [0.3, 2.2], recall_beam: [0.4, 2.4], reply: [0.4, 2.6], order_done: [0.2, 1], remember_orb: [0.4, 2.4], library: [0.2, 1.6] },
     fx: {
       select: { kind: "callout", text: "KNIGHT|a real QM agent" },
@@ -40,7 +40,7 @@ const RULES: Record<string, Rule> = {
     sfx: { recall_beam: "sfx_beam.wav", remember_orb: "sfx_orb.wav" },
   },
   teams: {
-    target: 14,
+    target: 20,
     hold: { select3: [1, 1], form_team: [0.3, 1.2], trio: [0.3, 1.8], order: [0.3, 1.5], "handoff*": [0.4, 1.6], verdict_approved: [0.5, 2.6], verdict_changes: [0.5, 2], run_done: [0.2, 1.2], camp_resolved: [0.2, 1.4] },
     fx: {
       trio: { kind: "callout", text: "TRIO|planner, implementer, reviewer" },
@@ -53,7 +53,7 @@ const RULES: Record<string, Rule> = {
     sfx: { "handoff*": "sfx_scroll.wav", verdict_approved: "sfx_chime.wav" },
   },
   forge: {
-    target: 15,
+    target: 20,
     hold: { forge_open: [0.8, 1.2], described: [1.2, 1], forge_submit: [0.3, 1], card: [0.3, 3.2], train: [0.3, 1], spawned: [0.3, 2], unit_spawned: [0.3, 2], order_active: [0.3, 1.5], recall_beam: [0.3, 1.5] },
     fx: {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
@@ -65,24 +65,40 @@ const RULES: Record<string, Rule> = {
     sfx: { train: "sfx_hammer.wav" },
   },
   autopilot: {
-    target: 11, // command montage part 1 (14 s without a loadout capture)
+    target: 17,
     hold: { new_issue: [0.6, 0.6], camp_spawned: [0.3, 1.6], autopilot_on: [0.3, 1], proposal: [0.3, 1.8], proposed: [0.3, 1.8], veto: [0.4, 1.6], order_cancelled: [0.2, 0.8], autopilot_go: [0.3, 1.6], order_active: [0.2, 1.2] },
     fx: {
       camp_spawned: [{ kind: "callout", text: "NEW ISSUE|a new camp" }, { kind: "mascotShock", text: "More monsters!", lead: 0.4 }],
       proposed: { kind: "callout", text: "AUTOPILOT|15 s veto ring" },
-      veto: [{ kind: "punchIn" }, { kind: "mascotSmug", text: "Not that one." }],
+      order_cancelled: [{ kind: "punchIn" }, { kind: "mascotSmug", text: "Not that one." }],
       autopilot_go: { kind: "callout", text: "LET IT RIDE|order goes" },
     },
-    caps: { camp_spawned: "New issue: a camp appears", proposed: "Autopilot proposes, 15 s veto ring", veto: "Cancel one, let one go" },
-    vo: { vo_auto_1: "new_issue", vo_auto_2: "proposed" },
+    caps: { camp_spawned: "New issue: a camp appears", proposed: "Autopilot proposes, 15 s veto ring", order_cancelled: "Vetoed: that order is cancelled" },
+    vo: { vo_auto_1: "new_issue", vo_auto_2: "proposed", vo_auto_3: "order_cancelled" },
   },
   loadout: {
-    target: 3, // command montage part 2
-    hold: { "loadout*": [0.3, 1.2], save: [0.3, 1.0] },
-    fx: {},
+    target: 12, // mock close-up, zoomed on the side panel
+    hold: { select: [0.6, 1], "loadout*": [0.3, 1.6], orders_chips: [0.5, 1.2], skill: [0.5, 1.2], save: [0.4, 1.6], applied: [0.2, 1] },
+    fx: {
+      orders_chips: { kind: "callout", text: "LOADOUT|standing orders and skills" },
+      save: { kind: "mascotSmug", text: "Custom kit.", lead: 0.4 },
+    },
     caps: { "loadout*": "Loadout: the unit's standing orders" },
-    vo: { vo_loadout_1: "loadout*" },
+    vo: { vo_loadout_1: "loadout*", vo_loadout_2: "save" },
   },
+};
+
+// QM web UI intercuts (Emre 16:10): the unit's own QM session, inserted into the map clip after an event.
+const QM_RULE: Rule = {
+  target: 5,
+  hold: { qm_open: [0.2, 0.8], qm_order: [0.3, 1.4], "qm_tool*": [0.3, 1.2], qm_reply: [0.3, 2.2] },
+  fx: { qm_order: { kind: "callout", text: "QM WEB UI|the same agent's session" } },
+  caps: { qm_open: "Meanwhile in QM: the order, its GBrain tool calls, the reply" },
+  vo: {},
+};
+const INTERCUT: Record<string, { after: string; seconds: number }> = {
+  orders: { after: "recall_beam", seconds: 5 },
+  teams: { after: "handoff*", seconds: 4.5 },
 };
 
 const match = (table: Record<string, unknown>, name: string): string | undefined =>
@@ -194,6 +210,41 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   return { id, src, sfx, voSwap, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
+type Planned = NonNullable<ReturnType<typeof plan>>;
+// Splices the QM clip q into map clip m at the end of the segment holding the first `after` event.
+function insertIntercut(m: Planned, q: Planned, after: string) {
+  const ev = m.events.find((e) => (after.endsWith("*") ? e.name.startsWith(after.slice(0, -1)) : e.name === after));
+  let acc = 0;
+  let idx = m.segments.length;
+  for (let i = 0; i < m.segments.length; i++) {
+    const g = m.segments[i];
+    acc += Math.round(((g.to - g.from) / g.rate) * 30) / 30;
+    if (ev && acc >= ev.at + 1.2) {
+      idx = i + 1;
+      break;
+    }
+  }
+  // cut point: inside a long segment, split it 1.8 s after the event so the beam or scroll is seen first
+  let at = m.segments.slice(0, idx).reduce((a, g) => a + Math.round(((g.to - g.from) / g.rate) * 30) / 30, 0);
+  if (ev && idx > 0 && at - ev.at > 3) {
+    const g = m.segments[idx - 1];
+    const cutOut = ev.at + 1.8;
+    const segStart = at - Math.round(((g.to - g.from) / g.rate) * 30) / 30;
+    const srcCut = round(g.from + (cutOut - segStart) * g.rate);
+    m.segments.splice(idx - 1, 1, { ...g, to: srcCut }, { ...g, from: srcCut });
+    at = segStart + Math.round(((srcCut - g.from) / g.rate) * 30) / 30;
+  }
+  const dt = q.seconds;
+  const shift = <T extends { at: number }>(xs: T[]) => xs.map((x) => (x.at >= at ? { ...x, at: round(x.at + dt, 2) } : x));
+  m.segments.splice(idx, 0, ...q.segments.map((g) => ({ ...g, label: "QM web UI" })));
+  m.captions = [...shift(m.captions), ...q.captions.map((c) => ({ ...c, at: round(c.at + at, 2) }))].sort((a, b) => a.at - b.at);
+  m.fx = [...shift(m.fx), ...q.fx.map((c) => ({ ...c, at: round(c.at + at, 2) }))];
+  m.events = [...shift(m.events), ...q.events.map((c) => ({ ...c, at: round(c.at + at, 2) }))].sort((a, b) => a.at - b.at);
+  m.sfx = shift(m.sfx);
+  m.voAnchor = Object.fromEntries(Object.entries(m.voAnchor).map(([k, v]) => [k, v >= at ? round(v + dt, 2) : v]));
+  m.seconds = round(m.seconds + dt, 2);
+}
+
 const dir = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? join(import.meta.dir, "../public/clips");
 const edlPath = join(import.meta.dir, "../src/edl.json");
 const edl: Record<string, unknown> = {};
@@ -219,40 +270,38 @@ for (const [id, rule] of Object.entries(RULES)) {
   }
   const p =
     id === "loadout"
-      ? plan(id, rule, doc, ext, 0)
-      : plan(id, rule, doc, ext, TITLE, id === "autopilot" && !loadoutCaptured ? 14 : rule.target);
+      ? plan(id, rule, doc, ext)
+      : plan(id, rule, doc, ext, TITLE, rule.target);
   if (!p) {
     console.log(`${id}: no usable events`);
     continue;
+  }
+  const ic = INTERCUT[id];
+  const qmExt = ic && ["mp4", "webm"].find((x) => existsSync(join(dir, `${id}-qm.${x}`)));
+  if (ic && qmExt && existsSync(join(dir, `${id}-qm.markers.json`))) {
+    const qdoc = JSON.parse(readFileSync(join(dir, `${id}-qm.markers.json`), "utf8"));
+    const q = plan(`${id}-qm`, QM_RULE, qdoc, qmExt, 0, ic.seconds);
+    const m = q && plan(id, rule, doc, ext, TITLE, rule.target - q.seconds);
+    if (q && m) {
+      insertIntercut(m, q, ic.after);
+      edl[id] = m;
+      console.log(`${id} [${doc.backend}] + QM intercut ${q.seconds}s after ${ic.after}: ${m.seconds}s (target ${rule.target})`);
+      continue;
+    }
   }
   if (d !== dir) p.src = p.src.replace("clips/", "mock-loadout/");
   p.segments = p.segments.map((g) => ({ ...g, src: p.src }));
   edl[id] = p;
   console.log(`${id} [${doc.backend}]: ${p.seconds}s (target ${rule.target}), hold ${p.holdRate}x, gaps ${p.gapRate}x, ${p.segments.length} segs, ${p.fx.length} fx, ${p.captions.length} caps, vo ${Object.keys(p.voAnchor).join(",")}`);
 }
-// Command montage: autopilot, then the short loadout edit.
+// Loadout is the side panel: hold a close-up on its orders and skills so the text reads (rev: the full board is
+// too small). Origin at the panel's top right keeps it on screen; fx positions move with the zoom.
+const Z = { s: 1.6, x: 1910, y: 60 };
 type P = NonNullable<ReturnType<typeof plan>>;
-const ap = edl.autopilot as P | undefined;
-const lo0 = edl.loadout as P | undefined;
-// The loadout edit is the side panel: hold a close-up on its orders and skills so the text reads
-// (rev: the full board is too small). Origin at the panel's top right keeps it on screen.
-const lo = lo0 && { ...lo0, segments: lo0.segments.map((g) => ({ ...g, zoom: { s: 1.6, x: 1910, y: 60 } })) };
-if (!ap) delete edl.command;
-if (ap) {
-  const off = ap.seconds;
-  edl.command = {
-    id: "command",
-    src: ap.src,
-    segments: [...ap.segments, ...(lo?.segments ?? [])],
-    captions: [...ap.captions, ...(lo?.captions ?? []).map((c) => ({ ...c, at: round(c.at + off, 2) }))],
-    fx: [...ap.fx, ...(lo?.fx ?? []).map((x) => ({ ...x, at: round(x.at + off, 2) }))],
-    events: [...ap.events, ...(lo?.events ?? []).map((e) => ({ ...e, at: round(e.at + off, 2) }))],
-    sfx: [...ap.sfx, ...(lo?.sfx ?? []).map((x) => ({ ...x, at: round(x.at + off, 2) }))],
-    voSwap: {},
-    voAnchor: { ...ap.voAnchor, ...Object.fromEntries(Object.entries(lo?.voAnchor ?? {}).map(([k, v]) => [k, round(v + off, 2)])) },
-    seconds: round(off + (lo?.seconds ?? 0), 2),
-  };
-  console.log(`command: ${(edl.command as P).seconds}s (autopilot ${off}s + loadout ${lo?.seconds ?? 0}s)`);
+const lo = edl.loadout as P | undefined;
+if (lo) {
+  lo.segments = lo.segments.map((g) => ({ ...g, zoom: Z }));
+  lo.fx = lo.fx.map((f) => (f.x === undefined || f.y === undefined ? f : { ...f, x: round(Z.x + (f.x - Z.x) * Z.s, 0), y: round(Z.y + (f.y - Z.y) * Z.s, 0) }));
 }
 
 // Hero: 2 s of busy gameplay, starting just before its first recall beam when marked.

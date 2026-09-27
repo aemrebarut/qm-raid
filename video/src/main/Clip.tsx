@@ -31,6 +31,28 @@ const FastForward: React.FC<{ rate: number }> = ({ rate }) => {
   );
 };
 
+// Marks footage from another app (the QM web UI intercut) so the cut back and forth reads.
+const SourceTag: React.FC<{ text: string }> = ({ text }) => (
+  <div
+    style={{
+      position: "absolute",
+      top: 48,
+      right: 60,
+      background: theme.gold,
+      color: theme.night,
+      fontFamily: theme.titleFont,
+      fontWeight: 900,
+      fontSize: 38,
+      letterSpacing: 2,
+      padding: "6px 22px",
+      borderRadius: 8,
+      boxShadow: "0 6px 18px rgba(0,0,0,0.5)",
+    }}
+  >
+    {text}
+  </div>
+);
+
 const Placeholder: React.FC<{ c: ClipDef }> = ({ c }) => (
   <AbsoluteFill style={{ background: theme.slate, justifyContent: "center", alignItems: "center" }}>
     <div style={{ color: theme.stoneLight, fontFamily: theme.bodyFont, fontSize: 48 }}>
@@ -56,6 +78,7 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
                 <OffthreadVideo src={staticFile(g.src ?? c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
               </AbsoluteFill>
               {g.rate > 2 && len > 12 ? <FastForward rate={Math.round(g.rate)} /> : null}
+              {g.label ? <SourceTag text={g.label} /> : null}
             </Sequence>
           );
         })

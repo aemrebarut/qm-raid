@@ -6,17 +6,17 @@ export const FPS = 30;
 export const WIDTH = 1920;
 export const HEIGHT = 1080;
 
-// 75 s cut (Emre 16:03): 0:00 to 0:02 real gameplay hero shot (frame 0 is the thumbnail), 11 s anime intro,
-// orders 15, teams 14, forge 15, command montage 14 (autopilot then a 3 s loadout edit), end card 4.
+// 1:50 cut (Emre 16:08): 0:00 to 0:02 real gameplay hero shot (frame 0 is the thumbnail), 11 s anime intro,
+// orders 22, teams 20, forge 20, autopilot 17, loadout 12 (mock close-up), end card 6.
 export const HERO_SECONDS = 2;
 export const INTRO_SECONDS = 11;
-export const END_SECONDS = 4;
+export const END_SECONDS = 6;
 // Overlap between sections for transitions (frames).
 export const TRANSITION_FRAMES = 8;
 
 // src overrides the clip src (the command montage cuts two captures together).
 // zoom holds a scale around a fixed point (1920x1080 px) for the whole segment, e.g. the loadout panel.
-export type Segment = { from: number; to: number; rate: number; src?: string; zoom?: { s: number; x: number; y: number } };
+export type Segment = { from: number; to: number; rate: number; src?: string; zoom?: { s: number; x: number; y: number }; label?: string };
 export type Caption = { at: number; dur: number; text: string };
 // Fx cues placed at capture markers, output seconds relative to the clip start.
 export type FxCue = { at: number; kind: string; text?: string; x?: number; y?: number };
@@ -49,10 +49,11 @@ export type Planned = {
 export const planned = edl as unknown as Record<string, Planned>;
 
 const base: ClipDef[] = [
-  { id: "orders", title: "Orders and Memory", subtitle: "A knight answers to GBrain", src: null, segments: [], fallbackSeconds: 15, captions: [], fx: [] },
-  { id: "teams", title: "Teams", subtitle: "Planner, implementer, reviewer", src: null, segments: [], fallbackSeconds: 14, captions: [], fx: [] },
-  { id: "forge", title: "The Forge", subtitle: "River AI trains new unit types", src: null, segments: [], fallbackSeconds: 15, captions: [], fx: [] },
-  { id: "command", title: "Command", subtitle: "New issues, autopilot, loadout", src: null, segments: [], fallbackSeconds: 14, captions: [], fx: [] },
+  { id: "orders", title: "Orders and Memory", subtitle: "A knight answers to GBrain", src: null, segments: [], fallbackSeconds: 22, captions: [], fx: [] },
+  { id: "teams", title: "Teams", subtitle: "Planner, implementer, reviewer", src: null, segments: [], fallbackSeconds: 20, captions: [], fx: [] },
+  { id: "forge", title: "The Forge", subtitle: "River AI trains new unit types", src: null, segments: [], fallbackSeconds: 20, captions: [], fx: [] },
+  { id: "autopilot", title: "Autopilot", subtitle: "New issues, 15 second veto", src: null, segments: [], fallbackSeconds: 17, captions: [], fx: [] },
+  { id: "loadout", title: "Loadout", subtitle: "A knight's standing orders", src: null, segments: [], fallbackSeconds: 12, captions: [], fx: [] },
 ];
 
 // With any planned capture, unplanned clips drop out (a failed capture is cut, the rest breathe).

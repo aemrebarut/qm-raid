@@ -19,7 +19,7 @@ class HttpError extends Error {
 const fail = (error: string, status = 400) => json({ ok: false, error }, status);
 
 type Link = { from_slug: string; to_slug: string; link_type: string };
-type PageRow = { slug: string; type: string; title: string };
+type PageRow = { slug: string; type: string; title: string; updated_at?: string };
 
 async function getPage(slug: string): Promise<{ slug: string; title: string; type: string; body: string; fm: Record<string, any> } | null> {
   try {
@@ -138,20 +138,29 @@ function invalidateGraph() {
 }
 const GRAPH_TTL_MS = 10000;
 
-async function graph() {
-  if (graphCache && Date.now() - graphAt < GRAPH_TTL_MS) return graphCache;
+// Per-page link cache keyed by updated_at, so a rebuild only reads pages that changed (the engine proxy times out at 8 s).
+const linkCache = new Map<string, { updated: string; links: { to: string; type: string }[] }>();
+let graphInflight: { gen: number; promise: Promise<{ nodes: any[]; edges: any[] }> } | null = null;
+
+async function pageLinks(p: PageRow): Promise<{ to: string; type: string }[]> {
+  const hit = linkCache.get(p.slug);
+  if (hit && p.updated_at && hit.updated === p.updated_at) return hit.links;
+  const typed = await tool<Link[]>("get_links", { slug: p.slug }).catch(() => [] as Link[]);
+  const links = typed.map((l) => ({ to: l.to_slug, type: l.link_type }));
+  // Wikilinks not yet swept into gbrain links.
+  const page = await getPage(p.slug);
+  for (const to of wikilinks(page?.body ?? "")) if (to !== p.slug && !links.some((l) => l.to === to)) links.push({ to, type: "mentions" });
+  if (p.updated_at) linkCache.set(p.slug, { updated: p.updated_at, links });
+  return links;
+}
+
+async function buildGraph() {
   const gen = graphGen;
   const pages = await listPages();
   const known = new Set(pages.map((p) => p.slug));
   const edges: { from: string; to: string; type: string }[] = [];
   for (const p of pages) {
-    const links = await tool<Link[]>("get_links", { slug: p.slug });
-    for (const l of links) if (known.has(l.to_slug)) edges.push({ from: l.from_slug, to: l.to_slug, type: l.link_type });
-    // Wikilinks not yet swept into gbrain links.
-    const page = await getPage(p.slug);
-    for (const to of wikilinks(page?.body ?? "")) {
-      if (known.has(to) && to !== p.slug && !edges.some((e) => e.from === p.slug && e.to === to)) edges.push({ from: p.slug, to, type: "mentions" });
-    }
+    for (const l of await pageLinks(p)) if (known.has(l.to)) edges.push({ from: p.slug, to: l.to, type: l.type });
   }
   const built = { nodes: pages.map((p) => ({ id: p.slug, type: nodeType(p), title: p.title })), edges };
   if (gen === graphGen) {
@@ -159,6 +168,17 @@ async function graph() {
     graphAt = Date.now();
   }
   return built;
+}
+
+async function graph() {
+  if (graphCache && Date.now() - graphAt < GRAPH_TTL_MS) return graphCache;
+  // Concurrent callers share one build, but only a build started after the last write.
+  if (!graphInflight || graphInflight.gen !== graphGen) {
+    const run = { gen: graphGen, promise: buildGraph() };
+    graphInflight = run;
+    run.promise.finally(() => { if (graphInflight === run) graphInflight = null; }).catch(() => {});
+  }
+  return graphInflight.promise;
 }
 
 async function recall(componentId?: string, targetId?: string, query?: string) {

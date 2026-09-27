@@ -1,4 +1,5 @@
 import { Composition } from "remotion";
+import { FX_GALLERY_FRAMES, FxGallery } from "./fx";
 import { Intro } from "./intro/Intro";
 import { Main } from "./main/Main";
 import { Clip } from "./main/Clip";
@@ -20,6 +21,7 @@ export const Root: React.FC = () => (
         height={HEIGHT}
       />
     ))}
+    <Composition id="FxGallery" component={FxGallery} durationInFrames={FX_GALLERY_FRAMES} fps={FPS} width={WIDTH} height={HEIGHT} />
     <Composition id="EndCard" component={EndCard} durationInFrames={END_FRAMES} fps={FPS} width={WIDTH} height={HEIGHT} />
   </>
 );

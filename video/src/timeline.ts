@@ -28,7 +28,20 @@ export type ClipDef = {
   fx: FxCue[];
 };
 
-export const clips: ClipDef[] = [
+import edl from "./edl.json";
+
+// Planned edit per clip from scripts/plan.ts (capture markers); overrides the defaults below.
+export type Planned = {
+  src: string;
+  segments: Segment[];
+  captions: Caption[];
+  fx: FxCue[];
+  events: { name: string; at: number }[];
+  voAnchor: Record<string, number>;
+};
+export const planned = edl as unknown as Record<string, Planned>;
+
+const base: ClipDef[] = [
   {
     id: "orders",
     title: "Orders and Memory",
@@ -81,12 +94,18 @@ export const clips: ClipDef[] = [
   },
 ];
 
-export const clipSeconds = (c: ClipDef): number =>
-  c.src && c.segments.length
-    ? c.segments.reduce((s, g) => s + (g.to - g.from) / g.rate, 0)
-    : c.fallbackSeconds;
+// Loadout only goes in if its capture exists; otherwise its time goes to the others.
+export const clips: ClipDef[] = base
+  .filter((c) => c.id !== "loadout" || planned.loadout)
+  .map((c) => {
+    const p = planned[c.id];
+    return p ? { ...c, src: p.src, segments: p.segments, captions: p.captions, fx: p.fx } : c;
+  });
 
-export const clipFrames = (c: ClipDef): number => Math.round(clipSeconds(c) * FPS);
+export const segFrames = (g: Segment): number => Math.round(((g.to - g.from) / g.rate) * FPS);
+
+export const clipFrames = (c: ClipDef): number =>
+  c.src && c.segments.length ? c.segments.reduce((s, g) => s + segFrames(g), 0) : Math.round(c.fallbackSeconds * FPS);
 
 export const INTRO_FRAMES = INTRO_SECONDS * FPS;
 export const END_FRAMES = END_SECONDS * FPS;

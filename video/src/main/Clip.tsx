@@ -1,5 +1,5 @@
 import { AbsoluteFill, OffthreadVideo, Sequence, staticFile, useCurrentFrame } from "remotion";
-import { ClipDef, FPS, clipFrames } from "../timeline";
+import { ClipDef, FPS, clipFrames, segFrames } from "../timeline";
 import { theme } from "../theme";
 import { FxLayer, punch } from "./FxLayer";
 import { LowerThird } from "./LowerThird";
@@ -47,13 +47,13 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
       <AbsoluteFill style={{ transform: punch(frame, c.fx) }}>
       {c.src && c.segments.length ? (
         c.segments.map((g, i) => {
-          const len = Math.round(((g.to - g.from) / g.rate) * FPS);
+          const len = segFrames(g);
           const from = at;
           at += len;
           return (
             <Sequence key={i} from={from} durationInFrames={len}>
               <OffthreadVideo src={staticFile(c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
-              {g.rate > 2 ? <FastForward rate={g.rate} /> : null}
+              {g.rate > 2 && len > 12 ? <FastForward rate={Math.round(g.rate)} /> : null}
             </Sequence>
           );
         })

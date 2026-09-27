@@ -56,6 +56,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type
 | qm-bridge (real QM agents) | services/qm-bridge | 4614 | raid-qm | QM |
 | mock-bridge (fake agents) | services/mock-bridge | 4615 | raid-eng | nobody |
 | brain (GBrain game memory) | services/brain | 4616 | raid-gbrain | gbrain CLI |
+| test engine on mock (automated tests and reviewers only) | services/engine with PORT=4618, BRIDGE_URL=4615 | 4618 | raid-eng | mock-bridge, brain |
 | gbrain MCP for QM agents | services/brain (gbrain serve) | 4617 if HTTP | raid-gbrain | QM |
 
 Rules: no service imports another service's code. Shared TypeScript types live only in `contract/types.ts` (owned by the Analyst; ask for changes). Each service has its own package.json, `bun run dev`, README.md, `GET /health` returning `{"ok": true, "service": "<name>"}`, and a smoke test in its own `test/` folder. The engine picks the bridge with `BRIDGE_URL` (default http://127.0.0.1:4615, QM is http://127.0.0.1:4614) and the proposer with `PROPOSER_URL` (default http://127.0.0.1:4613, River is http://127.0.0.1:4612). If a dependency is down, the caller degrades (logs, keeps running) and never crashes.

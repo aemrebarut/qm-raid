@@ -91,3 +91,13 @@ export async function waitRun(runId: string, timeoutMs = 180_000, everyMs = 1500
 export function sessionUrl(sessionId: string): string {
   return `${PORTAL_URL}/admin/history/s/${encodeURIComponent(sessionId)}`;
 }
+
+/** The QM session id for a thread, once QM has created it (null before). */
+export async function findSessionId(threadRef: string): Promise<string | null> {
+  const { sessions } = await api<{ sessions: Array<{ id: string; threadRef?: string }> }>("GET", "/api/sessions");
+  return sessions.find((s) => s.threadRef === threadRef)?.id ?? null;
+}
+
+export async function archiveSession(sessionId: string): Promise<void> {
+  await api("POST", `/api/sessions/${encodeURIComponent(sessionId)}`, { archived: true });
+}

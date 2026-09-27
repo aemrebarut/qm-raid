@@ -17,7 +17,13 @@ export interface Target {
 }
 export interface Customer { id: string; name: string; contact: string; contactSlug: string; slug: string } // slug = companies/<id>
 export interface World { components: Component[]; buildings: Building[]; targets: Target[]; customers: Customer[] } // GET brain /world
-export interface Team { id: number; name: string; color: string; autopilot: boolean; members: string[] }
+// Team workflows: an agent graph inside a team (planner -> implementer -> reviewer, loops, fan-out).
+export interface WorkflowNode { id: string; role: string; unitId: string; instructions?: string } // role: planner | implementer | reviewer | any label
+export interface WorkflowEdge { from: string; to: string; on: "done" | "approved" | "changes" }
+export interface Workflow { preset: "solo" | "pair" | "trio" | "fanout" | "custom"; entry: string; nodes: WorkflowNode[]; edges: WorkflowEdge[]; maxLoops: number }
+export interface WorkflowStep { nodeId: string; unitId: string; orderId: string; status: "active" | "done" | "approved" | "changes" | "failed"; summary: string; ts: number }
+export interface WorkflowRun { id: string; teamId: number; targetId: string; status: "running" | "done" | "needs_human" | "failed" | "cancelled"; loops: number; active: string[]; steps: WorkflowStep[] }
+export interface Team { id: number; name: string; color: string; autopilot: boolean; members: string[]; workflow: Workflow | null }
 export interface Order {
   id: string; unitId: string; targetId: string; status: "proposed" | "active" | "done" | "cancelled" | "failed";
   source: "user" | "autopilot"; vetoDeadline: number | null; reply: string | null;
@@ -25,7 +31,7 @@ export interface Order {
 export interface MemoryOp { ts: number; unitId: string; op: "recall" | "remember" | "link"; slugs: string[]; summary: string }
 export interface State {
   components: Component[]; buildings: Building[]; units: Unit[]; targets: Target[]; teams: Team[]; orders: Order[];
-  unitTypes: UnitType[]; memory: { pages: number; recent: MemoryOp[] }; stats: { spentUsd: number; tokens: number }; backend: string;
+  unitTypes: UnitType[]; workflowRuns: WorkflowRun[]; memory: { pages: number; recent: MemoryOp[] }; stats: { spentUsd: number; tokens: number }; backend: string;
 }
 
 // Bridge API events (GET /events on qm-bridge and mock-bridge)
@@ -60,5 +66,7 @@ export type EngineEvent =
   | Ev<"target.updated", { target: Target }>
   | Ev<"team.updated", { team: Team }>
   | Ev<"stats", { spentUsd: number; tokens: number }>
-  | Ev<"forge.updated", { unitType: UnitType }>;
+  | Ev<"forge.updated", { unitType: UnitType }>
+  | Ev<"workflow.updated", { run: WorkflowRun }>
+  | Ev<"workflow.handoff", { runId: string; fromUnitId: string; toUnitId: string; nodeId: string; summary: string }>;
 export type EngineEventType = EngineEvent["type"];

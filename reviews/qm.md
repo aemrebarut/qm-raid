@@ -121,3 +121,15 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Reviewed the attribution-window change from 15 to 90 seconds. It broadens which recent units share delayed org-wide spend; it does not make usage attributable to a specific run.
 - No new finding from this small change. The open 5e878d1 usage findings still apply: deleted ids remain eligible, integer rounding does not preserve totals, and overlapping polls can regress the baseline. The longer window extends retired-unit eligibility until those fixes land.
 - Implementer-reported real engine/GBrain evidence was not rerun because the shared QM instance is reserved for the demo. Prior isolated accounting fixtures remain the relevant review evidence.
+
+## 2026-09-27 15:14 PDT: 4d1ddc6 longer run recovery
+
+- Reviewed the six-line retry-window diff. An isolated exact-commit fixture injected six consecutive stream HTTP 503 responses, then recovery. The bridge reconnected on attempt seven and emitted exactly one reply with the original orderId; the prior five-attempt limit would have failed this case.
+- Virtual-time backoff advanced 20 seconds with the five-second cap. No real QM request, process restart, or live bridge access was needed. Change accepted; existing persistence/accounting findings remain open.
+- Fixture: /tmp/raid-qm-review-4d1ddc6/src/check.ts.
+
+## 2026-09-27 15:14 PDT: revised session continuity requirement
+
+- The lead relayed Emre's new priority: one persistent QM conversation per unit, using threadRef web:emre:raid-<ns>-<unitId> with QM_THREAD_NS. Session continuity across respawn/reset/restart is intended. This supersedes the earlier fresh-session reset requirement and its associated review finding.
+- Acceptance for the upcoming change: DELETE then POST of the same id retains sessionId, reset inserts a visible New round marker, later orders land in that same session, and http://localhost:8129/s/<sessionId> renders the chat.
+- Verify isolated behavior first; coordinate any necessary real milestone check with raid-eng-plan before touching the shared QM bridge.

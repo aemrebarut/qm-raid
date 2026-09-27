@@ -35,6 +35,15 @@ check(p.length === 1 && p[0].unitId === "u2" && /knows billing/.test(p[0].reason
 r = await propose({ units: [unit("u1", 10, 10)], targets: [target("t1", "billing", 2, 10, 11), target("t2", "search", 2, 10, 11)], memory: "Ada learned that search reindex jobs must be tenant scoped" });
 check(r.body.proposals[0]?.targetId === "t2", "memory text mentioning a component adds weight");
 
+// K9: memory naming a rule / learning for a component shows in the reason and adds weight
+r = await propose({ units: [unit("u1", 10, 10)], targets: [target("t1", "auth", 3, 10, 12), target("t2", "billing", 3, 10, 12)],
+  memory: "Recalling what the team knows about billing and LUM-101\nLinking learnings/lum-101-u1-1790546460000 to rules/billing-idempotency" });
+check(r.body.proposals[0]?.targetId === "t2" && /team learned the idempotency rule/.test(r.body.proposals[0]?.reason), `rule in memory: "${r.body.proposals[0]?.reason}"`);
+r = await propose({ units: [unit("u1", 10, 10)], targets: [target("t1", "auth", 2, 10, 12)], memory: "Bram remembered learnings/lum-104-u2-1 about auth token expiry" });
+check(/team has a learning on auth/.test(r.body.proposals[0]?.reason ?? ""), `learning in memory: "${r.body.proposals[0]?.reason}"`);
+r = await propose({ units: [unit("u1", 10, 10)], targets: [target("t1", "search", 2, 10, 12)], memory: "Recalling what the team knows about search and LUM-107" });
+check(/recent memory mentions search/.test(r.body.proposals[0]?.reason ?? "") && !/learn/.test(r.body.proposals[0]?.reason ?? ""), `bare mention: "${r.body.proposals[0]?.reason}"`);
+
 // tie-break by lower unit id
 r = await propose({ units: [unit("u10", 5, 5), unit("u2", 5, 5)], targets: [target("t1", "billing", 2, 6, 6)], memory: "" });
 check(r.body.proposals[0]?.unitId === "u2", "tie-break by lower unit id (u2 before u10)");

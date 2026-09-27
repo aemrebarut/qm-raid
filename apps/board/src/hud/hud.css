@@ -648,3 +648,5 @@
 .hud-feed { min-height: 0; }
 .hud-feed:empty { display: none; }
 .hud-side .hud-section:has(> .hud-feed:empty) { display: none; } /* no activity yet: only the message box */
+/* The Loadout tab holds only the loadout: the formation panel keeps its own visibility, so the tab hides it here */
+.hud-side:has(> .hud-tabs:not([hidden]) > .hud-tab:nth-child(2)[aria-selected="true"]) > .hud-wf { display: none !important; }

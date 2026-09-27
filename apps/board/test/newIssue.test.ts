@@ -72,3 +72,45 @@ test("new issue dialog: N toggles, Random posts {}, the form posts fields, Esc c
     off();
   } finally { g.fetch = origFetch; }
 });
+
+test("new issue dialog: a late success keeps a newer draft (review P2 d31400a)", async () => {
+  const g = globalThis as any;
+  const origFetch = g.fetch;
+  const { Window } = await import("happy-dom");
+  const win = new Window();
+  g.document = win.document; g.window = win; g.HTMLElement = win.HTMLElement; g.Node = win.Node;
+  const pending: ((r: Response) => void)[] = [];
+  g.fetch = () => new Promise<Response>((resolve) => pending.push(resolve));
+  const ok = () => new Response(JSON.stringify({ ok: true, target: { id: "t902", issue: "LUM-902", title: "First issue", component: "billing", kind: "bug", severity: 2, status: "open", pos: { x: 1, y: 1 }, customers: [] } }));
+  try {
+    const { NewIssueDialog } = await import("../src/hud/newIssue");
+    const { createStore, createBus, fixtureState } = await import("../src/core");
+    const dlg = new NewIssueDialog(createStore(fixtureState()), createBus());
+    win.document.body.append(dlg.root as any);
+    const title = dlg.root.querySelector("input") as any;
+
+    // Reopened with a new draft while the first request is in flight
+    dlg.open(); title.value = "First issue";
+    const first = dlg.submit();
+    dlg.close(); dlg.open(); title.value = "Next issue draft";
+    pending.shift()!(ok());
+    expect((await first)?.issue).toBe("LUM-902");
+    expect(dlg.isOpen).toBe(true);
+    expect(title.value).toBe("Next issue draft");
+
+    // Same view, draft edited during the request
+    const second = dlg.submit();
+    title.value = "Edited while sending";
+    pending.shift()!(ok());
+    await second;
+    expect(dlg.isOpen).toBe(true);
+    expect(title.value).toBe("Edited while sending");
+
+    // Untouched: cleared and closed
+    const third = dlg.submit();
+    pending.shift()!(ok());
+    await third;
+    expect(dlg.isOpen).toBe(false);
+    expect(title.value).toBe("");
+  } finally { g.fetch = origFetch; }
+});

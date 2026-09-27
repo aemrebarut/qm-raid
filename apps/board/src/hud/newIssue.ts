@@ -44,6 +44,7 @@ export class NewIssueDialog {
   private randomBtn: HTMLButtonElement;
   private spawnBtn: HTMLButtonElement;
   private busy = false;
+  private session = 0; // bumps on every open and close, so a late reply only acts on the view it came from
 
   constructor(private store: Store, private bus: Bus) {
     this.randomBtn = h("button", { class: "nix-btn", type: "button", title: "Spawn a random issue from the Library pool", onclick: () => void this.random() },
@@ -66,11 +67,13 @@ export class NewIssueDialog {
     this.zone.replaceChildren(h("option", { value: "" }, "Least busy"), ...zones.map((c) => h("option", { value: c.id }, c.name)));
     this.zone.value = zones.some((c) => c.id === keep) ? keep : "";
     this.err.textContent = "";
+    this.session++;
     this.root.hidden = false;
     this.randomBtn.focus();
   }
 
   close(): void {
+    this.session++;
     this.root.hidden = true;
     if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   }
@@ -91,12 +94,14 @@ export class NewIssueDialog {
   private async spawn(body: SpawnTarget): Promise<Target | null> {
     if (this.busy) return null;
     this.setBusy(true);
+    const session = this.session, sent = this.title.value;
     const r = await api.spawnTarget(body);
     this.setBusy(false);
-    if (!r.ok) { this.err.textContent = r.error; return null; }
+    // Only the view that sent the request, with the draft untouched since, is cleared and closed.
+    const same = session === this.session && this.title.value === sent;
+    if (!r.ok) { if (session === this.session) this.err.textContent = r.error; return null; }
     const t = r.target ?? null;
-    this.title.value = "";
-    this.close();
+    if (same) { this.title.value = ""; this.close(); }
     if (t) {
       const zone = this.store.getState().components.find((c) => c.id === t.component)?.name ?? t.component;
       this.bus.toast(`${t.issue} spawned in ${zone}`);

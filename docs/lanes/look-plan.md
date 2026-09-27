@@ -101,3 +101,11 @@ Verdict: it reads as one game now: world, slate HUD, 3D portraits, preset cards,
 
 ### raid-ui-scene
 8. Forge progress plate over the smithy (`Smoke Ranger: reading the...`, i3-presets and i3-loadout) is still the old parchment tag with serif text: engrave it like the other labels (condensed caps name + a 3 px River-blue bar, no box), or hide it when the Forge overlay can show the same.
+
+## Iteration 4 (shots i4-*, ?art=on default, 16:04)
+Verdict: ship quality. Proposal rows keep their ids, Loadout has switches and no formation leak, roles and portraits agree, world plates engraved, yards read as grass. Only nits left; freeze 16:40, last shots i6 16:28.
+
+### raid-look-hud
+32. Loadout sticky footer (i4-loadout): Apply/Revert bar is transparent, the `Plan` row text shows through; opaque slate backing and 8 px bottom padding under the scroll content.
+33. Proposal chevron points down (`Ada v LUM-101`): `.hud-card-to` sits on the svg itself, the rotate rule targets a descendant `.lk-icon`; rotate the svg (coordinate with raid-ui-hud if the class lives in ordersBar.ts).
+34. hud 30 (staged): feed lines `Ada plan for LUM-107:` (trailing colon) and `Rule Warden 7 Recall: LUM-107 in onboarding for bri...`.

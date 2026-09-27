@@ -101,7 +101,15 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       act("thinking", `Thinking with the ${t.name} model (${t.model.startsWith("dry-run:") ? "dry run" : "River"})`);
       const ask = { typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
         order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId };
-      let answer = await opts.ask(ask);
+      let answer: string;
+      try {
+        answer = await opts.ask(ask);
+      } catch (e) {
+        // River slow or down: answer in the type's template voice so the order still completes, and say so.
+        if (t.model.startsWith("dry-run:")) throw e;
+        act("error", `River did not answer (${(e as Error).message.slice(0, 120)}); answering from the ${t.name} template instead.`);
+        answer = "[template fallback, River unavailable]\n" + await opts.ask({ ...ask, model: `dry-run:${t.id}` });
+      }
       if (!live()) return;
       // Team workflows: a reviewer's reply must end with a VERDICT line. The house-style model may not write one,
       // so ask it once more for just the verdict; if it still gives none, approve and say so.

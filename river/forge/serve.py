@@ -12,7 +12,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from forge import datagen, env
 
@@ -22,6 +24,8 @@ _session_ctx = None
 _session = None
 _renderers: dict = {}
 _world = {"at": 0.0, "data": None}
+_lock = threading.Lock()      # session and renderer creation
+_out = threading.Lock()       # one JSON line at a time on stdout
 
 
 def log(msg: str) -> None:
@@ -61,36 +65,46 @@ def river_answer(req: dict) -> str:
     import river_client as river
     from river_client.renderers import get_renderer
     base = req["baseModel"]
-    if base not in _renderers:
-        _renderers[base] = get_renderer(base, thinking=False)
-    r = _renderers[base]
-    if _session is None:
-        _session_ctx = river.Client(api_key=os.environ["RIVER_API_KEY"]).session(project="qm-raid-forge-units")
-        _session = _session_ctx.__enter__()
+    with _lock:
+        if base not in _renderers:
+            _renderers[base] = get_renderer(base, thinking=False)
+        if _session is None:
+            _session_ctx = river.Client(api_key=os.environ["RIVER_API_KEY"]).session(project="qm-raid-forge-units")
+            _session = _session_ctx.__enter__()
+        r, session = _renderers[base], _session
     prompt = r.build_sample_prompt(messages(req)).prompt
     try:
-        out = _session.sample(prompt, base_model=base, checkpoint=req["model"], max_tokens=450,
-                              temperature=0.3, stop=r.get_stop_strings())
+        out = session.sample(prompt, base_model=base, checkpoint=req["model"], max_tokens=450,
+                             temperature=0.3, stop=r.get_stop_strings(), timeout=90)
     except Exception:
-        _session_ctx, _session = None, None  # reopen on the next request
+        with _lock:
+            if _session is session:
+                _session_ctx, _session = None, None  # reopen on the next request
         raise
     return out[0][0].text.strip()
 
 
+def handle(line: str) -> None:
+    rid = None
+    try:
+        req = json.loads(line)
+        rid = req.get("id")
+        text = dry_answer(req) if str(req.get("model", "")).startswith("dry-run:") else river_answer(req)
+        msg = {"id": rid, "text": text}
+    except Exception as e:
+        log(f"request {rid} failed: {type(e).__name__}: {e}")
+        msg = {"id": rid, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+    with _out:
+        print(json.dumps(msg), flush=True)
+
+
 def main() -> None:
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        rid = None
-        try:
-            req = json.loads(line)
-            rid = req.get("id")
-            text = dry_answer(req) if str(req.get("model", "")).startswith("dry-run:") else river_answer(req)
-            print(json.dumps({"id": rid, "text": text}), flush=True)
-        except Exception as e:
-            log(f"request {rid} failed: {type(e).__name__}: {e}")
-            print(json.dumps({"id": rid, "error": f"{type(e).__name__}: {str(e)[:200]}"}), flush=True)
+    # Requests run concurrently: several forge units can think at once, and a template fallback
+    # never waits behind a slow River call.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for line in sys.stdin:
+            if line.strip():
+                pool.submit(handle, line.strip())
 
 
 if __name__ == "__main__":

@@ -126,7 +126,7 @@ const json = (body: unknown, status = 200) =>
 
 load();
 
-const modelServer = createModelServer(RIVER_DIR);
+const modelServer = createModelServer(RIVER_DIR, Number(process.env.FORGE_MODEL_TIMEOUT_MS ?? 60_000));
 const units = createUnits({
   types: () => [...types.values()].map((t) => ({ id: t.id, name: t.name, description: t.description, status: t.status, model: t.model, baseModel: t.baseModel ?? null })),
   ask: (r) => modelServer.ask(r),

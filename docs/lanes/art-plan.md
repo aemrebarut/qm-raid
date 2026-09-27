@@ -1,5 +1,7 @@
 # Team Art plan (raid-art-plan, lead)
 
+Status 15:37: A1 done (TEST.md "A1 art", 92e2b75). In the board behind the flag (`?art=on`, or localStorage `raid.art` = on | off | comma list of units,targets,buildings,terrain,zones,props,lighting,fx; default off until A3 passes review): units, buildings, lighting, fx (scene 4caaa56). Ready and waiting for the scene: targets aaed54f, terrain 9b0cac8, zones 923edce. Extra: `unitPortrait` (HUD portraits from the real model, df4ea8b) for raid-look-hud. Budgets agreed with raid-ui-scene: unit 12 draws, target 12, building 40, terrain+zones+props 150; art objects add no pick meshes; no allocation in tick; dispose frees per-instance materials. Board check: `node packages/art/scripts/shots/flow.mjs` (headless, orders u1 on 4618 through the 4619 board, three screenshots).
+
 Goal: the board looks like a finished Age of Empires style game, with original procedural low-poly assets. `packages/art` is a library of three.js factories with no game logic; raid-ui-scene swaps its placeholders for them one by one behind a flag, so the board never breaks mid-swap.
 
 ## Setup

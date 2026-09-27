@@ -12,3 +12,12 @@ Dry run (`FORGE_MODE` unset or `dry`): step 1 runs for real with the template ge
 Check access: `RIVER_API_KEY=... .venv/bin/python -m forge.capabilities` (prints model names only).
 
 Run 1 (15:05, style guide in the prompt for both models): trained 0.81 vs base 0.81, no gain, since the base already follows an explicit guide. Run 2 moves the guide into the weights.
+
+## Reviewer profile (Rule Warden, forge/warden.py)
+A type whose name or description mentions review, judge or verdict trains as a workflow reviewer or judge.
+- Orders: the engine's workflow order as a forge unit sees it (order header, `Role: reviewer.` or `Role: judge.` with the engine's own instructions, `Previous work:` with one implementer, or a planner plus implementer, or two implementers for a judge).
+- Changes: 13 Lumen house rules as the brain states them (components/<id> House rules and rules/* pages). Each rule has one change that follows it and one that breaks it, so the right verdict (APPROVED, CHANGES, or APPROVED (winner: uX)) is known.
+- Teacher: the same short unit prompt plus the review format (Rules:, Finding:, final VERDICT line) and a hidden key with the rule and the correct verdict. The student never sees the key. A teacher review is kept only if it ends with a valid VERDICT line, gets the verdict or winner right and cites the rule slug; otherwise a checked template replaces it.
+- Split: one rule per component is held out (billing-tz, auth-refresh, onb-mailer, search-scope). Eval orders use only held-out rules, so the eval measures applying a rule read from the brain context, not remembering a verdict. The held-out judge rows are all one-good-one-bad (no both-wrong case).
+- Eval: style (valid final VERDICT line, cites the slug, Rules and Finding lines, concise), verdict accuracy against the known key (engine semantics: the last VERDICT line decides), and groundedness (same judge). evalScore = mean of the three; GET /types/:id/eval shows each.
+- Recall budget: 3500 characters instead of 1500 (runs/<id>/profile.json, read by serve.py), because past learnings come first in the recall context and the house rules must still fit.

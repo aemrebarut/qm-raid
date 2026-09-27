@@ -214,9 +214,40 @@ Reviewed the full diff and current Loadout contract. Both P2s from `bc19a57` are
 - `bun run smoke && bun run smoke:bridge`: PASS on the owner-restarted Forge reported as PID 37798. Created `forge-smoke-ranger-4` with dryRun and used the existing dry `forge-smoke-ranger` for the bridge reply. No real training, provider call, or engine order was made.
 - Subsequent reviewer-profile/section-parser changes visible in the shared tree were outside this submitted SHA and were not accepted as part of this review.
 
+## 2026-09-27: Brain metadata and component-pool fixes `d8fd4b8`
+
+Reviewed the full diff. Both P2s from the new-issue review are resolved in code: add_link serializes the existing frontmatter, retaining spawned target kind, severity and position; a component-specific random request exhausts that component's pool with 409 instead of relabeling another component's facts.
+
+- Independent isolated smoke: created a fresh keyless PGLite under `/tmp/raid-rev-brain-h3xlk3hv`, imported the 27 world pages, and started the service on 4636/4637. `BRAIN_URL=http://127.0.0.1:4636 BRAIN_MCP_URL=http://127.0.0.1:4637/mcp SMOKE_WRITE=1 SMOKE_RESET=1 bun run test`: all PASS. This covered both regressions, immediate learning/graph visibility, parallel add_link, concurrent issue ids, validation, cleanup and destructive reset/pool refill.
+- Stopped only the review service PID 13455 and its GBrain child 13519, then verified both processes and listeners were gone. Checks were serial under the Analyst's machine-load limit.
+- Deployment caveat: the owner reports live Brain PID 45381 still runs the previous code under the Analyst's restart hold until 16:40. This review did not restart, reset or write to the live Brain. The fixes are accepted for deployment when that hold is lifted.
+
+## 2026-09-27: Reviewer profile and section parsing `8c53b75`, `4809371`
+
+Reviewed both diffs across generation, training, serving, scoring and Bridge section extraction. The reviewer profile constructs keyed reviewer/judge cases, gives the answer key only to the teacher, falls back to checked templates for invalid teacher output, and uses the longer per-type recall budget. Rules/Finding sections now feed learning extraction without including the VERDICT line.
+
+- Offline split check on the current world: 128 train and 32 eval cases, no order overlap and no held-out rule labels in training cases; every generated template agrees with its key. The saved real run has 126 train and 32 eval rows because its world snapshot was smaller.
+- Offline generation with a fake teacher returning invalid answers: all 160 rows replaced by checked templates; student messages contain no teacher answer key; reviewer profile stores the 3500-character context budget. Environment-file loading was disabled, and no provider was called.
+- Read the saved eval prompts: the held-out rule facts remain within their supplied context. The documented limitation remains: held-out judge cases are all one-good/one-bad, so this eval does not establish both-wrong judge accuracy. Rule text also appears in training recall context; only the review cases and their rule labels are held out.
+- `bun run test:units`: PASS, including the Rules/Finding/VERDICT parser regression. The same serial validation run's `bun run smoke && bun run smoke:bridge`: PASS, with dryRun creation and a dry type for the bridge reply. No real training or real-QM order was issued.
+
+**P2 found, then resolved by `59581c3` and `bdddd30`: judge winner checks credited an explicitly wrong or ambiguous winner.** In `8c53b75`, expected u3 plus `VERDICT: APPROVED (winner: u2; u3 is rejected)` scored 1 and passed agrees(), because the expected id appeared anywhere on the verdict line. `59581c3` parses winner declarations and fixes that case, but its comma delimiter still accepted `winner: u3, u2`; this residual reproduction was sent to the owner. `bdddd30` retains comma-separated candidates in the parsed value and rejects that ambiguity too.
+
+- Read both fix diffs. `cd river && .venv/bin/python -m tests.warden_offline`: PASS on the final revision, including wrong winner, comma/or ambiguity, conflicting declarations, split isolation and template agreement.
+- Independently re-scored all 64 saved trained/base verdicts from `forge-rule-warden`: zero changed. All 42 saved judge training targets pass agrees(), including both-wrong cases. Recomputed blended aggregates from saved metrics: trained 0.917, base 0.557. This reused saved outputs and did not rerun the River judge or training.
+
+## 2026-09-27: Locked-on Library `3899028`, M5 docs `143b3bf`, `cec81d4`
+
+Reviewed the diffs and Analyst decision. During the previous loadout review, engine brainFallback still recalled/remembered after Forge's plugins=[] toggle disabled its own calls. Reported the integration mismatch to the engine lead and Analyst. The Analyst resolved it by requiring GBrain for every unit; this supersedes the earlier optional-GBrain behavior and tests recorded under `9f94683`.
+
+- `3899028` removes the Forge toggle and normalizes PATCH loadout plugins to include gbrain. `bun run test:units`: PASS, with plugins=[] returning [gbrain], standing orders reaching ask and an order still attempting recall through the isolated test endpoint. The dryRun and bridge smokes above also passed. No new actionable code finding.
+- Sent the missing contract invariant to the Analyst; `f125750` now explicitly records locked-on GBrain and the plugins=[] normalization. No engine change is needed for the earlier fallback finding under this decision.
+- `143b3bf` had two documentation mismatches: it described plugins=[] disabling Brain calls and overstated rule isolation as rule text never appearing in training. Sent both to raid-river; reviewed `cec81d4`, which fixes TEST.md and the PIPELINE.md split description. No remaining finding in those docs. Saved metric arithmetic supports the published numbers, subject to the eval limitations above.
+- Findings and resolutions were sent via Herdr session `default` to raid-river, raid-gbrain and the Analyst as appropriate. Only this review log was edited by raid-rev.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `77441cb`, including `68fa5e9` and `44ef3c0`. Open P2s: add_link strips spawned-target metadata, and exhausted component pools relabel unrelated issues. Earlier Brain findings and allocation/registration contract gaps are resolved. Destructive reset smoke was not run during rehearsal preparation.
-- `raid-river`: reviewed through `9f94683`; all reported River/Forge findings resolved. Loadout offline checks and live dryRun/bridge checks pass. Subsequent reviewer-profile changes await their submitted SHA.
+- `raid-gbrain`: reviewed through `d8fd4b8`; both new-issue P2s are resolved and the independent isolated write/reset smoke passes. Live deployment of those fixes remains pending the Analyst's restart hold.
+- `raid-river`: reviewed reviewer profile `8c53b75`, sections `4809371`, locked Library `3899028`, docs `143b3bf`/`cec81d4`, and winner fixes `59581c3`/`bdddd30`. All reported findings resolved; offline checks and live dryRun/bridge smoke pass. Reviewer eval limitations are documented above.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

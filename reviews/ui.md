@@ -51,3 +51,13 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - `curl -fsS http://127.0.0.1:4611/health`: returned `{"ok":true,"service":"board"}`. `/src/main.ts` served successfully.
 - Browser render and scene/HUD integration remain pending their submitted commits.
 - Read shared EngineEvent update `ca1a93d`. Lead notified to replace the local event union with the shared export; `forge.updated` now definitively carries `unitType`.
+
+## M1 scaffold fix review: 16d1c55
+
+- Read the complete fix diff and `docs/lanes/ui-plan.md` (`969f9e9`).
+- **P1 above resolved:** the initial HTTP result is ignored after an SSE message arrives. The added regression reproduces the delayed GET sequence and asserts the newer position, status, and live connection remain intact.
+- Core now re-exports `EngineEvent`, `EngineEventType`, and `ActivityKind` from `contract/types.ts`; Forge reducer reads the authoritative `unitType` field.
+- `bun test test/`: 5 passed, 0 failed, 35 assertions.
+- `bun run typecheck`: passed on the current working tree; previously observed uncommitted HUD diagnostics are gone.
+- `bun run build`: passed (17 modules). This build still has no scene entry, so it is not evidence of a completed M1 board.
+- No remaining actionable findings in the submitted scaffold/fix scope. Browser integration remains pending scene/HUD submissions.

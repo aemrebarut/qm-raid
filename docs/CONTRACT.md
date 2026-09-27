@@ -90,7 +90,7 @@ Slug conventions: `components/<componentId>`, `issues/<issue lowercased, e.g. lu
 
 ## Forge API (services/forge, port 4612; the River building)
 The user names a new agent type and describes its job; the Forge generates synthetic training data for that job, fine-tunes a model with the River API, evaluates it, and then units of that type can be trained (spawned) from the Forge.
-- `POST /types` {name, description} -> {typeId}
+- `POST /types` {name, description, dryRun?} -> {typeId}  (`dryRun: true` forces the fake 60 s pipeline even with the key set; every smoke test and reviewer check must pass it)
 - `GET /types` -> [{id, name, description, status: "generating"|"training"|"evaluating"|"ready"|"failed", progress (0..1), stage (short text), examples (count), evalScore (0..1 or null), model (River model id or null)}]
 - Forge units implement the Bridge API on the same port (POST /units, /units/:id/send, PATCH, DELETE, GET /events), running a small agent loop on the trained model with the brain service for recall and remember (emit them as `gbrain.recall` / `gbrain.remember` tool activity).
 Engine side: `state.unitTypes` = [{id, name, source: "builtin"|"forge", status, progress, stage, model}]; `POST /api/forge/types` {name, description} proxies to the Forge; `POST /api/units` {class: "<typeId>"} spawns a unit of a forged type (only when ready); the engine routes each unit to its bridge (built-in classes to BRIDGE_URL, forge types to FORGE_URL, default http://127.0.0.1:4612) and polls GET /types every 2 s, emitting `forge.updated` {unitType} events. The full engine event union is `EngineEvent` in contract/types.ts.

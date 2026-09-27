@@ -21,3 +21,67 @@
 .hud-run-pip[data-state="changes"] { background: #c7771f; color: #fff; }
 .hud-run-pip[data-state="failed"] { background: #b3261e; color: #fff; }
 @keyframes hud-wf-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* .hud-btn and card rules set display, which beats the UA [hidden] rule: keep hidden run and formation controls gone. */
+.hud-orders [hidden], .hud-wf [hidden] { display: none !important; }
+
+/* Formation flow (Look tokens with fallbacks): Form team entry, preset cards, portrait role slots, bench, start cue */
+.hud-wf-entry { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hud-wf-form {
+  display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: var(--lk-fs-l, 15px); font-weight: 700;
+  color: #1a1408; background: linear-gradient(180deg, var(--lk-gold, #e0b454), #a8812f); border: 1px solid var(--lk-metal-hi, #c8ad7a); border-radius: var(--lk-r, 3px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 12px rgba(224,180,84,.35); cursor: pointer; transition: filter .14s ease, box-shadow .14s ease;
+}
+.hud-wf-form:hover { filter: brightness(1.08); box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 0 18px rgba(224,180,84,.55); }
+.hud-wf-key, .hud-wf-slot-key { font-size: 10px; font-weight: 700; padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; opacity: .7; }
+
+.hud-wf-presets[data-big="true"] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.hud-wf-presets[data-big="false"] { display: flex; flex-wrap: wrap; gap: 4px; }
+.hud-wf-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 6px 8px; text-align: left; cursor: pointer;
+  font: inherit; color: var(--lk-text, #e8e2d4); background: var(--lk-bg-2, rgba(34,40,49,.9));
+  border: 1px solid var(--lk-line, rgba(200,173,122,.28)); border-radius: var(--lk-r, 3px); box-shadow: var(--lk-bevel, none);
+  transition: border-color .14s ease, background-color .14s ease, box-shadow .14s ease;
+}
+.hud-wf-card:hover:not(:disabled) { background: var(--lk-bg-3, rgba(48,56,67,.95)); border-color: var(--lk-metal-hi, #c8ad7a); }
+.hud-wf-card:disabled { opacity: .4; cursor: default; }
+.hud-wf-card[data-on="true"] { border-color: var(--lk-gold, #e0b454); box-shadow: 0 0 0 1px var(--lk-gold, #e0b454), 0 0 10px rgba(224,180,84,.3); }
+.hud-wf-card b { font-family: var(--lk-font-head, inherit); font-size: var(--lk-fs-m, 13px); letter-spacing: .06em; text-transform: uppercase; }
+.hud-wf-purpose { font-size: var(--lk-fs-xs, 11px); color: var(--lk-text-2, #a9a292); line-height: 1.25; }
+.hud-wf-presets[data-big="false"] .hud-wf-card { flex-direction: row; align-items: center; padding: 3px 8px; }
+.hud-wf-presets[data-big="false"] .hud-wf-thumb, .hud-wf-presets[data-big="false"] .hud-wf-purpose { display: none; }
+.hud-wf-off { flex-direction: row !important; align-items: center; gap: 4px; }
+.hud-wf-thumb { width: 100%; max-width: 110px; height: auto; }
+.hud-wf-thumb .hud-wf-disc { stroke-width: 1.5; fill: var(--lk-bg-0, #10141a); }
+.hud-wf-thumb .hud-wf-glyph { font-size: 7px; font-weight: 700; fill: var(--lk-text, #e8e2d4); }
+.hud-wf-thumb .hud-wf-edge { stroke-width: 1.1; stroke: var(--lk-text-2, #a9a292); }
+.hud-wf-thumb .hud-wf-arrow { fill: var(--lk-text-2, #a9a292); }
+.hud-wf-thumb .hud-wf-edge-changes { stroke: var(--lk-warn, #e39a3b); }
+.hud-wf-thumb .hud-wf-arrow.hud-wf-edge-changes { fill: var(--lk-warn, #e39a3b); }
+
+.hud-wf-slots { display: flex; flex-direction: column; gap: 4px; }
+.hud-wf-slot {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 6px; text-align: left; cursor: pointer; font: inherit;
+  color: var(--lk-text, #e8e2d4); background: var(--lk-well, rgba(6,8,11,.55)); border: 1px solid var(--lk-line-soft, rgba(200,173,122,.14));
+  border-left: 3px solid var(--team, #8a7a5c); border-radius: var(--lk-r, 3px); transition: border-color .14s ease, background-color .14s ease;
+}
+.hud-wf-slot:hover { border-color: var(--lk-metal-hi, #c8ad7a); border-left-color: var(--team, #8a7a5c); }
+.hud-wf-slot[data-armed="true"] { border-color: var(--lk-gold, #e0b454); box-shadow: 0 0 10px rgba(224,180,84,.35); }
+.hud-wf-slot[data-armed="true"] .hud-wf-who { color: var(--lk-gold, #e0b454); }
+.hud-wf-slot[data-drop="true"] { background: var(--lk-gold-dim, rgba(224,180,84,.18)); }
+.hud-wf-slot-text { display: flex; flex-direction: column; min-width: 0; }
+.hud-wf-slot .hud-wf-role { font-family: var(--lk-font-head, inherit); font-size: var(--lk-fs-xs, 11px); letter-spacing: .08em; text-transform: uppercase; color: var(--lk-head, #d9c79f); }
+.hud-wf-who { font-size: var(--lk-fs-m, 13px); font-weight: 600; }
+.hud-wf-face {
+  flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--lk-r, 3px); cursor: grab;
+  color: var(--lk-text, #e8e2d4); background: radial-gradient(circle at 35% 30%, #3a4350, #161b22); border: 1px solid var(--team, #8a7a5c);
+}
+.hud-wf-bench { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 2px; }
+.hud-wf-bench .hud-wf-face { width: 26px; height: 26px; }
+
+.hud-wf-cue { display: flex; align-items: center; gap: 6px; font-size: var(--lk-fs-s, 12px); color: var(--lk-gold, #e0b454); }
+.hud-wf-mouse { width: 18px; height: 18px; flex: none; }
+.hud-wf-mouse-btn { animation: hud-wf-pulse 1.4s ease-in-out infinite; }
+.hud-wf-step-text b { margin-right: 4px; }
+.hud-wf-step-role { margin-right: 6px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--lk-text-3, #6f6a60); }
+.hud-wf-step .hud-feed-time { margin-left: auto; flex: none; }

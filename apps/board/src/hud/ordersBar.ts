@@ -17,8 +17,8 @@ interface Card { el: HTMLElement; ring: SVGCircleElement; secs: HTMLElement; tit
 interface RunCard { el: HTMLElement; title: HTMLElement; sub: HTMLElement; chain: HTMLElement; cancel: HTMLButtonElement; dismiss: HTMLButtonElement; chainSig: string; teamId: number; orderId: string | null; expires: number }
 
 export class OrdersBar {
-  private runHead = h("h3", { class: "hud-orders-head" }, "Team runs");
-  private head = h("h3", { class: "hud-orders-head" }, "Autopilot proposals");
+  private runHead = h("h3", { class: "hud-orders-head" }, "Runs");
+  private head = h("h3", { class: "hud-orders-head", title: "Autopilot proposals: veto, adjust or approve" }, "Proposals");
   readonly root = h("section", { class: "hud-orders", hidden: true }, this.runHead, this.head);
   private cards = new Map<string, Card>();
   private runs = new Map<string, RunCard>();
@@ -55,7 +55,7 @@ export class OrdersBar {
     }
     this.root.hidden = this.cards.size === 0 && this.runs.size === 0;
     this.head.hidden = this.cards.size === 0;
-    this.head.textContent = this.cards.size > 1 ? `Autopilot proposals (${this.cards.size})` : "Autopilot proposal";
+    this.head.textContent = this.cards.size > 1 ? `Proposals ${this.cards.size}` : "Proposal";
     const cmd = this.bus.command;
     if (cmd?.kind === "adjust" && gone.has(cmd.orderId)) this.bus.setCommand(null); // its card just went away
     this.markAdjusting();
@@ -88,7 +88,7 @@ export class OrdersBar {
       this.updateRun(s, c, run, team);
     }
     this.runHead.hidden = this.runs.size === 0;
-    this.runHead.textContent = this.runs.size > 1 ? `Team runs (${this.runs.size})` : "Team run";
+    this.runHead.textContent = this.runs.size > 1 ? `Runs ${this.runs.size}` : "Run";
   }
 
   private addRun(run: WorkflowRun): RunCard {
@@ -168,7 +168,7 @@ export class OrdersBar {
         h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel", type: "button", title: "Veto this order", onclick: () => this.act(api.cancelOrder(id), "Order vetoed") }, "Cancel"),
         h("button", { class: "hud-btn hud-btn-sm", type: "button", title: "Pick another target or unit for this order",
           onclick: () => this.bus.setCommand(this.bus.command?.kind === "adjust" && this.bus.command.orderId === id ? null : { kind: "adjust", orderId: id }) }, "Adjust"),
-        h("button", { class: "hud-btn hud-btn-sm hud-btn-go", type: "button", title: "Approve now", onclick: () => this.act(api.goOrder(id), "Order approved") }, "Go now"),
+        h("button", { class: "hud-btn hud-btn-sm hud-btn-go", type: "button", title: "Approve now", onclick: () => this.act(api.goOrder(id), "Order approved") }, "Go"),
       ),
     );
     const card: Card = { el, ring, secs, title, reason, deadline: o.vetoDeadline, unitId: o.unitId }; // handlers read it later

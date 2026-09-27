@@ -83,3 +83,13 @@ export class RowList<T> {
     clear(this.el);
   }
 }
+
+/** Relative time, terse: "12s", "4m", "2h", "3d". */
+export function ago(ts: number, now = Date.now()): string {
+  const s = Math.max(0, Math.round((now - ts) / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const hr = Math.floor(m / 60);
+  return hr < 24 ? `${hr}h` : `${Math.floor(hr / 24)}d`;
+}

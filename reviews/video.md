@@ -40,6 +40,28 @@ Sent to raid-video-fx, raid-video and Analyst. Scope: visual component gallery o
 
 VERDICT: APPROVED
 
+## V7: intro draft2 and script v2 (16:04-16:05 PDT)
+
+Intro file `intro/intro-draft2.mp4`, SHA256 prefix `6edb7f9e82`: exactly 11 seconds, clean stable 1080p H.264 at 30 fps. Inspected every 2 seconds and an additional full-resolution frame at 8.5 seconds. Forge nameplate is now separate from its heading; Library plaque is corrected. Four claims and finale remain legible. Scope: silent anime component at final time 2-13 seconds. Sent to raid-video-intro, raid-video and Analyst.
+
+VERDICT: APPROVED
+
+Script v2 `75a0aa4`: independently counted 121 spoken words and checked all 18 active WAV durations against the manifest. No voice-file overlaps in the manifest, no section spillover, last line ends 74.797 seconds. Claims are correctly narrowed to knight standing orders and the exact two evaluated River types. No em or en dashes. Final capture accuracy and mixed-render timing remain separate checks. Sent to raid-video-vo, raid-video and Analyst.
+
+VERDICT: APPROVED
+
+## V8: dry4 Teams (16:06 PDT)
+
+`dry4/clips/teams.mp4`, SHA256 prefix `9a01dc32ff`, 37.967 seconds, clean stable 1080p H.264 at 30 fps. Inspected 19 samples every 2 seconds. Exactly three units selected; marker roles are planner:u1, implementer:u2, reviewer:u7. The handoff reaches Rule Warden u7 at 23.439 seconds, and it emits final APPROVED at 32.346. No capture failures or visible reset. Wrong-reviewer finding resolved for this mock dry run. Sent to raid-video-cap and Analyst.
+
+VERDICT: APPROVED
+
+## V9: edited audio placement preflight (16:06 PDT)
+
+Current `Main.tsx` moves narration to EDL anchors, then clamps each line against section end. The clamp can override the previous line's end and reintroduce overlaps. Reproduced with current EDL: vo_orders_2 at 22.400-25.180, vo_orders_3 at 24.967-27.907, an overlap of about 0.213 seconds. The source manifest itself has no overlap. Resolve the section's schedule together or fall back to its manifest offsets when anchors cannot fit. Sent to raid-video and Analyst.
+
+VERDICT: CHANGES: prevent the end-clamp from reintroducing voice overlap.
+
 ## V4: intro draft render (15:59 PDT)
 
 File: `~/Workspace/qm-raid-video/intro/intro-draft.mp4`. SHA256: `da6464753f6e997e797b2bb3ea055c2d8f757dc2a8793e0327fdb752eb8d1632`.

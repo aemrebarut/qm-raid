@@ -1,5 +1,5 @@
 // qm-bridge: Bridge API (docs/CONTRACT.md) on 127.0.0.1:4614 backed by real QM agents, one QM conversation per unit.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BridgeEvent, SendRequest, SpawnRequest } from "../../../contract/types.ts";
 import {
@@ -21,6 +21,7 @@ const PORT = Number(process.env.PORT ?? 4614);
 const HOST = "127.0.0.1";
 // Unit map survives bridge restarts so in-flight units keep their QM sessions (gitignored).
 const STATE_FILE = join(import.meta.dir, "..", ".state", "units.json");
+const TIMING_FILE = join(import.meta.dir, "..", ".state", "timing.jsonl"); // one row per finished order
 // One stable QM conversation per unit: threadRef web:<principal>:raid-<ns>-<unitId>, across respawns, resets and restarts.
 // Change QM_THREAD_NS to start every unit in a fresh conversation.
 const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
@@ -29,6 +30,7 @@ const ROUND_MARKER = "New round: the board was reset. Recall from GBrain before 
 interface Send extends SendRequest {
   intro?: boolean;
   key?: string; // idempotency key, persisted, so retries and post-crash re-sends never start a second run
+  t?: { send: number; depth: number; queued?: number; first?: number }; // per-order timing (epoch ms)
 }
 interface Unit extends SpawnRequest {
   threadRef: string;
@@ -128,6 +130,7 @@ setInterval(() => {
 
 function activity(u: Unit, send: Send, kind: "message" | "tool" | "thinking" | "error", text: string, extra: { tool?: string; args?: unknown } = {}): void {
   if (!alive(u)) return; // deleted or replaced units stay silent
+  if (send.t && !send.t.first) send.t.first = Date.now();
   emit({ type: "activity", unitId: u.id, ...(send.orderId ? { orderId: send.orderId } : {}), kind, text, ...extra });
 }
 
@@ -167,6 +170,7 @@ async function begin(u: Unit, s: Send): Promise<void> {
   const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u, s));
   if (!u.active || u.active.send !== s) return;
   u.active.runId = runId;
+  if (s.t) s.t.queued = Date.now();
   lastWork.set(u.id, Date.now());
   if (alive(u)) saveUnits();
   void follow(u, s, runId);
@@ -194,7 +198,24 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
     emit({ type: "error", unitId: u.id, ...(s.orderId ? { orderId: s.orderId } : {}), text: outcome.text });
   }
   saveUnits();
+  if (s.t) logTiming(u, s);
   pump(u);
+}
+
+// Per-order timing: send = POST /send received, queued = QM accepted the turn, first = first activity, terminal = reply/error.
+function logTiming(u: Unit, s: Send): void {
+  const t = s.t!;
+  const terminal = Date.now();
+  const rel = (x?: number) => (x ? `+${((x - t.send) / 1000).toFixed(1)}s` : "-");
+  console.log(
+    `[qm-bridge] timing unit=${u.id} order=${s.orderId ?? "-"} depth=${t.depth} send=${new Date(t.send).toISOString().slice(11, 23)} ` +
+      `queued=${rel(t.queued)} first=${rel(t.first)} terminal=${rel(terminal)}`,
+  );
+  try {
+    appendFileSync(TIMING_FILE, `${JSON.stringify({ unitId: u.id, orderId: s.orderId ?? null, depth: t.depth, t_send: t.send, t_queued: t.queued ?? null, t_first_event: t.first ?? null, t_terminal: terminal })}\n`);
+  } catch {
+    // timing is diagnostics only
+  }
 }
 
 function outcomeOf(run: RunState): { ok: boolean; text: string } {
@@ -491,7 +512,8 @@ const server = Bun.serve({
       if (m === "POST" && parts[2] === "send") {
         const b = await body<Send>(req);
         if (!b.text || typeof b.text !== "string") return json({ ok: false, error: "text required" }, 400);
-        enqueue(u, { text: b.text, orderId: b.orderId, targetId: b.targetId, componentId: b.componentId });
+        const t = { send: Date.now(), depth: u.queue.length + (u.active ? 1 : 0) }; // depth = sends ahead of this one
+        enqueue(u, { text: b.text, orderId: b.orderId, targetId: b.targetId, componentId: b.componentId, t });
         return json({ ok: true, queued: u.queue.length });
       }
       if (m === "PATCH" && !parts[2]) {

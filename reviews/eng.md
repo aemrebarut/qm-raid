@@ -111,3 +111,12 @@ Each reviewed commit records its SHA, tests and result, concrete findings (sever
 - R5 on locked 4618: team 1 trio runs planner -> implementer -> reviewer changes -> implementer -> reviewer approved, five correlated workflow orders, correct handoff units/context, final run done and target resolved only at completion.
 - Module/wiring review priorities: custom graph validation and member binding, branch joins across iterations, bounded changes loops and needs_human, cancellation/reset/retirement while a step is active, failed step handling, latest replies in prompts, and complete shared-type SSE payloads. Implementers own code/tests; reviewer records evidence here.
 - W2 real QM remains lead-coordinated on 4610/4611. Automated workflow probes use 4618/mock with the same lock and BRAIN_RESET=0 constraints.
+
+
+## 2026-09-27 15:19 PDT: F2 workflow wiring 1fa90b7 and fake-flow coverage 9051979
+
+- Reviewed both commits, including dynamic runner loading, linked game hooks, workflow prompt context, terminal notifications, run-wide cancellation, PUT/DELETE routes, default state fields, and exclusion of workflow teams from autopilot (including response-time revalidation).
+- Isolated engine suite passed 18 tests / 106 assertions. The fake-flow test verifies workflow source/runId/nodeId, a single entry order, previous reply in the next prompt, target remaining engaged during handoff, cancellation through the runner, autopilot exclusion, and clearing a graph when a bound member leaves.
+- Seven independent in-process route/state checks passed: new default fields, PUT in allowed preflight methods, foreign PUT 403, text/plain PUT 415, unknown team 404, explicit unavailable-runner error, and DELETE clearing.
+- Existing live engine smoke passed under `/tmp/engplan/with4618 raid-eng-rev` on 4618: snapshot first, validation, movement, working state, completed mock order o1 with reply, 12 activity events, increasing seq. Lock released; no services started/stopped and no request to 4610.
+- No actionable finding in the F2 wiring. The graph runner was still absent during these checks; this is wiring/regression evidence, not R5 acceptance. Actual trio loop, fanout joins, bounded loops and integrated cancellation/reset remain pending raid-eng-flow's implementation.

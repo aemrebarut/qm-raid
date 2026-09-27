@@ -52,6 +52,8 @@ const lightingMods = import.meta.glob("../src/lighting.ts", { eager: true }) as 
 const lightingFn = Object.values(lightingMods)[0]?.lighting;
 let rig: Lighting | null = null;
 try { rig = lightingFn ? lightingFn(scene, renderer, { mapSize: 24 }) : null; } catch (e) { console.error("[showroom] lighting failed", e); }
+if (rig && typeof rig.update !== "function") { console.error("[showroom] lighting() handle has no update(); see Lighting in src/types.ts"); }
+let rigUpdate = rig && typeof rig.update === "function" ? () => rig!.update() : null;
 if (!rig) {
   scene.add(new THREE.HemisphereLight("#fff3d6", "#4a6630", 1.4));
   const sun = new THREE.DirectionalLight("#fff0cf", 2.4);
@@ -189,7 +191,9 @@ renderer.setAnimationLoop(() => {
     if (turn.checked && p.ex.turntable !== false) p.pivot.rotation.y += dt * 0.35;
     try { p.inst.tick?.(t, dt); } catch (e) { console.error(`[showroom] ${p.ex.name}.tick`, e); p.inst.tick = undefined; }
   }
-  rig?.update();
+  if (rigUpdate) {
+    try { rigUpdate(); } catch (e) { console.error("[showroom] lighting update", e); rigUpdate = null; } // never blank the page
+  }
   controls.update();
   renderer.render(scene, camera);
   frames++; acc += dt;

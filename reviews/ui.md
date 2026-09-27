@@ -169,3 +169,10 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - **157675c P2 resolved:** store.run now returns the newest running run, falling back to newest completed. Starting the local simulator cancels the existing fixture run. Exact reproduction now returns dev-w2 while dev-w2 runs, then shows its completed state.
 - commandTarget sends {teamId,targetId} for an exact workflow-team selection; a partial team still sends {unitIds,targetId}. Regression checks cover both. Existing Adjust branch remains ahead of normal team commands.
 - Final checkpoint: 11 tests pass, 55 assertions, typecheck and production build pass (46 modules), 4619 health returns ok. No remaining actionable findings in this reviewed batch. Workflow UI and full mock/real engine runs are future W1/W2 work, not claimed as complete here.
+
+## Framing and hotkeys: 98bc5f3, c2529f9
+
+- 98bc5f3 accepted. Headless Chrome on 4619 with isolated fixture state passes projected-content bounds at 1440x900, 1200x700, and 1200x600. Vertical ranges match the padded safe area: 60..704, 60..529, and 60..450 respectively. Screenshots confirm Billing and Barracks are fully visible above the bottom panel; no page errors. Temporary screenshots: /tmp/raid-ui-review/fit-1440-900.png and fit-1200-700.png.
+- Resize reframes before manual input. After wheel zoom, a subsequent resize preserves camera target and zoom. Read the Library 9x9 tree exclusion; no actionable finding.
+- c2529f9 accepted. Isolated hotkey checks pass current-selection resolution, visible key badges, Message/Order/Recall, input/textarea/select/contentEditable guards, modifier/repeat/reserved-key guards, two-press Retire, Barracks K/R/C, building V focus, and listener removal on dispose. Requests are mocked.
+- Board smoke remains 11 passed / 55 assertions; typecheck and production build pass. No new actionable findings in these submissions.

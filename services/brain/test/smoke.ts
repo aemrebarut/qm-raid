@@ -60,5 +60,55 @@ if (process.env.SMOKE_WRITE === "1") {
     return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && early && edgesNow && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
   });
 }
+if (process.env.SMOKE_WRITE === "1") {
+  await check("POST /issues: pool draw, /world and recall include it, remember links it, unique parallel ids, given fields, cleanup", async () => {
+    const A = await post("/issues", { pos: { x: 5, y: 2 } });
+    const a = A.target;
+    const n = Number(a.id.slice(1));
+    const shapeOk = A.ok && a.id === `t${n}` && a.issue === `LUM-${n}` && a.status === "open" && a.pos.x === 5 && a.pos.y === 2 && typeof a.title === "string";
+    const w = await get("/world");
+    const worldOk = w.targets.some((t: any) => t.id === a.id && t.pos.x === 5 && t.component === a.component);
+    const r = await post("/recall", { targetId: a.id, unitId: "smoke" });
+    const slugA = `issues/lum-${n}`;
+    const recallOk = r.slugs.includes(slugA) && r.slugs.includes(`components/${a.component}`) && a.customers.every((c: string) => r.slugs.includes(`companies/${c}`));
+    // remember on the spawned target links its issue and component at once.
+    const l = await post("/remember", { unitId: "smoke", targetId: a.id, text: "Smoke learning on a spawned issue." });
+    const g = await get("/graph");
+    const linkOk = [slugA, `components/${a.component}`].every((to) => g.edges.some((e: any) => e.from === l.slug && e.to === to));
+    // Concurrent spawns get unique ids.
+    const par = await Promise.all([1, 2, 3].map((i) => post("/issues", { pos: { x: 17, y: i }, title: `Smoke parallel ${i}`, component: "auth" })));
+    const ids = par.map((x) => x.target?.id);
+    const uniqueOk = new Set(ids).size === 3 && ids.every(Boolean);
+    const B = await post("/issues", { pos: { x: 18, y: 12 }, title: "Smoke spawned issue", component: "search", kind: "feature", severity: 1, customers: ["kestrel-labs", "nope"] });
+    const b = B.target;
+    const bOk = b.component === "search" && b.kind === "feature" && b.severity === 1 && b.customers.join() === "kestrel-labs" && b.title === "Smoke spawned issue";
+    const bad = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pos: { x: 1, y: 1 }, title: "x", component: "nope" }) });
+    const noPos = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    for (const x of par) await post("/forget", { slug: `issues/lum-${x.target.id.slice(1)}` });
+    await post("/forget", { slug: l.slug });
+    await post("/forget", { slug: "units/smoke" });
+    await post("/forget", { slug: slugA });
+    await post("/forget", { slug: `issues/lum-${b.id.slice(1)}` });
+    const again = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
+    await post("/forget", { slug: `issues/lum-${again.id.slice(1)}` });
+    const ok = n > 109 && shapeOk && worldOk && recallOk && linkOk && uniqueOk && bOk && bad.status === 400 && noPos.status === 400 && again.title === a.title;
+    if (!ok) console.log("  ", JSON.stringify({ a, shapeOk, worldOk, recallOk, linkOk, ids, bOk, bad: bad.status, noPos: noPos.status, again: again?.title }));
+    return ok;
+  });
+}
+// Destructive (wipes all learnings, units and spawned issues): only with SMOKE_RESET=1.
+if (process.env.SMOKE_RESET === "1") {
+  await check("reset removes spawned issues and learnings and refills the pool", async () => {
+    const first = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
+    await post("/remember", { unitId: "smoke", targetId: "t101", text: "Smoke learning before reset." });
+    const r = await post("/reset", {});
+    const g = await get("/graph");
+    const clean = !g.nodes.some((x: any) => x.type === "learning" || x.type === "unit" || x.id === `issues/lum-${first.id.slice(1)}`);
+    const w = await get("/world");
+    const again = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
+    await post("/reset", {});
+    return r.ok && clean && w.targets.length === 9 && again.title === first.title && again.issue === first.issue;
+  });
+}
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

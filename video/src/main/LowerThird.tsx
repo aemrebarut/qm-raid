@@ -9,8 +9,9 @@ export const LowerThird: React.FC<{ text: string; frames: number }> = ({ text, f
     <div
       style={{
         position: "absolute",
-        left: 80,
-        bottom: 90,
+        // top left, clear of the board HUD (event feed, unit card and command buttons sit at the bottom)
+        left: 48,
+        top: 64,
         transform: `translateX(${x}px)`,
         opacity: o,
         background: "rgba(16,21,28,0.88)",
@@ -19,9 +20,9 @@ export const LowerThird: React.FC<{ text: string; frames: number }> = ({ text, f
         padding: "16px 30px",
         color: theme.parchment,
         fontFamily: theme.bodyFont,
-        fontSize: 44,
+        fontSize: 40,
         fontWeight: 700,
-        maxWidth: 1400,
+        maxWidth: 1180,
       }}
     >
       {text}

@@ -19,13 +19,13 @@ type Rule = {
   vo: Record<string, string>;
 };
 
-const TITLE = 1.2; // title card at the head of every clip
+const TITLE = 1.0; // title card at the head of every clip
 const MAX_FF = 12;
 const CAP_DUR = 2.6;
 
 const RULES: Record<string, Rule> = {
   orders: {
-    target: 20,
+    target: 15,
     hold: { select: [1.2, 1.2], order: [0.3, 2.2], recall_beam: [0.4, 2.4], reply: [0.4, 2.6], order_done: [0.2, 1], remember_orb: [0.4, 2.4], library: [0.2, 1.6] },
     fx: {
       select: { kind: "callout", text: "KNIGHT|a real QM agent" },
@@ -37,7 +37,7 @@ const RULES: Record<string, Rule> = {
     vo: { vo_orders_1: "select", vo_orders_2: "recall_beam", vo_orders_3: "reply", vo_orders_4: "remember_orb" },
   },
   teams: {
-    target: 20,
+    target: 14,
     hold: { select3: [1, 1], form_team: [0.3, 1.2], trio: [0.3, 1.8], order: [0.3, 1.5], "handoff*": [0.4, 1.6], verdict_approved: [0.5, 2.6], verdict_changes: [0.5, 2], run_done: [0.2, 1.2], camp_resolved: [0.2, 1.4] },
     fx: {
       trio: { kind: "callout", text: "TRIO|planner, implementer, reviewer" },
@@ -49,7 +49,7 @@ const RULES: Record<string, Rule> = {
     vo: { vo_teams_1: "select3", vo_teams_2: "order", vo_teams_3: "handoff*", vo_teams_4: "verdict_approved" },
   },
   forge: {
-    target: 20,
+    target: 15,
     hold: { forge_open: [0.8, 1.2], described: [1.2, 1], forge_submit: [0.3, 1], card: [0.3, 3.2], train: [0.3, 1], spawned: [0.3, 2], unit_spawned: [0.3, 2], order_active: [0.3, 1.5], recall_beam: [0.3, 1.5] },
     fx: {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
@@ -60,7 +60,7 @@ const RULES: Record<string, Rule> = {
     vo: { vo_forge_1: "forge_open", vo_forge_2: "described", vo_forge_3: "card", vo_forge_4: "train" },
   },
   autopilot: {
-    target: 15,
+    target: 11, // command montage part 1 (14 s without a loadout capture)
     hold: { new_issue: [0.6, 0.6], camp_spawned: [0.3, 1.6], autopilot_on: [0.3, 1], proposal: [0.3, 1.8], proposed: [0.3, 1.8], veto: [0.4, 1.6], order_cancelled: [0.2, 0.8], autopilot_go: [0.3, 1.6], order_active: [0.2, 1.2] },
     fx: {
       camp_spawned: [{ kind: "callout", text: "NEW ISSUE|a new camp" }, { kind: "mascotShock", text: "More monsters!", lead: 0.4 }],
@@ -72,8 +72,8 @@ const RULES: Record<string, Rule> = {
     vo: { vo_auto_1: "new_issue", vo_auto_2: "proposed", vo_auto_3: "veto" },
   },
   loadout: {
-    target: 15,
-    hold: { "loadout*": [0.6, 1.8], select: [0.8, 1], save: [0.3, 1.6], order: [0.3, 1.6], order_active: [0.3, 1.4] },
+    target: 3, // command montage part 2
+    hold: { "loadout*": [0.3, 1.2], save: [0.3, 1.0] },
     fx: {},
     caps: { "loadout*": "Loadout: the unit's standing orders" },
     vo: { vo_loadout_1: "loadout*", vo_loadout_2: "save" },
@@ -85,14 +85,14 @@ const match = (table: Record<string, unknown>, name: string): string | undefined
 
 const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
 
-function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }) {
+function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, ext: string, title = TITLE, target = rule.target) {
   const D = doc.duration;
   const evs = doc.events.filter((e) => match(rule.hold, e.name));
   if (!evs.length) return null;
   // 1x windows around events; the first one also covers the title card.
   let wins = evs.map((e, i) => {
     const [pre, post] = rule.hold[match(rule.hold, e.name)!];
-    return [Math.max(0, e.t - pre - (i === 0 ? TITLE : 0)), Math.min(D, e.t + post)] as [number, number];
+    return [Math.max(0, e.t - pre - (i === 0 ? title : 0)), Math.min(D, e.t + post)] as [number, number];
   });
   wins.sort((a, b) => a[0] - b[0]);
   const merged: [number, number][] = [];
@@ -106,19 +106,19 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }) {
   const gaps: [number, number][] = [];
   for (let i = 1; i < wins.length; i++) gaps.push([wins[i - 1][1], wins[i][0]]);
   const G = gaps.reduce((s, g) => s + g[1] - g[0], 0);
-  const T = rule.target;
+  const T = target;
   let holdRate = 1;
-  let gapRate = G > 0 && T - H > 0.5 ? G / (T - H) : MAX_FF;
+  let gapRate = G > 0 && T - H > 0.5 ? G / (T - H) : Infinity;
   if (gapRate < 1) {
     // More room than action: play gaps at 1x and extend the tail if the source allows.
     gapRate = 1;
     const spare = T - H - G;
     wins[wins.length - 1][1] = Math.min(D, wins[wins.length - 1][1] + spare);
   } else if (gapRate > MAX_FF) {
-    gapRate = MAX_FF;
-    holdRate = Math.min(2, H / Math.max(0.1, T - G / MAX_FF));
-  } else if (G === 0 && H > T) {
-    holdRate = Math.min(2, H / T);
+    // Holds alone overrun the slot: gaps at max fast-forward, holds sped up to fit (warns above 1.6x).
+    gapRate = G > 0 ? MAX_FF : 1;
+    holdRate = Math.max(1, H / Math.max(0.5, T - G / gapRate));
+    if (holdRate > 1.6) console.log(`  ${id}: holds need ${holdRate.toFixed(2)}x, trim hold windows in RULES`);
   }
   gapRate = Math.round(gapRate * 10) / 10;
   holdRate = Math.round(holdRate * 100) / 100;
@@ -144,7 +144,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }) {
   const events: { name: string; at: number }[] = [];
   const voAnchor: Record<string, number> = {};
   const seenFx = new Set<string>();
-  let capEnd = TITLE + 0.1;
+  let capEnd = title + 0.1;
   for (const e of doc.events) {
     const at = round(out(e.t), 2);
     events.push({ name: e.name, at });
@@ -154,7 +154,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }) {
       for (const f of ([] as FxRule[]).concat(rule.fx[fk])) {
         const text = f.text === "$name" ? String(e.unitName ?? e.typeName ?? "") : f.text;
         const xy = f.noXY ? {} : { x: e.x, y: e.y };
-        fx.push({ at: round(Math.max(TITLE, at + (f.lead ?? 0)), 2), kind: f.kind, ...(text ? { text } : {}), ...xy });
+        fx.push({ at: round(Math.max(title, at + (f.lead ?? 0)), 2), kind: f.kind, ...(text ? { text } : {}), ...xy });
       }
     }
     const ck = match(rule.caps, e.name);
@@ -171,20 +171,27 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }) {
     }
   }
   const total = segs.reduce((s, g) => s + Math.round(((g.to - g.from) / g.rate) * 30) / 30, 0);
-  return { id, src: `clips/${id}.webm`, segments: segs, captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
+  const src = `clips/${id}.${ext}`;
+  return { id, src, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
 const dir = process.argv[2] ?? join(import.meta.dir, "../public/clips");
 const edlPath = join(import.meta.dir, "../src/edl.json");
 const prev = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, "utf8")) : {};
 const edl: Record<string, unknown> = { ...prev };
+const loadoutCaptured = ["mp4", "webm"].some((x) => existsSync(join(dir, `loadout.${x}`))) && existsSync(join(dir, "loadout.markers.json"));
 for (const [id, rule] of Object.entries(RULES)) {
   const f = join(dir, `${id}.markers.json`);
-  if (!existsSync(f) || !existsSync(join(dir, `${id}.webm`))) {
+  const ext = ["mp4", "webm"].find((x) => existsSync(join(dir, `${id}.${x}`)));
+  if (!existsSync(f) || !ext) {
     console.log(`${id}: no capture`);
     continue;
   }
-  const p = plan(id, rule, JSON.parse(readFileSync(f, "utf8")));
+  const doc = JSON.parse(readFileSync(f, "utf8"));
+  const p =
+    id === "loadout"
+      ? plan(id, rule, doc, ext, 0)
+      : plan(id, rule, doc, ext, TITLE, id === "autopilot" && !loadoutCaptured ? 14 : rule.target);
   if (!p) {
     console.log(`${id}: no usable events`);
     continue;
@@ -192,5 +199,34 @@ for (const [id, rule] of Object.entries(RULES)) {
   edl[id] = p;
   console.log(`${id}: ${p.seconds}s (target ${rule.target}), hold ${p.holdRate}x, gaps ${p.gapRate}x, ${p.segments.length} segs, ${p.fx.length} fx, ${p.captions.length} caps, vo ${Object.keys(p.voAnchor).join(",")}`);
 }
+// Command montage: autopilot, then the short loadout edit.
+type P = NonNullable<ReturnType<typeof plan>>;
+const ap = edl.autopilot as P | undefined;
+const lo = edl.loadout as P | undefined;
+if (ap) {
+  const off = ap.seconds;
+  edl.command = {
+    id: "command",
+    src: ap.src,
+    segments: [...ap.segments, ...(lo?.segments ?? [])],
+    captions: [...ap.captions, ...(lo?.captions ?? []).map((c) => ({ ...c, at: round(c.at + off, 2) }))],
+    fx: [...ap.fx, ...(lo?.fx ?? []).map((x) => ({ ...x, at: round(x.at + off, 2) }))],
+    events: [...ap.events, ...(lo?.events ?? []).map((e) => ({ ...e, at: round(e.at + off, 2) }))],
+    voAnchor: { ...ap.voAnchor, ...Object.fromEntries(Object.entries(lo?.voAnchor ?? {}).map(([k, v]) => [k, round(v + off, 2)])) },
+    seconds: round(off + (lo?.seconds ?? 0), 2),
+  };
+  console.log(`command: ${(edl.command as P).seconds}s (autopilot ${off}s + loadout ${lo?.seconds ?? 0}s)`);
+}
+
+// Hero: 2 s of busy gameplay, starting just before its first recall beam when marked.
+const heroExt = ["mp4", "webm"].find((x) => existsSync(join(dir, `hero.${x}`)));
+if (heroExt) {
+  const hm = join(dir, "hero.markers.json");
+  const doc = existsSync(hm) ? JSON.parse(readFileSync(hm, "utf8")) : { duration: 4, events: [] };
+  const beam = (doc.events as Ev[]).find((e) => e.name === "recall_beam");
+  const from = round(Math.min(Math.max(0.3, beam ? beam.t - 0.6 : 0.5), Math.max(0.3, doc.duration - 2.1)));
+  edl.hero = { src: `clips/hero.${heroExt}`, from };
+  console.log(`hero: from ${from}s`);
+} else delete edl.hero;
 writeFileSync(edlPath, JSON.stringify(edl, null, 2) + "\n");
 console.log(`wrote ${edlPath}`);

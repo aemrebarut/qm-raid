@@ -2,16 +2,17 @@ import { AbsoluteFill, Audio, Sequence, Series, staticFile } from "remotion";
 import { VoTrack, useManifest } from "./audio";
 import { Intro } from "../intro/Intro";
 import { CUES } from "../fx";
-import { END_FRAMES, FPS, INTRO_FRAMES, clipFrames, clips, planned } from "../timeline";
+import { END_FRAMES, FPS, HERO_FRAMES, INTRO_FRAMES, clipFrames, clips, planned } from "../timeline";
+import { Hero } from "./Hero";
 import { Clip } from "./Clip";
 import { EndCard } from "./EndCard";
 
-// The full cut: intro, five capability clips, end card. Audio (VO, music, sfx) is layered here
+// The full cut: 2 s gameplay hero (frame 0 = thumbnail), 13 s anime intro, five capability clips, end card. Audio (VO, music, sfx) is layered here
 // from video/audio/manifest.json once raid-video-vo delivers it.
 // Section start in frames, by id: intro, each clip id, end.
 export const sectionStarts = (): Record<string, number> => {
-  const out: Record<string, number> = { intro: 0 };
-  let at = INTRO_FRAMES;
+  const out: Record<string, number> = { hero: 0, intro: HERO_FRAMES };
+  let at = HERO_FRAMES + INTRO_FRAMES;
   for (const c of clips) {
     out[c.id] = at;
     at += clipFrames(c);
@@ -63,6 +64,9 @@ export const Main: React.FC = () => (
   <AbsoluteFill style={{ background: "#000" }}>
     <AudioBed />
     <Series>
+      <Series.Sequence durationInFrames={HERO_FRAMES}>
+        <Hero />
+      </Series.Sequence>
       <Series.Sequence durationInFrames={INTRO_FRAMES}>
         <Intro />
       </Series.Sequence>
@@ -78,7 +82,7 @@ export const Main: React.FC = () => (
     {WIPE
       ? Object.entries(sectionStarts())
           // the intro ends on its own white wipe
-          .filter(([k]) => k !== "intro" && k !== clips[0].id)
+          .filter(([k]) => k !== "hero" && k !== "intro" && k !== clips[0].id)
           .map(([k, at]) => (
             <Sequence key={`wipe-${k}`} from={at - Math.floor(WIPE.frames / 2)} durationInFrames={WIPE.frames}>
               <WIPE.C />

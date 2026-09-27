@@ -5,7 +5,7 @@ import { FxLayer, punch } from "./FxLayer";
 import { LowerThird } from "./LowerThird";
 import { TitleCard } from "./TitleCard";
 
-const TITLE_FRAMES = 36;
+const TITLE_FRAMES = 30;
 
 const FastForward: React.FC<{ rate: number }> = ({ rate }) => {
   const f = useCurrentFrame();
@@ -52,7 +52,7 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
           at += len;
           return (
             <Sequence key={i} from={from} durationInFrames={len}>
-              <OffthreadVideo src={staticFile(c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
+              <OffthreadVideo src={staticFile(g.src ?? c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
               {g.rate > 2 && len > 12 ? <FastForward rate={Math.round(g.rate)} /> : null}
             </Sequence>
           );

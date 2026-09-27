@@ -256,6 +256,17 @@
    "at": 35
   },
   {
+   "file": "vo_teams_4.wav",
+   "id": "vo_teams_4",
+   "section": "teams",
+   "duration": 4.32,
+   "text": "Rejected three times? The team escalates to a human instead of shipping.",
+   "engine": "eleven",
+   "anchor": "run_needs_human",
+   "offset": 0,
+   "at": 35
+  },
+  {
    "file": "vo_auto_3.wav",
    "id": "vo_auto_3",
    "section": "autopilot",

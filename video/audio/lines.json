@@ -149,6 +149,16 @@
    "el": "Same trio, inside Q M: every handoff is a real conversation."
   },
   {
+   "id": "vo_teams_4",
+   "section": "teams",
+   "role": "herald",
+   "alt": true,
+   "anchor": "run_needs_human",
+   "max": 4.3,
+   "text": "Rejected three times? The team escalates to a human instead of shipping.",
+   "el": "Rejected three times? The team escalates to a human... instead of shipping."
+  },
+  {
    "id": "vo_forge_1",
    "section": "forge",
    "role": "herald",

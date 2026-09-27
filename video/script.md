@@ -32,6 +32,7 @@ Words: 180 spoken, 80 s of speech in 110 s; every capability clip keeps at least
 | vo_teams_2b (alt) | handoff | 43.52 | 6.82 | Right-click a camp, and the scrolls fly. The reviewer is a Rule Warden, forged by River. |
 | vo_teams_3b (alt) | verdict | 51.28 | 3.98 | Verdict: changes! Back to the anvil, implementer. |
 | vo_teams_qm (alt) | qm_cut | 35 | 4.78 | Same trio, inside QM: every handoff is a real conversation. |
+| vo_teams_4 (alt) | run_needs_human | anchor | 4.32 | Rejected three times? The team escalates to a human instead of shipping. |
 
 ## Clip 3 The Forge (River AI) 0:55 to 1:15 (20 s slot, 14.2 s speech, 34 words)
 | id | anchor | at (s) | dur (s) | line |
@@ -59,7 +60,7 @@ Words: 180 spoken, 80 s of speech in 110 s; every capability clip keeps at least
 | vo_end |  | 104.3 | 4.19 | One human. Thirty-one AI agents. Built today. |
 | vo_end_b (alt) |  | 104 | 3.6 | One human, a swarm of AI agents, built today. |
 
-Alts: `vo_teams_2b` names the Rule Warden (use only if the take shows it reviewing); `vo_teams_3b` if the verdict is CHANGES; `vo_auto_3` only if a cancel is on screen; `vo_orders_qm` and `vo_teams_qm` for the QM web UI intercuts, only if the QM view shows what they say (the order, GBrain tool calls, the reply; the teammates' conversations). If an intercut line is used, shorten or drop the neighbouring line so the clip still breathes. `vo_end_b` has no number.
+Alts: `vo_teams_2b` names the Rule Warden (use only if the take shows it reviewing); `vo_teams_3b` if the verdict is CHANGES; `vo_auto_3` only if a cancel is on screen; `vo_orders_qm` and `vo_teams_qm` for the QM web UI intercuts, only if the QM view shows what they say (the order, GBrain tool calls, the reply; the teammates' conversations). If an intercut line is used, shorten or drop the neighbouring line so the clip still breathes. `vo_teams_4` on run_needs_human (the take's Rule Warden said CHANGES three times and the run ended needs_human: past maxLoops the engine hands the issue back instead of shipping, docs/CONTRACT.md Team workflows). `vo_end_b` has no number.
 
 ## Evidence for claims (for raid-video-rev)
 - "a real QM agent": knight = QM agent on gpt-6-astra (docs/CONTRACT.md class map); the take runs on the real engine 4610 with real QM.

@@ -1,0 +1,9 @@
+{
+  "name": "brain",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "test": "bun run test/smoke.ts"
+  }
+}

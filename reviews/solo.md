@@ -47,9 +47,21 @@ Validation:
 - Executed the committed `slugify` body using Bun with an empty map: confirmed all three built-in collisions without creating those conflicting types in the running service.
 - Full dry-run completion check for `smoke-ranger-2`: PASS, observed training and evaluating, then `ready` with progress 1, 160 examples, `model: dry-run:smoke-ranger-2`, and `evalScore: null`.
 
+## 2026-09-27: Forge fixes `4585f77`
+
+Reviewed `4585f77d76cd84a2ca01510b197a64dd8f2f83b1` with no working-tree differences in Forge/River paths. Both findings from `5715cca` are resolved for newly generated types/data:
+
+- The committed id generator returns `forge-knight`, `forge-ranger`, `forge-scout`, and `forge-oracle`; repeated Knight names produce `forge-knight-2` and `forge-knight-3`.
+- The new split returns 128 distinct train prompts and 32 distinct evaluation prompts with zero overlap for both the fallback world and the live nine-target Brain world at seed 7. The pipeline preserves that split when writing JSONL. This establishes held-out phrasing, not held-out issue/generalization evaluation.
+- `cd services/forge && bun run smoke`: PASS against the restarted service (reported PID 65749), type `forge-smoke-ranger-2`.
+- Full dry-run completion: PASS, `ready`, progress 1, 160 examples, `model: dry-run:forge-smoke-ranger-2`, `evalScore: null`.
+- Devbrain `code/forge` is now available and was read.
+
+No new actionable findings in this fix commit. The earlier push of review commit `84aaa1d` raced another agent's push; a subsequent `git ls-remote` confirmed remote main had advanced to descendant `2288e94`, including that review. No pull, force push, or history rewrite was used.
+
 ## Lane review queue
 
-- `raid-gbrain`: awaiting first submitted commit SHA.
-- `raid-river`: `5715cca` reviewed; two P2 findings sent, awaiting fixes.
+- `raid-gbrain`: reviewing `eedbb1a` and `b603566`.
+- `raid-river`: `5715cca` reviewed; both P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

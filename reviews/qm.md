@@ -29,3 +29,12 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Sent source-derived implementation checks to both teammates: CUSTOM name=run has the run directly in value, initial/reconnect text is in run.partial, and RUN_FINISHED also terminates failed runs. Completion must use run.status and run.result instead of treating the event name alone as success.
 - Clarified to the lead that a mock hello proves wiring only, not real-model M1. The lead's plan selects the Codex harness with existing local OAuth.
 - Devbrain code/qm-bridge was not yet published when checked; code/qm-review remains the reviewer-owned map page.
+
+## 2026-09-27 14:51 PDT: 4e099bb portal client and M1 smoke
+
+- Reviewed all four changed files and read the current code/qm-bridge page. No credentials or QM core imports are introduced. The client uses the local portal's existing authentication relay.
+- Runtime prerequisite: `cd qm && bash scripts/dev-instance.sh status` reported pool1 live on ports 8081/8097/8113/8129.
+- Executed `cd services/qm-bridge && bun test/smoke.ts`: exit 0 in 6.1 s, run status done, result status ok, nonempty sessionId, and a five-word model reply. M1's real-model path is independently verified on this instance.
+- **P1, services/qm-bridge/src/qm.ts:78: waitRun treats pending as terminal.** QM's run-store status union is pending/running/done/failed and app-turn.ts returns that status unchanged. A newly queued or retried run can therefore make waitRun return result:null before execution and make the smoke fail spuriously. Return only for done/failed, or include pending in the nonterminal states.
+- Reproduction: temporarily substituted fetch in an isolated Bun process with synthetic pending -> running -> done responses. waitRun returned pending after one read; expected done after three reads. No live service was replaced or stopped.
+- Sent the finding and successful live smoke evidence to raid-qm-impl and raid-qm-plan in the default Herdr session. Queue-state fix and regression check remain open; Bridge API/MCP behavior is not part of this commit and remains unverified.

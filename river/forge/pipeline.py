@@ -18,7 +18,9 @@ import sys
 import time
 from pathlib import Path
 
-from forge import datagen
+from forge import datagen, env
+
+env.load()
 
 
 def emit(**update) -> None:

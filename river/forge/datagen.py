@@ -84,7 +84,8 @@ def _order(tpl: str, extra: str, t: dict, world: dict, comps: dict) -> dict:
     order = tpl.format(issue=t["issue"], kind=t["kind"], severity=t["severity"],
                        component=comps.get(t["component"], t["component"]), title=t["title"],
                        customers=_customers(t, world)) + extra
-    return {"order": order, "meta": {"targetId": t["id"], "issue": t["issue"], "component": t["component"], "extra": extra.strip()}}
+    return {"order": order, "meta": {"targetId": t["id"], "issue": t["issue"], "component": t["component"], "extra": extra.strip(),
+                                        "customers": [c.strip() for c in _customers(t, world).split(",") if c.strip()]}}
 
 
 def build_split(spec: TypeSpec, world: dict, n_train: int, n_eval: int, seed: int) -> tuple[list[dict], list[dict]]:
@@ -115,15 +116,15 @@ def build_split(spec: TypeSpec, world: dict, n_train: int, n_eval: int, seed: in
 def system_prompt(spec: TypeSpec) -> str:
     return (f"You are a {spec.name}, a unit on the Lumen agent board. Your job: {spec.description} "
             "Before acting, recall what the team brain knows about the component and customer. "
-            "Answer with a short plan, the fix or triage decision, a reply to the customer, and one learning to remember.")
+            "Answer under these headings, in order: Recall:, Plan:, Decision:, Customer reply:, Remember:. "
+            "Name the issue id, the component and the customer.")
 
 
 def template_response(spec: TypeSpec, p: dict, world: dict) -> str:
     """Deterministic stand-in for the teacher: structured, in the type's voice."""
     m = p["meta"]
     t = next(x for x in world["targets"] if x["id"] == m["targetId"])
-    cust = _customers(t, world)
-    first = cust.split(",")[0]
+    first = (m.get("customers") or [_customers(t, world)])[0]
     verb = "fix" if t["kind"] == "bug" else "scope"
     return (
         f"{spec.name} on {t['issue']}.\n"

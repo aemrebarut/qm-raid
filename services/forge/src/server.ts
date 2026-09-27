@@ -15,8 +15,10 @@ const RIVER_DIR = resolve(import.meta.dir, "../../../river");
 const RUNS_DIR = join(RIVER_DIR, "runs");
 const STORE = join(RUNS_DIR, "types.json");
 const PYTHON = join(RIVER_DIR, ".venv/bin/python");
-// dry (default): fake training, real synthetic data. river: real River SFT (needs RIVER_API_KEY in env).
-const MODE = process.env.FORGE_MODE === "river" ? "river" : "dry";
+// dry: fake training, real synthetic data. river: real River SFT. Default: river when RIVER_API_KEY is set
+// (Bun loads services/forge/.env when started from services/forge), else dry. FORGE_MODE overrides.
+const MODE = process.env.FORGE_MODE === "dry" || process.env.FORGE_MODE === "river"
+  ? process.env.FORGE_MODE : process.env.RIVER_API_KEY ? "river" : "dry";
 const DRY_SECONDS = Number(process.env.FORGE_DRY_SECONDS ?? 60);
 
 const types = new Map<string, ForgeType>();

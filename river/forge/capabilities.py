@@ -2,6 +2,10 @@
 import os
 import sys
 
+from forge import env
+
+env.load()
+
 key = os.environ.get("RIVER_API_KEY")
 if not key:
     sys.exit("RIVER_API_KEY is not set (Emre sets it); dry-run mode still works")

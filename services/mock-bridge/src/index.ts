@@ -4,9 +4,17 @@ import { buildScript, isOrderSend } from "./script.ts";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT ?? 4615);
-const SPEED = Math.max(0.1, Number(process.env.MOCK_SPEED ?? 1)); // >1 plays scripts faster (tests)
-const ERROR_RATE = Math.min(1, Math.max(0, Number(process.env.MOCK_FAIL ?? 0) || 0)); // 0.1 = 10% of orders fail
 const BASE = `http://${HOST}:${PORT}`;
+
+// Env vars are the defaults; POST /debug/config changes them at runtime (not part of the Bridge API).
+const clamp = (v: unknown, lo: number, hi: number, dflt: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
+const truthy = (v: unknown) => v === true || v === 1 || v === "1" || v === "true";
+const config = {
+  speed: clamp(process.env.MOCK_SPEED ?? 1, 0.1, 100, 1),      // >1 plays scripts faster (tests)
+  fail: clamp(process.env.MOCK_FAIL ?? 0, 0, 1, 0),            // 0.1 = 10% of orders end in a terminal error
+  noGbrain: truthy(process.env.MOCK_NO_GBRAIN),                // no gbrain tool calls (engine fallback)
+  mcpNames: clamp(process.env.MOCK_MCP_NAMES ?? 0.25, 0, 1, 0.25), // share of runs with mcp__gbrain__* tool names
+};
 
 interface MockUnit extends SpawnRequest {
   sessionId: string;
@@ -78,13 +86,14 @@ function play(u: MockUnit, req: SendRequest) {
   stop(u, order ? "order" : "chat");
   const slot = order ? u.timers.order : u.timers.chat;
   if (order) u.orderId = req.orderId ?? null;
-  const steps = buildScript(u.id, u.name, req, { errorRate: ERROR_RATE });
+  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames });
+  const speed = config.speed;
   for (const s of steps) {
     const t = setTimeout(() => {
       if (units.get(u.id) !== u) return; // deleted meanwhile
       emit(s.event);
       if (order && (s.event.type === "reply" || s.event.type === "error")) { u.orderId = null; u.timers.order = []; }
-    }, Math.round(s.at / SPEED));
+    }, Math.round(s.at / speed));
     slot.push(t);
   }
 }
@@ -112,6 +121,19 @@ const server = Bun.serve({
     try {
       if (m === "GET" && url.pathname === "/health") return json({ ok: true, service: "mock-bridge", units: units.size, clients: clients.size });
       if (m === "GET" && url.pathname === "/events") return sse(req, srv);
+      if (url.pathname === "/debug/config") {
+        if (m === "GET") return json({ ok: true, config });
+        if (m === "POST") {
+          const b = await body<{ speed?: number; fail?: number; noGbrain?: boolean; mcpNames?: number }>(req);
+          if (!b || typeof b !== "object") return fail("json body required");
+          if (b.speed !== undefined) config.speed = clamp(b.speed, 0.1, 100, config.speed);
+          if (b.fail !== undefined) config.fail = clamp(b.fail, 0, 1, config.fail);
+          if (b.noGbrain !== undefined) config.noGbrain = truthy(b.noGbrain);
+          if (b.mcpNames !== undefined) config.mcpNames = clamp(b.mcpNames, 0, 1, config.mcpNames);
+          console.log(`config ${JSON.stringify(config)}`);
+          return json({ ok: true, config });
+        }
+      }
 
       if (parts[0] === "units") {
         const id = parts[1];
@@ -158,5 +180,5 @@ const server = Bun.serve({
   },
 });
 
-console.log(`mock-bridge on ${BASE} (speed x${SPEED}, error rate ${ERROR_RATE})`);
+console.log(`mock-bridge on ${BASE} ${JSON.stringify(config)}`);
 export { server };

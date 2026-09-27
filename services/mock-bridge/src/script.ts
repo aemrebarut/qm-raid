@@ -9,6 +9,7 @@ export interface OrderInfo {
   component: string | null;  // "billing"
   title: string | null;
   customers: string[];       // slugs, ["companies/acme-robotics"]
+  learningSlug: string | null; // engine-assigned "learnings/lum-12-u1-1790546460000"
 }
 
 const COMPONENTS = ["billing", "auth", "onboarding", "search"];
@@ -24,7 +25,8 @@ export function parseOrder(text: string, componentId?: string): OrderInfo {
   const ids = text.match(/^\s*customers\s*:\s*(.+)$/im)?.[1]?.split(/[,\s]+/).filter((c) => /^[a-z0-9-]+$/.test(c)) ?? [];
   const slugs = (text.match(/(?:customers|companies)\/[a-z0-9-]+/g) ?? []).map((c) => c.replace(/^customers\//, "companies/"));
   const customers = [...new Set([...ids.map((c) => `companies/${c}`), ...slugs])];
-  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers };
+  const learningSlug = text.match(/\blearnings\/[a-z0-9][a-z0-9-]*/)?.[0] ?? null;
+  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers, learningSlug };
 }
 
 // House rules mirror world/brain (rules/* pages exist for billing, auth, search) so recall beams hit real pages.
@@ -46,7 +48,13 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
 }
 
-export interface ScriptOpts { rand?: () => number; errorRate?: number; now?: number }
+export interface ScriptOpts {
+  rand?: () => number;
+  errorRate?: number;  // MOCK_FAIL: share of orders that end in a terminal error event
+  noGbrain?: boolean;  // MOCK_NO_GBRAIN: no gbrain tool calls at all (exercises the engine fallback)
+  mcpRate?: number;    // share of runs that use MCP-style tool names (mcp__gbrain__search, ...)
+  now?: number;
+}
 
 // Only an explicit orderId makes a send an order (full 6 to 10 s work sequence); anything else is a direct
 // message and gets a short chat, even if its text mentions an issue. Text parsing only supplies context.
@@ -54,12 +62,24 @@ export function isOrderSend(req: SendRequest): boolean {
   return typeof req.orderId === "string" && req.orderId.length > 0;
 }
 
+// gbrain tool names as a real QM agent may report them through MCP
+const MCP_NAMES: Record<string, string> = {
+  "gbrain.recall": "mcp__gbrain__search", "gbrain.search": "mcp__gbrain__search", "gbrain.get_page": "mcp__gbrain__get_page",
+  "gbrain.remember": "mcp__gbrain__put_page", "gbrain.add_link": "mcp__gbrain__add_link",
+};
+
 export function buildScript(unitId: string, unitName: string, req: SendRequest, opts: ScriptOpts = {}): Step[] {
   const rand = opts.rand ?? Math.random;
   const o = parseOrder(req.text, req.componentId);
-  if (!isOrderSend(req)) return chatScript(unitId, unitName, req.text, o, rand);
-  const failed = rand() < (opts.errorRate ?? 0);
-  return orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
+  const steps = isOrderSend(req)
+    ? orderScript(unitId, unitName, o, req.orderId, rand() < (opts.errorRate ?? 0), opts.now ?? Date.now(), rand)
+    : chatScript(unitId, unitName, req.text, o, rand);
+  const gb = (e: BridgeEvent) => e.type === "activity" && !!e.tool?.startsWith("gbrain.");
+  if (opts.noGbrain) return steps.filter((s) => !gb(s.event));
+  if (rand() < (opts.mcpRate ?? 0)) {
+    for (const s of steps) if (gb(s.event) && s.event.type === "activity") s.event = { ...s.event, tool: MCP_NAMES[s.event.tool!] ?? s.event.tool!.replace("gbrain.", "mcp__gbrain__") };
+  }
+  return steps;
 }
 
 function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: string | undefined, failed: boolean, now: number, rand: () => number): Step[] {
@@ -69,8 +89,8 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
   const title = o.title ?? `work on ${comp}`;
   const issueSlug = o.issue ? `issues/${o.issue.toLowerCase()}` : null;
   const recallSlugs = [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : []), ...(issueSlug ? [issueSlug] : []), ...o.customers];
-  // contract slug convention: learnings/<issue>-<unitId>-<epoch ms>
-  const learnSlug = `learnings/${slugify(o.issue ?? comp)}-${slugify(unitId)}-${now}`;
+  // the engine assigns the learning slug in the prompt; else the contract convention learnings/<issue>-<unitId>-<epoch ms>
+  const learnSlug = o.learningSlug ?? `learnings/${slugify(o.issue ?? comp)}-${slugify(unitId)}-${now}`;
   const oid = orderId ? { orderId } : {};
   const a = (kind: "message" | "tool" | "thinking" | "error", text: string, tool?: string, args?: unknown): BridgeEvent =>
     tool ? { type: "activity", unitId, ...oid, kind, text, tool, args } : { type: "activity", unitId, ...oid, kind, text };
@@ -80,23 +100,23 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
     [0.03, a("thinking", `Reading the order: ${issue} "${title}" in ${comp}.`)],
     [0.12, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall",
       { query: `${comp} ${title}`, slugs: recallSlugs })],
-    [0.22, a("message", `GBrain house rule for ${comp}: ${f.rule}.`)],
+    ...(f.ruleSlug ? [[0.18, a("tool", `Reading ${f.ruleSlug}`, "gbrain.get_page", { slug: f.ruleSlug })] as [number, BridgeEvent]] : []),
+    [0.24, a("message", `House rule for ${comp}: ${f.rule}.`)],
     [0.32, a("tool", `Reading ${f.file}`, "read_file", { path: f.file })],
     [0.42, a("message", `Reproduced ${issue} locally.`)],
     [0.52, a("thinking", `The bug matches the house rule; the code breaks it.`)],
     [0.62, a("tool", `Editing ${f.file}`, "edit_file", { path: f.file })],
     [0.72, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
-    [0.80, a("message", `Tests pass. I ${f.fix}.`)],
-    [0.88, a("tool", `Remembering the learning from ${issue}`, "gbrain.remember",
-      { slug: learnSlug, text: `${title}: ${f.fix}. Rule: ${f.rule}.`, links: [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), `units/${unitId}`] })],
   ];
-  if (issueSlug && rand() < 0.5) seq.push([0.93, a("tool", `Linking the learning to ${issue}`, "gbrain.add_link", { from: learnSlug, to: issueSlug, linkType: "mentions" })]);
   if (failed) {
     // MOCK_FAIL path: tests fail, no remember, terminal error event instead of a reply
-    seq.splice(8); // keep up to the test run
     seq.push([0.85, a("error", `${f.test} still fails after the edit.`)]);
     seq.push([1.0, { type: "error", unitId, ...oid, text: `${unitName}: could not fix ${issue}; ${f.test} still fails.` }]);
   } else {
+    seq.push([0.80, a("message", `Tests pass. I ${f.fix}.`)]);
+    seq.push([0.88, a("tool", `Remembering the learning from ${issue}`, "gbrain.remember",
+      { slug: learnSlug, text: `${title}: ${f.fix}. Rule: ${f.rule}.`, links: [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), `units/${unitId}`] })]);
+    if (issueSlug && rand() < 0.5) seq.push([0.93, a("tool", `Linking the learning to ${issue}`, "gbrain.add_link", { from: learnSlug, to: issueSlug, linkType: "mentions" })]);
     seq.push([1.0, { type: "reply", unitId, ...oid, text: `${unitName}: fixed ${issue} "${title}". I ${f.fix}, added a regression test in ${f.test}, and saved the learning to GBrain as ${learnSlug}.` }]);
   }
 
@@ -107,7 +127,7 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
 }
 
 function chatScript(unitId: string, unitName: string, text: string, o: OrderInfo, rand: () => number): Step[] {
-  const total = 2000 + Math.floor(rand() * 1500);
+  const total = 2000 + Math.floor(rand() * 1000);
   const tokens = 300 + Math.floor(rand() * 700);
   const slugs = [...(o.component ? [`components/${o.component}`] : []), ...(o.issue ? [`issues/${o.issue.toLowerCase()}`] : [])];
   const about = o.issue ? ` about ${o.issue}` : o.component ? ` about ${o.component}` : "";

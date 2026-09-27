@@ -3,6 +3,7 @@ import { api, type Building, type Bus, type FeedEntry, type Order, type Selectio
 import { BarracksPanel } from "./barracks";
 import { slugChips } from "./chips";
 import { clear, h, put, RowList, safeColor, safeUrl, timeOf } from "./dom";
+import { FormationPanel, roleOf, teamOfSelection } from "./formation";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
 
@@ -10,7 +11,7 @@ const FEED_SHOWN = 40;
 
 const KIND_ICON: Record<string, string> = {
   message: "\u{1F4AC}", tool: "\u{1F6E0}", thinking: "\u{1F4AD}", error: "⚠",
-  recall: "\u{1F4D6}", remember: "\u{1F4DC}", link: "\u{1F517}", order: "⚔", reply: "✉", you: "\u{1F451}",
+  recall: "\u{1F4D6}", remember: "\u{1F4DC}", link: "\u{1F517}", order: "⚔", reply: "✉", you: "\u{1F451}", handoff: "\u{1F4E8}",
 };
 
 export class SidePanel {
@@ -19,6 +20,7 @@ export class SidePanel {
   private replySlot = h("div");
   private feedFor: string | null = null;
   private barracks: BarracksPanel;
+  private formation: FormationPanel;
   private feedLast: unknown = null;
   private sent = new Map<string, FeedItem[]>(); // the user's own messages, merged into the feed
   private feed = h("ol", { class: "hud-feed" });
@@ -30,8 +32,9 @@ export class SidePanel {
 
   constructor(private store: Store, private bus: Bus) {
     this.barracks = new BarracksPanel(bus);
+    this.formation = new FormationPanel(store, bus);
     // Feed and message box stay attached (only hidden) so typing focus survives re-renders.
-    this.root.append(this.body, this.barracks.root, this.feedWrap, this.replySlot, this.msg.el);
+    this.root.append(this.body, this.formation.root, this.barracks.root, this.feedWrap, this.replySlot, this.msg.el);
     store.onEvent(() => {
       const id = this.focusUnitId();
       if (id && this.feedFor === id && store.feed(id).at(-1) !== this.feedLast) this.renderFeed();
@@ -83,6 +86,10 @@ export class SidePanel {
     const barracks = !!s && this.sel.focus === "building" && s.buildings.find((b) => b.id === this.sel.building)?.kind === "barracks";
     this.barracks.root.hidden = !barracks;
     if (barracks && s) this.barracks.setState(s);
+    // Team view: the selection is exactly one team's members (chip name or its digit key).
+    const team = s && this.sel.focus === "units" ? teamOfSelection(s, this.sel.units) : undefined;
+    this.formation.root.hidden = !team;
+    if (team && s) this.formation.setState(s, team);
     this.root.dataset.empty = "false";
     if (!s) return void put(this.out, h("p", { class: "hud-hint" }, "Waiting for the engine..."));
     const sel = this.sel;
@@ -124,7 +131,7 @@ export class SidePanel {
         order
           ? h("div", { class: "hud-order" },
               h("div", null, target ? `${target.issue}: ${target.title}` : order.targetId),
-              h("div", { class: "hud-sub" }, `${order.status} · ${order.source === "autopilot" ? "autopilot" : "you"}`))
+              h("div", { class: "hud-sub" }, `${order.status} · ${sourceLabel(s, order)}`))
           : h("div", { class: "hud-sub" }, "No order. Right-click a camp to send this unit."),
       ),
       qmUrl ? h("a", { class: "hud-btn hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in QM") : null,
@@ -154,8 +161,14 @@ export class SidePanel {
   }
 
   private renderRoster(s: State, units: Unit[]): void {
-    put(this.out, 
-      h("h2", null, `${units.length} units selected`),
+    const team = teamOfSelection(s, units.map((u) => u.id));
+    put(this.out,
+      team
+        ? h("header", { class: "hud-side-head hud-team-head", style: `--team:${safeColor(team.color)}` },
+            h("span", { class: "hud-team-dot" }),
+            h("div", null, h("h2", null, `${team.name} team`),
+              h("div", { class: "hud-sub" }, `group ${team.id} · ${units.length} units · ${team.workflow ? `${team.workflow.preset} formation` : "no formation"} · autopilot ${team.autopilot ? "on" : "off"}`)))
+        : h("h2", null, `${units.length} units selected`),
       h("ul", { class: "hud-roster" },
         units.map((u) => {
           const team = s.teams.find((t) => t.id === u.team);
@@ -163,6 +176,7 @@ export class SidePanel {
             h("button", { class: "hud-roster-item", type: "button", "data-unit": u.id, onclick: () => this.bus.select([u.id]) },
               h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
               h("span", null, u.name),
+              roleOf(team, u.id) ? h("span", { class: "hud-role-tag" }, roleOf(team, u.id)!) : null,
               statusPill(u.status),
             ));
         }),
@@ -339,7 +353,17 @@ function unitName(s: State, id: string): string {
 
 function orderLine(s: State, o: Order): string {
   const u = s.units.find((x) => x.id === o.unitId);
-  return `${u?.name ?? o.unitId} (${o.status}${o.source === "autopilot" ? ", autopilot" : ""})`;
+  return `${u?.name ?? o.unitId} (${o.status}${o.source === "user" ? "" : `, ${sourceLabel(s, o)}`})`;
+}
+
+/** Who gave the order: you, the autopilot, or a team workflow (with the node's role). */
+function sourceLabel(s: State, o: Order): string {
+  if (o.source === "autopilot") return "autopilot";
+  if (o.source !== "workflow") return "you";
+  const run = o.runId ? s.workflowRuns.find((r) => r.id === o.runId) : undefined;
+  const wf = run ? s.teams.find((t) => t.id === run.teamId)?.workflow : undefined;
+  const role = o.nodeId ? wf?.nodes.find((n) => n.id === o.nodeId)?.role ?? o.nodeId : undefined;
+  return role ? `workflow, ${role}` : "workflow";
 }
 
 function prettySlug(slug: string): string {

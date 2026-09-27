@@ -6,7 +6,7 @@ import { h, RowList, timeOf } from "./dom";
 const LINES = 6;
 const ICON: Record<string, string> = {
   message: "\u{1F4AC}", tool: "\u{1F6E0}", thinking: "\u{1F4AD}", error: "⚠",
-  recall: "\u{1F4D6}", remember: "\u{1F4DC}", order: "⚔", reply: "✉",
+  recall: "\u{1F4D6}", remember: "\u{1F4DC}", order: "⚔", reply: "✉", handoff: "\u{1F4E8}",
 };
 
 export class GlobalFeed {

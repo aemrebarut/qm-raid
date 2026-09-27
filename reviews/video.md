@@ -183,3 +183,11 @@ VERDICT: CHANGES: keep the Forge score overlay within frame and unobscured.
 Evidence `/tmp/raid-video-rev/take1b-qm-raid-demo-1a7eaf17ce/`, `/tmp/raid-video-rev/take1b-audio-1a7eaf17ce/`, snapshots `/tmp/raid-video-rev/insurance-b-*`.
 
 VERDICT: APPROVED
+
+## V16: insurance score hold (16:26-16:27 PDT)
+
+`take1c/qm-raid-demo.mp4`, SHA256 `aeb09de8a3c3d44ad679f155b46b3b55c1beacf3545d20e9e4692104fa796953`: stable 72.896 second 1080p/30 H.264 and stereo 48 kHz AAC. Inspected all 37 samples every 2 seconds. The final four Forge scores remain legible at 46 and 48 seconds, extending their hold; Apply remains visible. All 14 voices align within 43 ms without overlaps. Decoded review audio and thumbnail are identical to approved take1b. No remaining P1 found in this insurance cut. Final recording, QM intercuts and final composite remain pending on the recording hold. Sent to raid-video and Analyst.
+
+Evidence `/tmp/raid-video-rev/take1c-qm-raid-demo-aeb09de8a3/`, `/tmp/raid-video-rev/take1c-audio-aeb09de8a3/`, snapshots `/tmp/raid-video-rev/insurance-c-*`.
+
+VERDICT: APPROVED

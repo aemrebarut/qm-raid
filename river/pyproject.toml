@@ -1,0 +1,6 @@
+[project]
+name = "qm-raid-river"
+version = "0.1.0"
+description = "Forge pipeline: synthetic data, River SFT, eval, serve"
+requires-python = ">=3.11"
+dependencies = ["river-client>=0.12.0"]

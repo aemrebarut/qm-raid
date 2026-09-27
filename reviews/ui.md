@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current checkpoint: A3 UI art-on and off-fallback checks PASS on 4619; full Formation click-through and forged-unit selection/movement pass. All reported UI P2s in this batch are verified fixed. Authorized default-art flip a456886 and shared Forge plate 98de3e8 accepted. Latest board validation: 22 tests / 127 assertions pass; typecheck currently fails in uncommitted HUD Loadout edits, reported to the owner. Previous typecheck and build passed. No JavaScript page errors; test Forge evaluation fetch 404s remain a reported network caveat.
+Current checkpoint: Frozen. A3 UI art-on and off-fallback checks PASS on 4619; full Formation click-through and forged-unit selection/movement pass. Authorized default-art flip a456886 and shared Forge plate 98de3e8 accepted. Latest board validation: 22 tests / 127 assertions and typecheck pass after the Loadout owner narrowed retired to boolean. Post-freeze requested review f9bdb1a found a P2: expansion controls are redundant after 3259597 removed row hiding; all order actions remain available by scrolling. Analyst notified. No JavaScript page errors; test Forge evaluation fetch 404s remain a reported network caveat.
 
 ## Review procedure
 
@@ -238,3 +238,10 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Real Chrome canvas check imports the building component from 4619 without mounting the board or sending engine requests. Both default art and ?art=off use the same 512x64 Forge plate at width 3.9. Initial hidden state, setWork hide/show, and pixel samples for half/full River-blue fill pass.
 - Inspected the full texture and overview-scale image in /tmp/raid-ui-review/forge-plate.png: condensed caps and the thin progress bar remain readable. No page errors; the single browser closed after the check.
 - Board tests pass: 22 tests / 127 assertions. Current working-tree typecheck fails at uncommitted hud/loadout.ts:296 because the retired property is inferred unknown for the disabled attribute. Sent exact error and boolean-narrowing suggestion to raid-ui-hud, who forwarded it to Loadout owner raid-ui-plan; this error is outside the two reviewed scene commits.
+
+## Post-freeze requested overflow review: f9bdb1a
+
+- **P2 open:** parent commit 3259597 removed both hud.css row-hiding caps and made every card available in a bounded scroll region. f9bdb1a still renders +N more / Show fewer controls whose data-all rules only set display:grid on already displayed cards. Toggling changes the label and aria-expanded without changing card visibility. Coordinate one consistent model or remove the redundant controls; no implementation change made during freeze.
+- Focused happy-dom checks pass child order, counts, aria-expanded toggles, urgent proposal/run flags, expanded-state persistence, and reset below the count threshold. Source comparison against the exact parent confirms the missing caps. All Veto, Go and Cancel actions remain available by scrolling, so this is not the earlier inaccessible-action P1.
+- Analyst notified via Herdr. HUD and Look HUD panes were already closed, so direct delivery to their agent names failed. No browser, service restart, live engine request or full test suite was started for this review.
+- Final typecheck from the preceding review passed after the Loadout owner's boolean fix. Reviewer remains frozen after recording this requested review.

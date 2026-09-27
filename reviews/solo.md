@@ -163,9 +163,22 @@ Inspected the full commit and confirmed no Forge/River working-tree differences 
 
 Both new P2 findings sent to `raid-river` in Herdr session `default`; the Analyst was informed of the P1 closure and remaining issues.
 
+## 2026-09-27: Judge coverage and verdict fixes `2069b34`
+
+Reviewed the complete diff. Both P2 findings from `b2f8b5e` and `2c8b600` are resolved. No new actionable findings in this commit.
+
+- Ran `tests.judge_offline` via runpy with `env.load` disabled: PASS for all failures, complete grading, 8/10 coverage, and successful retry. Fake provider only; no credential file or River request. Additional probes passed strict grade parsing, a valid zero, and exactly 9/10 paired coverage with the unpaired trained grade excluded.
+- Executed pipeline.main with fake generation/training/evaluation: unavailable grades emit ready with `evalScore: null` and an explicit incomplete-evaluation stage; a real groundedness zero remains a valid grade and blends correctly. PASS.
+- `BRAIN_URL=http://127.0.0.1:9 bun run test:units`: PASS. Additional injected-model checks PASS for invalid initial verdict followed by CHANGES, reuse of an earlier valid CHANGES, unchanged valid final verdict, and failed follow-up producing both a visible default-approval note and activity event. No live Brain calls.
+- `bun run smoke && bun run smoke:bridge`: PASS against the owner-restarted service reported as PID 10668. Created `forge-smoke-ranger-2` with dryRun and used the existing ready dry-run `forge-smoke-ranger` for the bridge reply. No paid provider requests or engine mutations were made for this review.
+
+## 2026-09-27: New-issue contract review `c874c30`
+
+Read the new routes/event and owner split in docs/lanes/flow.md. Brain implementation belongs to `raid-gbrain`; its review remains in this lane. Integration checks use 4619/4618, due 16:05. Sent two concrete gaps to the Analyst: define how a spawned targetId is registered for Brain recall/remember and survives restart (and whether GET /world includes it); define one issue-id allocator and collision handling across the real/test engines sharing Brain, including registration after the specified local outage fallback. Asked `raid-gbrain` to cover immediate issue recall, linked remember, concurrent unique ids, and reset/pool cleanup in its smoke. No implementation or new-issue API call was made in this contract review.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved.
-- `raid-river`: reviewed through `38f0358`. Original P1 direct-message interruption and P2 completed-pipeline replay are resolved. Open P2s: partial-store save during startup, offline units-test Brain access, unavailable judge grades, and final-verdict validation. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved. Awaiting POST /issues implementation for the new-issue feature; contract gaps sent to Analyst.
+- `raid-river`: reviewed through `2069b34`. Original P1 direct-message interruption and P2 completed-pipeline replay, unavailable judge grades, and final-verdict validation are resolved. Open P2s: partial-store save during startup and offline units-test Brain access. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

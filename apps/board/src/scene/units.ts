@@ -4,6 +4,7 @@ import type { Unit } from "../core";
 import { hash, makeBubble, makeLabel, mat, mesh, tileToWorld } from "./util";
 
 const NEUTRAL = "#8d8f96";
+const UNIT_SCALE = 1.5; // readable at whole-map zoom
 const SKIN = "#e6c09a";
 const STAFF_GEM_IDLE = new THREE.Color("#2f86d6");
 
@@ -69,6 +70,7 @@ export class UnitView {
     this.jitter = new THREE.Vector3(((h & 0xff) / 255 - 0.5) * 0.36, 0, (((h >> 8) & 0xff) / 255 - 0.5) * 0.36);
     this.group.userData = { kind: "unit", id: unit.id };
     this.group.name = `unit:${unit.id}`;
+    this.group.scale.setScalar(UNIT_SCALE);
     this.group.add(this.root);
 
     this.selRing = new THREE.Mesh(G.ring, new THREE.MeshBasicMaterial({ color: "#7dff6a", transparent: true, depthWrite: false }));
@@ -97,7 +99,6 @@ export class UnitView {
 
     for (const x of [-0.055, 0.055]) {
       const l = mesh(G.leg, dark, x, 0.09, 0);
-      l.geometry = G.leg;
       this.legs.push(l);
       this.root.add(l);
     }

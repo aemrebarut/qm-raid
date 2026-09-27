@@ -85,7 +85,7 @@ function library(group: THREE.Group) {
     group.add(w);
   }
   // Orb of knowledge above the spire: recall beams start here.
-  const orb = mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshLambertMaterial({ color: "#a9dcff", emissive: "#3b9cff" }), 0.85, 3.4, -0.55, false);
+  const orb = mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshLambertMaterial({ color: "#3a78c0", emissive: "#1a59cc" }), 0.85, 3.4, -0.55, false);
   orb.name = "libraryOrb";
   group.add(orb);
   const light = new THREE.PointLight("#5aa9ff", 3, 4, 1.5);
@@ -108,7 +108,7 @@ function library(group: THREE.Group) {
       pulseT = Math.max(0, pulseT - dt);
       const p = pulseT > 0 ? Math.sin((pulseT / 0.9) * Math.PI) : 0;
       orb.scale.setScalar(1 + p * 0.8);
-      orbMat.emissive.setRGB(0.23 + p * 0.6, 0.61 + p * 0.3, 1);
+      orbMat.emissive.setRGB(0.1 + p * 0.7, 0.35 + p * 0.5, 0.8 + p * 0.2);
       light.intensity = 3 + Math.sin(t * 2) * 0.4 + p * 10;
     },
     pulse() { pulseT = 0.9; },

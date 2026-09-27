@@ -47,6 +47,11 @@ export function mountPanels(el: HTMLElement, store: Store, bus: Bus): () => void
 
   let lastState = store.getState();
   const offs = [
+    bus.on("openPage", (slug) => {
+      const lib = store.getState().buildings.find((b) => b.kind === "gbrain")?.id ?? "library";
+      if (bus.selection.building !== lib) bus.selectBuilding(lib);
+      library.openPage(slug);
+    }),
     store.subscribe((s) => {
       if (s === lastState) return; // setState and state.snapshot replace the object; events mutate it
       lastState = s;

@@ -21,6 +21,7 @@ export type BusEvents = {
   hover: HoverRef;
   focusTile: { x: number; y: number }; // ask the camera to centre on a tile (minimap clicks)
   command: Command;
+  openPage: string; // open the Library overlay on this brain page slug (panels/ handles it)
   toast: { text: string; level: "info" | "error" }; // HUD shows these
 };
 
@@ -32,6 +33,8 @@ export interface Bus {
   readonly command: Command;
   setCommand(c: Command): void;
   toast(text: string, level?: "info" | "error"): void;
+  /** Open the Library overlay showing one brain page (e.g. a slug from a gbrain tool call). */
+  openPage(slug: string): void;
   select(unitIds: string[], opts?: { add?: boolean }): void;
   selectTarget(id: string | null): void;
   selectBuilding(id: string | null): void;
@@ -64,6 +67,7 @@ export function createBus(): Bus {
       emit("command", c);
     },
     toast(text, level = "info") { emit("toast", { text, level }); },
+    openPage(slug) { emit("openPage", slug); },
     select(unitIds, opts) {
       const units = opts?.add ? [...new Set([...selection.units, ...unitIds])] : [...unitIds];
       // Selecting units keeps a selected target (so "units then target" can order), drops the building.

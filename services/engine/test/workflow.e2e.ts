@@ -1,11 +1,14 @@
 // Workflow live check on the TEST engine (4618, mock backend), owner raid-eng-flow. Never point it at 4610 (real QM).
-//   /tmp/engplan/with4618 raid-eng-flow bun test/workflow.e2e.ts [--cases trio,needs_human,cancel,duel] [--speed 8] [--timeout 120] [--no-reset]
+//   /tmp/engplan/with4618 raid-eng-flow bun test/workflow.e2e.ts [--cases trio,needs_human,cancel,duel,autopilot] [--speed 8] [--timeout 120] [--no-reset]
 // 4618 runs the last committed engine: commit first. POST /api/reset (4618 has BRAIN_RESET=0), then per case on team 1:
 // - trio: planner -> implementer -> reviewer (changes) -> implementer -> reviewer (approved) -> done, 5 workflow orders,
 //   4 handoffs between the right units, target resolved only after the last step.
 // - needs_human: mock review "changes": 3 CHANGES (maxLoops 2) -> needs_human, target open, no active orders.
 // - cancel: cancelling the implementer's order cancels the run and reopens the target.
 // - duel: both implementers start at once, the judge waits for both, then (mock) changes once and approves a winner.
+// - autopilot (W3, opt-in until game.ts has it; needs the proposer on 4613): autopilot on for the trio team proposes one
+//   team order for the entry unit only; go turns that order into the planner step; the run ends done; the veto log row
+//   (--veto-log, default /tmp/engplan/vetoes-test.jsonl, the 4618 VETO_LOG) has proposal.teamId and runId.
 // Fails fast when the engine reloads mid-test (SSE drops or a second snapshot) and after --timeout seconds overall.
 // The shared mock config is restored at the end. Env: ENGINE_URL (http://127.0.0.1:4618), MOCK_URL (http://127.0.0.1:4615).
 const E = (process.env.ENGINE_URL ?? "http://127.0.0.1:4618").replace(/\/$/, "");
@@ -15,6 +18,7 @@ const CASES = arg("--cases", "trio,needs_human,cancel,duel").split(",").map((c) 
 const SPEED = Number(arg("--speed", "8")) || 8;
 const TIMEOUT_MS = (Number(arg("--timeout", "120")) || 120) * 1000;
 const RESET = !process.argv.includes("--no-reset");
+const VETO_LOG = arg("--veto-log", "/tmp/engplan/vetoes-test.jsonl");
 if (new URL(E).port === "4610") { console.error("refusing to run against 4610 (the real QM engine); use the test engine on 4618"); process.exit(2); }
 
 const H = { "content-type": "application/json" };
@@ -39,6 +43,7 @@ async function restoreMock(): Promise<void> {
 const watchdog = setTimeout(async () => {
   console.log(`FAIL overall timeout (${TIMEOUT_MS / 1000} s)`);
   await restoreMock();
+  if (CASES.includes("autopilot")) await call(`${E}/api/teams/1`, "PATCH", { autopilot: false });
   process.exit(1);
 }, TIMEOUT_MS);
 
@@ -182,6 +187,43 @@ async function duel(m: string[]): Promise<void> {
   check((await state()).targets.find((t: any) => t.id === s.target.id)?.status === "resolved", "duel: target resolved");
 }
 
+async function autopilot(m: string[]): Promise<void> {
+  const put = await call(`${E}/api/teams/1/workflow`, "PUT", { preset: "trio" });
+  check(put.d?.ok === true, "autopilot: PUT trio preset", put.d);
+  const entry = put.d?.team?.workflow?.nodes?.find((n: any) => n.id === put.d.team.workflow.entry)?.unitId;
+  const from = events.length;
+  const on = await call(`${E}/api/teams/1`, "PATCH", { autopilot: true });
+  check(on.d?.team?.autopilot === true, "autopilot: on for team 1", on.d);
+  let p: any;
+  try {
+    p = await until(() => events.slice(from).find((e) => e.type === "order.proposed" && e.order.teamId === 1)?.order, 30000);
+  } finally {
+    await call(`${E}/api/teams/1`, "PATCH", { autopilot: false });
+  }
+  check(!!p, "autopilot: team proposal (order.proposed with teamId 1)", events.slice(from).filter((e) => e.type === "order.proposed").map((e) => e.order));
+  if (!p) return;
+  check(p.unitId === entry && p.source === "autopilot", "autopilot: proposal binds the entry unit only", { unitId: p.unitId, entry, source: p.source });
+  const others = events.slice(from).filter((e) => e.type === "order.proposed" && m.includes(e.order.unitId) && e.order.id !== p.id);
+  check(others.length === 0, "autopilot: no other proposals for team 1 members", others.map((e) => e.order));
+  const g = await call(`${E}/api/orders/${p.id}/go`, "POST", {});
+  check(g.d?.ok === true, "autopilot: POST /api/orders/:id/go", g.d);
+  const run = await until(() => events.slice(from).find((e) => e.type === "workflow.updated" && e.run.teamId === 1 && e.run.steps[0]?.orderId === p.id)?.run, 5000);
+  check(!!run && run.targetId === p.targetId && run.steps[0].nodeId === "planner", "autopilot: go starts a run whose planner step is the proposal order", run && { targetId: run.targetId, steps: run.steps });
+  if (!run) return;
+  const final = await runEnd(run.id, 60000);
+  check(final?.status === "done", "autopilot: run done", final && steps(final));
+  if (final?.status !== "done") explain(run.id, m);
+  const st = await state();
+  const orders = st.orders.filter((o: any) => o.runId === run.id);
+  check(orders[0]?.id === p.id && orders.every((o: any) => o.source === "workflow" && o.status === "done"), "autopilot: the proposal order is the first done workflow step", orders.map((o: any) => `${o.id}:${o.source}:${o.status}`));
+  check(!st.orders.some((o: any) => o.id !== p.id && o.targetId === p.targetId && o.status === "cancelled" && o.unitId === p.unitId), "autopilot: go cancelled nothing");
+  check(st.targets.find((t: any) => t.id === p.targetId)?.status === "resolved", "autopilot: target resolved");
+  await Bun.sleep(300); // veto rows are appended asynchronously
+  const rows = (await Bun.file(VETO_LOG).text().catch(() => "")).trim().split("\n").map((l) => { try { return JSON.parse(l); } catch { return null; } });
+  const row = rows.filter((r) => r?.proposal?.teamId === 1 && r?.runId === run.id).pop();
+  check(row?.action === "go" && row.proposal.unitId === p.unitId && row.proposal.targetId === p.targetId, `autopilot: veto log row with proposal.teamId and runId (${VETO_LOG})`, rows.slice(-2));
+}
+
 try {
   if (RESET) check((await call(`${E}/api/reset`, "POST", {})).d?.ok === true, "reset 4618");
   if (mockBefore) await call(`${MOCK}/debug/config`, "POST", { speed: SPEED, fail: 0, review: "loop" });
@@ -190,7 +232,7 @@ try {
   const team = (await state()).teams.find((t: any) => t.id === 1);
   check(team?.members?.length >= 3, "team 1 has 3 members", team?.members);
   const m = (team?.members ?? []) as string[];
-  const cases: Record<string, () => Promise<void>> = { trio: () => trio(m), needs_human: needsHuman, cancel, duel: () => duel(m) };
+  const cases: Record<string, () => Promise<void>> = { trio: () => trio(m), needs_human: needsHuman, cancel, duel: () => duel(m), autopilot: () => autopilot(m) };
   for (const name of CASES) {
     if (reloaded) break;
     if (!cases[name]) { check(false, `unknown case ${name}`); continue; }
@@ -201,6 +243,7 @@ try {
 } finally {
   ctl.abort();
   clearTimeout(watchdog);
+  if (CASES.includes("autopilot")) await call(`${E}/api/teams/1`, "PATCH", { autopilot: false });
   await restoreMock();
 }
 console.log(failures ? `${failures} FAILED` : "workflow e2e passed");

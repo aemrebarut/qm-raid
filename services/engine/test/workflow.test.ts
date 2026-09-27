@@ -6,7 +6,9 @@ import { fixtureState } from "../src/fixture.ts";
 import { cancelRun, initWorkflows, loadRuns, onOrderEnded, parseVerdict, presetWorkflow, runForOrder, saveRuns, startRun, validateWorkflow, type NodeBrief } from "../src/workflow.ts";
 
 // Fake game.ts: startOrder cancels the unit's previous open order (re-entering onOrderEnded), cancelOrder re-enters too.
+// W3: a unit's proposed team order (autopilot, teamId set) for the same target becomes the entry step instead.
 let nextOrder = 1;
+type TeamOrder = Order & { teamId?: number }; // W3: Order.teamId (contract pending)
 const briefs = new Map<string, NodeBrief>();
 function endOrder(o: Order, status: "done" | "failed" | "cancelled", reply: string | null = null): void {
   o.status = status;
@@ -19,6 +21,12 @@ initWorkflows({
   startOrder(unitId, targetId, brief) {
     const u = store.state.units.find((x) => x.id === unitId);
     if (!u || !store.state.targets.some((t) => t.id === targetId)) return null;
+    const proposal = store.state.orders.find((o) => o.id === u.orderId && o.status === "proposed" && (o as TeamOrder).teamId !== undefined && o.targetId === targetId);
+    if (proposal) {
+      Object.assign(proposal, { status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null });
+      briefs.set(proposal.id, brief);
+      return proposal.id;
+    }
     const prev = store.state.orders.find((o) => o.id === u.orderId && o.status === "active");
     if (prev) endOrder(prev, "cancelled");
     const o: Order = { id: `o${nextOrder++}`, unitId, targetId, status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null, reply: null };
@@ -443,4 +451,72 @@ test("E18: without saved data a running run fails; a step the restore closed end
   loadRuns(saved.flow);
   expect(store.state.workflowRuns.find((x) => x.id === r3.id)!.status).toBe("cancelled");
   expect(r.status).toBe("running"); // the old object is dead and untouched
+});
+
+// W3: autopilot proposes a whole-team run; the proposal order (entry unit, teamId) becomes the entry step on go.
+function propose(teamId: number, unitId: string, targetId: string): TeamOrder {
+  const o: TeamOrder = { id: `o${nextOrder++}`, unitId, targetId, status: "proposed", source: "autopilot", teamId, vetoDeadline: Date.now() + 15000, reply: null };
+  store.state.orders.push(o);
+  store.state.units.find((u) => u.id === unitId)!.orderId = o.id;
+  return o;
+}
+function go(o: TeamOrder) { // what game.ts does on go / expiry / adjust {targetId}
+  const r = startRun(o.teamId!, o.targetId);
+  if (!r.ok) { o.status = "failed"; o.reply = r.error; }
+  return r;
+}
+
+test("W3: go turns the team proposal into the entry step, then the run goes on as usual", () => {
+  setPreset(1, "trio");
+  const p = propose(1, "u1", "t101");
+  const res = go(p);
+  expect(res.ok).toBe(true);
+  const r = (res as { run: any }).run;
+  expect(r.steps[0]).toMatchObject({ nodeId: "planner", unitId: "u1", orderId: p.id, status: "active" });
+  expect(p).toMatchObject({ status: "active", source: "workflow", runId: r.id, nodeId: "planner", vetoDeadline: null });
+  expect(runForOrder(p.id)).toBe(r);
+  expect(store.state.orders).toHaveLength(1); // no second order, nothing cancelled
+  expect(briefs.get(p.id)!.role).toBe("planner");
+  finish("u1", "plan");
+  finish("u2", "impl");
+  finish("u3", "VERDICT: APPROVED");
+  expect(r.status).toBe("done");
+  expect(target("t101").status).toBe("resolved");
+  expect(store.state.orders.map((o) => `${o.id}:${o.source}:${o.status}`)).toEqual([`${p.id}:workflow:done`, expect.stringMatching(/:workflow:done$/), expect.stringMatching(/:workflow:done$/)]);
+});
+
+test("W3: adjust {targetId} runs on the new target; duel reuses the proposal for the first entry only", () => {
+  setPreset(1, "trio");
+  const p = propose(1, "u1", "t101");
+  p.targetId = "t102"; // adjust
+  const r = go(p) as { ok: true; run: any };
+  expect(r.run.targetId).toBe("t102");
+  expect(r.run.steps[0].orderId).toBe(p.id);
+  expect(target("t102").status).toBe("engaged");
+
+  store.state = fixtureState();
+  setPreset(1, "duel");
+  const d = propose(1, "u1", "t104");
+  const rd = go(d) as { ok: true; run: any };
+  expect(rd.run.steps.map((s: any) => s.nodeId)).toEqual(["implementer1", "implementer2"]);
+  expect(rd.run.steps[0].orderId).toBe(d.id);
+  expect(rd.run.steps[1].orderId).not.toBe(d.id);
+  expect(active().map((o) => o.unitId).sort()).toEqual(["u1", "u2"]);
+});
+
+test("W3: a team that lost its workflow fails the proposal; cancelling the reused step cancels the run", () => {
+  setPreset(1, "trio");
+  const p = propose(1, "u1", "t101");
+  team(1).workflow = null;
+  expect(go(p)).toEqual({ ok: false, error: "team Red has no workflow" });
+  expect(p.status).toBe("failed");
+  expect(store.state.workflowRuns).toEqual([]);
+
+  store.state = fixtureState();
+  setPreset(1, "trio");
+  const q = propose(1, "u1", "t101");
+  const r = (go(q) as { ok: true; run: any }).run;
+  endOrder(q, "cancelled");
+  expect(r.status).toBe("cancelled");
+  expect(target("t101").status).toBe("open");
 });

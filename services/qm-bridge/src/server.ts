@@ -194,7 +194,9 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
   };
 
   const seenTools = new Set<string>();
-  for (let attempt = 0; attempt < 5; attempt++) {
+  // Keep following through stream drops and QM restarts (runs are durable in QM's Postgres) for up to 10 minutes.
+  const deadline = Date.now() + 10 * 60_000;
+  for (let attempt = 0; Date.now() < deadline; attempt++) {
     if (!alive(u) || !u.active || u.active.send !== s) return;
     let finished = false;
     try {
@@ -276,7 +278,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
     } catch (err) {
       console.warn(`[qm-bridge] ${u.id} run ${runId} read: ${String((err as Error)?.message ?? err)}`);
     }
-    await Bun.sleep(1000 * (attempt + 1));
+    await Bun.sleep(Math.min(1000 * (attempt + 1), 5000));
   }
   finish(u, s, { ok: false, text: `lost track of QM run ${runId}` });
 }

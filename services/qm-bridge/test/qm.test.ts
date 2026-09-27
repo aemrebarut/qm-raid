@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { waitRun } from "../src/qm.ts";
 import { normalizeTool, toolArgs } from "../src/tools.ts";
-import { fetchCatalog, loadoutLines, loadoutMarker, normalizeLoadout } from "../src/loadout.ts";
+import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, soulContent, soulMarker, soulWritten } from "../src/loadout.ts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -92,4 +92,21 @@ test("catalog: QM skills (by name) plus GBrain when QM lists no MCP servers; fix
     throw new Error("ECONNREFUSED");
   }) as unknown as typeof fetch;
   expect((await fetchCatalog()).map((i) => i.id)).toEqual(["raid-board", "gbrain"]);
+});
+
+test("plan B: SOUL marker decodes to the loadout, silent reply = last web post, SOUL write needs HTTP 200", () => {
+  const l = { instructions: `Begin every reply with HALBERD. It's "quoted".`, skills: ["raid-board"], plugins: [] };
+  const cmd = soulMarker(l).split("\n").find((x) => x.startsWith("echo "))!;
+  expect(cmd).toContain('"$AGENT_API_URL/v1/soul"');
+  expect(cmd).toContain('x-agent-capability: $AGENT_API_TOKEN'); // env names only, no values
+  const content = JSON.parse(Buffer.from(cmd.split(" ")[1]!, "base64").toString()).content;
+  expect(content).toBe(soulContent(l));
+  expect(content).toContain(`It's "quoted".`);
+  const post = (text: string) => ({ type: "tool_call", payload: { tool: "web", action: "post", text } });
+  expect(lastWebPost([post("first"), { type: "tool_call", payload: { tool: "finish_silently" } }, post("HALBERD, hello")])).toBe("HALBERD, hello");
+  expect(lastWebPost([])).toBeNull();
+  const exec = (stdout: string) => ({ type: "tool_result", payload: { tool: "execute", stdout } });
+  expect(soulWritten([exec('{"ok":true,"version":2}\nHTTP 200\n')])).toBe(true);
+  expect(soulWritten([exec('{"error":"forbidden"}\nHTTP 403\n')])).toBe(false);
+  expect(soulWritten(undefined)).toBe(false);
 });

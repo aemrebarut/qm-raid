@@ -2,9 +2,10 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BridgeEvent, CatalogItem, Loadout, SendRequest, SpawnRequest } from "../../../contract/types.ts";
-import { fetchCatalog, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout } from "./loadout.ts";
+import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout, soulMarker, soulWritten } from "./loadout.ts";
 import {
   PORTAL_URL,
+  createProject,
   findSessionId,
   getRun,
   orgSpend,
@@ -26,15 +27,19 @@ const TIMING_FILE = join(import.meta.dir, "..", ".state", "timing.jsonl"); // on
 // One stable QM conversation per unit: threadRef web:<principal>:raid-<ns>-<unitId>, across respawns, resets and restarts.
 // Change QM_THREAD_NS to start every unit in a fresh conversation.
 const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
+// Plan B (flag): each unit gets its own QM project scope; a loadout change makes the agent write that scope's SOUL.
+const LOADOUT_SOUL = process.env.LOADOUT_SOUL === "1";
 const ROUND_MARKER = "New round: the board was reset. Recall from GBrain before each order. Reply with one short line.";
 
 interface Send extends SendRequest {
   intro?: boolean;
+  soul?: boolean; // plan B SOUL write: applied only when the run shows HTTP 200
   key?: string; // idempotency key, persisted, so retries and post-crash re-sends never start a second run
   t?: { send: number; depth: number; queued?: number; first?: number }; // per-order timing (epoch ms)
 }
 interface Unit extends SpawnRequest {
   loadout?: Loadout;
+  scopeId?: string; // plan B: group:web-project-<id>
   threadRef: string;
   sessionId: string | null;
   queue: Send[];
@@ -43,6 +48,7 @@ interface Unit extends SpawnRequest {
 
 const units = new Map<string, Unit>();
 const retired = new Set<string>(); // deleted unit ids; their next spawn opens a new round in the same conversation
+const projects = new Map<string, { projectId: string; scopeId: string }>(); // plan B: unitId -> its QM project, kept across DELETE
 const lastWork = new Map<string, number>(); // unitId -> last time it had a run (usage attribution)
 const alive = (u: Unit): boolean => units.get(u.id) === u;
 
@@ -50,7 +56,8 @@ function saveUnits(): void {
   try {
     mkdirSync(dirname(STATE_FILE), { recursive: true });
     const undelivered = backlog.filter(isTerminal); // terminals nobody has received yet survive a bridge restart
-    writeFileSync(STATE_FILE, JSON.stringify({ units: [...units.values()], retired: [...retired], undelivered }, null, 1));
+    const state = { units: [...units.values()], retired: [...retired], undelivered, projects: Object.fromEntries(projects) };
+    writeFileSync(STATE_FILE, JSON.stringify(state, null, 1));
   } catch (err) {
     console.warn(`[qm-bridge] cannot save unit map: ${String((err as Error)?.message ?? err)}`);
   }
@@ -59,11 +66,12 @@ function saveUnits(): void {
 function loadUnits(): void {
   try {
     const saved = JSON.parse(readFileSync(STATE_FILE, "utf8")) as
-      | { units?: Unit[]; retired?: string[]; undelivered?: BridgeEvent[] }
+      | { units?: Unit[]; retired?: string[]; undelivered?: BridgeEvent[]; projects?: Record<string, { projectId: string; scopeId: string }> }
       | Unit[];
     const rows = Array.isArray(saved) ? saved : (saved.units ?? []);
     for (const id of Array.isArray(saved) ? [] : (saved.retired ?? [])) retired.add(id);
     backlog.push(...(Array.isArray(saved) ? [] : (saved.undelivered ?? [])));
+    for (const [id, p] of Object.entries(Array.isArray(saved) ? {} : (saved.projects ?? {}))) projects.set(id, p);
     if (backlog.length) console.log(`[qm-bridge] restored ${backlog.length} undelivered terminal event(s)`);
     for (const r of rows) {
       if (!r?.id || !r.threadRef) continue;
@@ -160,7 +168,7 @@ function warnOnce(msg: string): void {
   console.warn(`[qm-bridge] ${msg}`);
 }
 
-function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string; idempotencyKey?: string } {
+function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string; idempotencyKey?: string; scopeId?: string } {
   // Allowed Codex models pass; with the catalog still unloaded (15 s boot fallback), gpt-* names pass too and QM
   // refuses a bad one (error terminal). Anything else (claude-* etc.) runs on QM's default model, with a warning.
   const model = codexModels.includes(u.model) || (!codexModels.length && /^gpt-/.test(u.model)) ? u.model : undefined;
@@ -169,6 +177,7 @@ function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string
     ...(s.key ? { idempotencyKey: s.key } : {}),
     ...(model ? { model } : {}),
     ...(CODEX_EFFORTS.includes(u.effort) ? { thinkingLevel: u.effort } : {}),
+    ...(u.scopeId ? { scopeId: u.scopeId } : {}),
   };
 }
 
@@ -209,6 +218,7 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
   if (s.intro) {
     // The intro is not an order: its text was streamed as chat; never a terminal event.
     if (!outcome.ok) activity(u, s, "error", outcome.text);
+    else if (s.soul) activity(u, s, "message", outcome.text);
   } else if (outcome.ok) {
     emit({ type: "reply", unitId: u.id, ...(s.orderId ? { orderId: s.orderId } : {}), text: outcome.text });
   } else {
@@ -240,9 +250,18 @@ function logTiming(u: Unit, s: Send): void {
   }
 }
 
-function outcomeOf(run: RunState): { ok: boolean; text: string } {
+function outcomeOf(run: RunState, s?: Send): { ok: boolean; text: string } {
   const r = run.result;
+  if (s?.soul) {
+    // Plan B loadout: applied only when the SOUL write printed HTTP 200.
+    return soulWritten(run.activity) ? { ok: true, text: "Loadout applied: SOUL written" } : { ok: false, text: "Loadout SOUL write failed (no HTTP 200)" };
+  }
   if (r?.status === "ok") return { ok: true, text: r.reply ?? run.partial ?? "" };
+  if (r?.status === "silent") {
+    // Group-scope (plan B) turns answer with a web post and end silent.
+    const post = lastWebPost(run.activity);
+    return post ? { ok: true, text: post } : { ok: false, text: "QM run ended silent without a reply" };
+  }
   const why = r?.reason ?? r?.message ?? r?.refusalKind ?? r?.status ?? run.status;
   return { ok: false, text: `QM run ${run.status}: ${why}` };
 }
@@ -302,6 +321,13 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
           if (ev.type === "TOOL_CALL_START") {
             if (seenTools.has(ev.toolCallId)) continue;
             seenTools.add(ev.toolCallId);
+            if (ev.toolCallName === "finish_silently") continue; // group-scope bookkeeping, not work
+            if (ev.toolCallName === "web" && ev.args?.action === "post" && typeof ev.args.text === "string") {
+              text = ev.args.text; // group-scope reply: shown as chat, not as a tool
+              flushed = 0;
+              flush(true);
+              continue;
+            }
             const tool = normalizeTool(ev.toolCallName, ev.args ?? {});
             const args = toolArgs(ev.args ?? {});
             activity(u, s, "tool", toolText(tool, args), { tool, args });
@@ -336,7 +362,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
     try {
       const run = await getRun(runId);
       if (runFinished(run)) {
-        const out = outcomeOf(run);
+        const out = outcomeOf(run, s);
         if (out.ok && out.text.length > text.length) text = out.text;
         flush(true);
         if (!u.sessionId && run.result?.sessionId) {
@@ -381,7 +407,8 @@ function introText(u: Unit): string {
 function applyLoadout(u: Unit, next: Loadout | null): boolean {
   if (!next || sameLoadout(u.loadout, next)) return false;
   u.loadout = next;
-  enqueue(u, { text: loadoutMarker(next), intro: true });
+  if (u.scopeId) enqueue(u, { text: soulMarker(next), intro: true, soul: true });
+  else enqueue(u, { text: loadoutMarker(next), intro: true });
   return true;
 }
 
@@ -440,6 +467,15 @@ async function spawn(req: Request): Promise<Response> {
   let u: Unit | null = null;
   try {
     u = await createUnit({ ...b, id: b.id, ...(loadout ? { loadout } : {}) });
+    if (LOADOUT_SOUL) {
+      // Own project scope per unit, created once and reused on respawn (its SOUL survives DELETE).
+      let p = projects.get(u.id);
+      if (!p) {
+        p = await createProject(`${u.name} (${u.id})`);
+        projects.set(u.id, p);
+      }
+      u.scopeId = p.scopeId;
+    }
     u.sessionId = await findSessionId(u.threadRef); // throws when QM is down -> 502
     units.set(u.id, u);
     if (!u.sessionId) {
@@ -447,6 +483,7 @@ async function spawn(req: Request): Promise<Response> {
     } else if (retired.has(u.id)) {
       await begin(u, { text: ROUND_MARKER, intro: true }); // back after a reset: mark the new round
     }
+    if (u.scopeId && u.loadout) enqueue(u, { text: soulMarker(u.loadout), intro: true, soul: true }); // plan B: SOUL now
     retired.delete(u.id);
     saveUnits();
   } catch (err) {

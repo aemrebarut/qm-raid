@@ -36,7 +36,7 @@ const pluginsText = (l: Loadout): string => [...new Set([...l.plugins, GBRAIN])]
 /** The visible marker turn queued in the unit's conversation when its loadout changes. */
 export function loadoutMarker(l: Loadout): string {
   return (
-    `Loadout changed. Standing orders from now on: ${l.instructions || "(none)"}. ` +
+    `Loadout changed. Standing orders from now on: ${l.instructions.replace(/[.\s]+$/, "") || "(none)"}. ` +
     `Skills: ${l.skills.length ? l.skills.join(", ") : "(none)"}, load them with the skills tool when relevant. ` +
     `Plugins: use only ${pluginsText(l)} (GBrain always on). Reply with one short line.`
   );
@@ -52,6 +52,50 @@ export function loadoutLines(l: Loadout | undefined): string[] {
   }
   if (l.skills.length || l.plugins.length) lines.push(`Loadout: skills ${l.skills.join(",") || "-"} | plugins ${pluginsText(l)}`);
   return lines;
+}
+
+// ---------- plan B (LOADOUT_SOUL=1): the unit's own QM project scope, whose SOUL holds its loadout ----------
+
+/** SOUL text for a unit's project scope: its standing orders plus the skills and plugins lines. */
+export function soulContent(l: Loadout): string {
+  return [
+    l.instructions || "No standing orders.",
+    `Skills: ${l.skills.length ? l.skills.join(", ") : "(none)"}; load them with the skills tool when relevant.`,
+    `Plugins: use only ${pluginsText(l)} (GBrain always on).`,
+  ].join("\n");
+}
+
+/** Marker turn that makes the agent write its scope SOUL with its own capability token (env names only; the
+ *  content goes base64 so no quoting can break). Applied only when the tool result shows HTTP 200. */
+export function soulMarker(l: Loadout): string {
+  const b64 = Buffer.from(JSON.stringify({ content: soulContent(l) })).toString("base64");
+  return [
+    "Loadout changed. Run exactly this one command with your execute tool, then reply with only the HTTP status line it printed:",
+    "",
+    `echo ${b64} | base64 -d | curl -sS -w '\\nHTTP %{http_code}\\n' -X POST "$AGENT_API_URL/v1/soul" -H "x-agent-capability: $AGENT_API_TOKEN" -H 'content-type: application/json' -d @-`,
+    "",
+    loadoutMarker(l).replace(/ Reply with one short line\.$/, ""),
+  ].join("\n");
+}
+
+type Activity = Array<{ type: string; payload: Record<string, unknown> }> | undefined;
+
+/** Group-scope runs end "silent": the reply is the text of the agent's last web post. */
+export function lastWebPost(activity: Activity): string | null {
+  let text: string | null = null;
+  for (const a of activity ?? []) {
+    if (a.type === "tool_call" && a.payload?.tool === "web" && a.payload?.action === "post" && typeof a.payload.text === "string") text = a.payload.text;
+  }
+  return text;
+}
+
+/** True when the run's SOUL write printed HTTP 200. */
+export function soulWritten(activity: Activity): boolean {
+  return (activity ?? []).some((a) => {
+    if (a.type !== "tool_result" || a.payload?.tool !== "execute") return false;
+    const out = `${a.payload.stdout ?? ""}${a.payload.result ?? ""}`;
+    return /HTTP 200\b/.test(out) && /"ok"\s*:\s*true/.test(out);
+  });
 }
 
 async function getJson(path: string): Promise<any> {

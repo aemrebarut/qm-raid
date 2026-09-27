@@ -78,11 +78,20 @@ export interface TurnOptions {
   model?: string;
   thinkingLevel?: string;
   idempotencyKey?: string;
+  scopeId?: string; // group:web-project-<id> for a unit's own project scope (LOADOUT_SOUL)
 }
 
 /** Queue a turn on a thread. Same threadRef = same QM session. */
 export async function startTurn(threadRef: string, text: string, opts: TurnOptions = {}): Promise<{ runId: string; status: string }> {
   return api("POST", "/api/turn", { text, threadRef, ...opts });
+}
+
+/** A QM project (own group scope with its own SOUL); used for per-unit loadouts behind LOADOUT_SOUL=1. */
+export async function createProject(name: string): Promise<{ projectId: string; scopeId: string }> {
+  const b = await api<any>("POST", "/api/projects", { name });
+  const projectId = String(b?.id ?? b?.project?.id ?? "");
+  if (!projectId) throw new Error(`POST /api/projects: no id in ${JSON.stringify(b).slice(0, 120)}`);
+  return { projectId, scopeId: String(b?.scopeId ?? b?.project?.scopeId ?? `group:web-project-${projectId}`) };
 }
 
 export async function getRun(runId: string): Promise<RunState> {

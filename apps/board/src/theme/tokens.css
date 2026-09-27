@@ -1,0 +1,108 @@
+/* Look tokens: one visual language for the HUD and panels. Dark translucent slate, warm-metal hairlines,
+   one accent per system. 8 px grid. System fonts only (no downloaded fonts). */
+:root {
+  /* Director's names (docs/lanes/look-plan.md); panels.css uses these */
+  --panel: linear-gradient(180deg, rgba(28, 33, 40, .94), rgba(15, 18, 23, .94));
+  --line: rgba(200, 164, 98, .42);
+  --ink: #ece6d8;
+  --ink-2: #a7adb4;
+  --ink-3: #6e757d;
+  --gold: #d9a441;
+  --river: #4fa7e0;
+  --danger: #d65a45;
+  --ok: #7cc47f;
+  --font-head: "Avenir Next Condensed", "DIN Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --font-body: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --panel-inner: inset 0 1px 0 rgba(255, 255, 255, .05), inset 0 0 24px rgba(0, 0, 0, .35);
+
+  /* Surfaces */
+  --lk-bg-0: rgba(14, 17, 22, .92);      /* deepest panel fill */
+  --lk-bg-1: rgba(22, 27, 34, .88);      /* panel fill */
+  --lk-bg-2: rgba(34, 40, 49, .9);       /* raised: buttons, cards */
+  --lk-bg-3: rgba(48, 56, 67, .95);      /* hover */
+  --lk-well: rgba(6, 8, 11, .55);        /* inset wells: feeds, inputs */
+  --lk-scrim: linear-gradient(180deg, rgba(10, 12, 16, .0), rgba(10, 12, 16, .55));
+
+  /* Metal hairlines and bevel */
+  --lk-metal: #8c7a5a;                   /* warm brass hairline */
+  --lk-metal-hi: #c8ad7a;
+  --lk-metal-lo: #3b3326;
+  --lk-line: rgba(200, 164, 98, .24);   /* inner dividers */
+  --lk-line-soft: rgba(200, 164, 98, .12);
+  --lk-bevel: inset 0 1px 0 rgba(255, 240, 210, .07), inset 0 -1px 0 rgba(0, 0, 0, .5);
+  --lk-inner: inset 0 0 0 1px rgba(0, 0, 0, .55), inset 0 12px 24px -12px rgba(0, 0, 0, .6);
+  --lk-drop: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 0 rgba(0, 0, 0, .6);
+
+  /* Text */
+  --lk-text: var(--ink);
+  --lk-text-2: var(--ink-2);                  /* secondary */
+  --lk-text-3: var(--ink-3);                  /* tertiary, disabled */
+  --lk-head: #d9c79f;                    /* section headers (brass) */
+
+  /* System accents */
+  --lk-gold: var(--gold);                    /* GBrain / Library / remember */
+  --lk-gold-dim: rgba(224, 180, 84, .18);
+  --lk-river: var(--river);                   /* River / Forge */
+  --lk-recall: #6fa8ff;                  /* recall beam */
+  --lk-danger: var(--danger);
+  --lk-warn: #e39a3b;
+  --lk-ok: var(--ok);
+  --lk-violet: #b08ce8;                  /* waiting on a human, handoff */
+  --lk-accent: var(--gold);                  /* focus rings, hotkeys */
+
+  /* Status (pips and bars) */
+  --lk-st-idle: #8b8f96;
+  --lk-st-moving: #6fa8ff;
+  --lk-st-recalling: #6fa8ff;
+  --lk-st-working: #e39a3b;
+  --lk-st-remembering: #e0b454;
+  --lk-st-waiting: #b08ce8;
+  --lk-st-error: #e0574a;
+
+  /* Type */
+  --lk-font: var(--font-body);
+  --lk-font-head: var(--font-head);
+  --lk-font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --lk-fs-xs: 11px;
+  --lk-fs-s: 12px;
+  --lk-fs-m: 13px;
+  --lk-fs-l: 15px;
+  --lk-fs-xl: 18px;
+
+  /* Grid and shape */
+  --lk-u: 8px;
+  --lk-r: 3px;
+  --lk-ease: var(--ease);
+  --lk-t: 140ms;
+}
+
+/* Base panel: translucent slate, brass hairline, bevel and inner shadow. */
+.lk-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--lk-r);
+  box-shadow: var(--panel-inner), 0 4px 12px rgba(0, 0, 0, .4);
+  color: var(--lk-text);
+  font-family: var(--lk-font);
+}
+
+/* Section header: condensed small caps in brass with a hairline rule. */
+.lk-head {
+  font-family: var(--lk-font-head); font-weight: 600; font-size: var(--lk-fs-s); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--lk-head);
+}
+
+/* Icon: monoline SVG on a 24 grid, inherits colour. */
+.lk-icon { display: inline-block; flex: none; width: 1em; height: 1em; vertical-align: -.15em; }
+.lk-icon * { vector-effect: non-scaling-stroke; }
+
+/* Keycap for hotkeys and hints */
+.lk-key {
+  display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  font: 700 10px/1 var(--lk-font); color: var(--lk-text); background: var(--lk-bg-3);
+  border: 1px solid var(--lk-line); border-bottom-color: rgba(0, 0, 0, .6); border-radius: 2px;
+}
+
+/* Status pip */
+.lk-pip { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--pip, var(--lk-st-idle)); box-shadow: 0 0 6px var(--pip, transparent); }

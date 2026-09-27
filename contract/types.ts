@@ -40,3 +40,24 @@ export interface SpawnResponse { sessionId: string | null; sessionUrl: string | 
 
 // Proposer API (POST /propose on autopilot and commander)
 export interface Proposal { unitId: string; targetId: string; reason: string }
+
+// Engine SSE events (GET /api/events). Every message is one EngineEvent; ts is epoch ms.
+export type ActivityKind = "message" | "tool" | "thinking" | "error";
+type Ev<T extends string, P> = { seq: number; ts: number; type: T } & P;
+export type EngineEvent =
+  | Ev<"state.snapshot", { state: State }>
+  | Ev<"unit.spawned", { unit: Unit }>
+  | Ev<"unit.updated", { unit: Unit }>
+  | Ev<"unit.moved", { unitId: string; pos: Pos }>
+  | Ev<"unit.status", { unitId: string; status: UnitStatus }>
+  | Ev<"unit.activity", { unitId: string; orderId?: string; kind: ActivityKind; text: string; tool?: string; args?: unknown }>
+  | Ev<"order.proposed", { order: Order }>
+  | Ev<"order.updated", { order: Order }>
+  | Ev<"memory.recall", { unitId: string; slugs: string[]; summary: string }>
+  | Ev<"memory.remember", { unitId: string; slug: string; summary: string }>
+  | Ev<"memory.link", { from: string; to: string; linkType: string }>
+  | Ev<"target.updated", { target: Target }>
+  | Ev<"team.updated", { team: Team }>
+  | Ev<"stats", { spentUsd: number; tokens: number }>
+  | Ev<"forge.updated", { unitType: UnitType }>;
+export type EngineEventType = EngineEvent["type"];

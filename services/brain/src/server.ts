@@ -81,7 +81,11 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
   }
   if (target) {
     add(issueSlug(target.issue));
-    for (const c of target.customers) add(`companies/${c}`);
+    for (const c of target.customers) {
+      add(`companies/${c}`);
+      const contact = world.customers.find((x) => x.id === c)?.contactSlug;
+      if (contact) add(contact);
+    }
   }
   // Past learnings about this issue or component.
   for (const s of [...slugs].filter((s) => s.startsWith("components/") || s.startsWith("issues/"))) {

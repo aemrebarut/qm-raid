@@ -65,7 +65,7 @@ async function loadWorld(): Promise<void> {
   const stats = await getJson<{ pages: number }>(`${BRAIN_URL}/stats`, 2000);
   if (stats && typeof stats.pages === "number") state.memory.pages = stats.pages;
   nextUnit = state.units.length + 1;
-  nextOrder = 1;
+  // nextOrder is never reset: order ids stay unique across /api/reset, so late pre-reset replies cannot match.
 }
 
 // ---------- bridge ----------
@@ -253,7 +253,9 @@ function slugsFrom(args: any): string[] {
   return [...new Set(out)];
 }
 
-function handleGbrainTool(u: Unit, tool: string, args: any, text: string, orderId: string | undefined): void {
+function handleGbrainTool(u: Unit, tool: string, rawArgs: any, text: string, orderId: string | undefined): void {
+  // qm-bridge may nest MCP call args as {mcpServer, args: {...}}.
+  const args = rawArgs && typeof rawArgs === "object" && rawArgs.args && typeof rawArgs.args === "object" ? { ...rawArgs, ...rawArgs.args } : rawArgs;
   const op = classifyGbrain(tool);
   // Counters feed the fallback (E7); a throwaway record absorbs stale or chat calls.
   const current = !!orderId && orderId === u.orderId;

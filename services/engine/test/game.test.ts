@@ -7,7 +7,7 @@ globalThis.fetch = (async () => new Response(JSON.stringify({ ok: true }), { sta
 
 const { store } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
-const { createOrders, onBridgeEvent } = await import("../src/game.ts");
+const { createOrders, onBridgeEvent, resetWorld } = await import("../src/game.ts");
 
 const unit = (id: string) => store.state.units.find((u) => u.id === id)!;
 const order = (id: string) => store.state.orders.find((o) => o.id === id)!;
@@ -60,4 +60,18 @@ test("gbrain classifier maps link, write and read tools", () => {
   onBridgeEvent({ type: "activity", unitId: "u4", kind: "tool", text: "w", tool: "mcp__gbrain__put_page", args: { slug: "learnings/y" } });
   onBridgeEvent({ type: "activity", unitId: "u4", kind: "tool", text: "r", tool: "gbrain.get_page", args: { slug: "components/auth" } });
   expect(store.state.memory.recent.slice(-3).map((m) => m.op)).toEqual(["link", "remember", "recall"]);
+});
+
+test("order ids stay unique across reset, so a late pre-reset reply cannot finish a new order", async () => {
+  const before = orderFor(["u1"], "t101");
+  await resetWorld();
+  const after = orderFor(["u1"], "t102");
+  expect(after.id).not.toBe(before.id);
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: before.id, text: "late pre-reset reply" });
+  expect(order(after.id).status).toBe("active");
+});
+
+test("nested MCP args {mcpServer, args} are unwrapped for slugs", () => {
+  onBridgeEvent({ type: "activity", unitId: "u5", kind: "tool", text: "r", tool: "gbrain.recall", args: { mcpServer: "gbrain", args: { componentId: "auth" } } });
+  expect(store.state.memory.recent.at(-1)!.slugs).toEqual(["components/auth"]);
 });

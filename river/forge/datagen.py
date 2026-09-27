@@ -35,17 +35,17 @@ TRAIN_TEMPLATES = [
     "Work issue {issue} ({kind}, severity {severity}) in {component}: {title}. Reported by {customers}. Recall what GBrain knows first, then fix or triage it, and remember what you learned.",
     "New order: {issue} \"{title}\" in the {component} component. Customers affected: {customers}. Investigate and report back.",
     "{customers} report: {title}. This is {issue}, a severity {severity} {kind} in {component}. Handle it.",
-    "Take {issue}. {title}. Component: {component}. What is your plan and what do you tell the customer?",
-    "Triage {issue} ({component}, sev {severity}): {title}",
+    "Take {issue} for {customers}. {title}. Component: {component}. What is your plan and what do you tell the customer?",
+    "Triage {issue} ({component}, sev {severity}) from {customers}: {title}",
     "Order from the board: go to {component} and deal with {issue}, \"{title}\". {customers} is waiting.",
     "{issue} needs an owner. {title} ({kind}, {component}). Customers: {customers}.",
-    "Please look at {issue} in {component}. Summary: {title}. Severity {severity}.",
+    "Please look at {issue} in {component} for {customers}. Summary: {title}. Severity {severity}.",
     "You are assigned {issue}: {title}. It affects {customers}. Recall, act, remember.",
     "Incoming {kind} in {component}: {title} ({issue}). Reporter: {customers}.",
 ]
 EVAL_TEMPLATES = [
     "Heads up, {customers} just escalated {issue} ({component}): {title}. What do you do?",
-    "Assignment: {issue}. Area {component}. Problem: {title}. Priority {severity} of 3.",
+    "Assignment: {issue} for {customers}. Area {component}. Problem: {title}. Priority {severity} of 3.",
     "Can you own {issue} for {customers}? It is a {component} {kind}: {title}.",
 ]
 EXTRAS = ["", " The customer is upset.", " It is blocking their month-end close.", " Keep the reply short.",

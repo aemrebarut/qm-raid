@@ -256,12 +256,14 @@ export class UnitView {
     // Remaining path length drives the catch-up speed.
     let remaining = dist;
     for (let i = 0; i < this.waypoints.length; i++) remaining += (this.waypoints[i + 1] ?? this.dest).distanceTo(this.waypoints[i]);
-    if (remaining > 14) {
-      pos.copy(this.dest); // teleport (reset, respawn)
+    // Teleport only on a large direct jump (reset, respawn); a routed detour through gates can be long
+    // while the engine moved the unit a single tile.
+    if (Math.hypot(this.dest.x - pos.x, this.dest.z - pos.z) > 14) {
+      pos.copy(this.dest);
       this.waypoints = [];
       this.moving = false;
     } else if (dist > 0.01) {
-      const speed = Math.max(3.0, remaining * 2.2); // engine steps 3 tiles/s (diagonals too); catch up without stutter
+      const speed = THREE.MathUtils.clamp(remaining * 2.2, 3.0, 10); // engine steps 3 tiles/s (diagonals too); catch up without stutter or zipping
       const step = Math.min(dist, speed * dt);
       pos.addScaledVector(to.normalize(), step);
       this.facing = turn(this.facing, Math.atan2(to.x, to.z), dt * 10);

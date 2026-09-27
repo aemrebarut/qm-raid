@@ -44,13 +44,39 @@ export class IsoCamera {
     this.version++;
   }
 
-  /** Zoom so the whole map diamond fits the viewport (never zooms in past 1). */
-  fitMap() {
-    const aspect = this.width / this.height;
-    const mapW = MAP_SIZE * Math.SQRT2 + 1; // diamond width in world units
-    this.camera.zoom = THREE.MathUtils.clamp(Math.min((VIEW_H * aspect) / mapW, 1), 0.55, 1);
+  /**
+   * Zoom and centre so the given world points (content corners, heights included) fit the viewport
+   * minus the HUD insets (px). No points fits the whole map.
+   */
+  fitMap(points: THREE.Vector3[] = [], insets = { top: 0, right: 0, bottom: 0, left: 0 }) {
+    if (!points.length) {
+      for (const x of [0, MAP_SIZE]) for (const z of [0, MAP_SIZE]) points.push(new THREE.Vector3(x, 0, z));
+    }
+    this.camera.zoom = 1;
     this.camera.updateProjectionMatrix();
-    this.target.set(MAP_SIZE / 2, 0, MAP_SIZE / 2 + 1);
+    this.update();
+    const right = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(this.camera.matrixWorld, 1);
+    let r0 = Infinity, r1 = -Infinity, u0 = Infinity, u1 = -Infinity;
+    for (const p of points) {
+      const r = p.dot(right), u = p.dot(up);
+      r0 = Math.min(r0, r); r1 = Math.max(r1, r);
+      u0 = Math.min(u0, u); u1 = Math.max(u1, u);
+    }
+    const aw = Math.max(80, this.width - insets.left - insets.right);
+    const ah = Math.max(80, this.height - insets.top - insets.bottom);
+    const pxPerUnit = this.height / VIEW_H; // at zoom 1
+    const zoom = Math.min(aw / (Math.max(1, r1 - r0) * pxPerUnit), ah / (Math.max(1, u1 - u0) * pxPerUnit));
+    this.camera.zoom = THREE.MathUtils.clamp(zoom, 0.45, 1.4);
+    this.camera.updateProjectionMatrix();
+    // Put the content centre at the centre of the safe rect, then slide the ground target to match.
+    const wpp = this.worldPerPixel();
+    const vr = (r0 + r1) / 2 - ((insets.left - insets.right) / 2) * wpp;
+    const vu = (u0 + u1) / 2 + ((insets.top - insets.bottom) / 2) * wpp;
+    const t = this.target;
+    const dr = vr - t.dot(right), du = vu - t.dot(up);
+    t.addScaledVector(RIGHT, dr).addScaledVector(UP_GROUND, du / Math.sin(ELEV));
+    t.y = 0;
     this.update();
   }
 

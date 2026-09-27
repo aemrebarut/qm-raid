@@ -51,6 +51,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const targets = new Map<string, TargetView>();
   const buildings = new Map<string, BuildingView>();
   let layout = "";
+  let userCamera = false; // once the user pans or zooms, stop auto framing
   const justSpawned = new Set<string>(); // ids from unit.spawned events, consumed by reconcile
 
   // ---- reconcile store -> meshes ----
@@ -72,6 +73,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
         buildings.set(b.id, v);
         buildingsG.add(v.group);
       }
+      if (!userCamera) frameContent(); // first real layout (or a new one) before the user moved the camera
     }
 
     const seenT = new Set<string>();
@@ -174,7 +176,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   offs.push(store.subscribe((s) => { reconcile(s); syncArrows(); }));
   offs.push(bus.on("selection", () => { syncSelection(); syncArrows(); }));
   offs.push(bus.on("hover", () => syncSelection()));
-  offs.push(bus.on("focusTile", ({ x, y }) => iso.focus(x + 0.5, y + 0.5)));
+  offs.push(bus.on("focusTile", ({ x, y }) => { userCamera = true; iso.focus(x + 0.5, y + 0.5); }));
   offs.push(store.onEvent((ev) => {
     if (ev.type === "memory.recall") recallFx(ev.unitId, ev.slugs ?? [], ev.summary);
     else if (ev.type === "memory.remember") rememberFx(ev.unitId, ev.slug, ev.summary);
@@ -307,6 +309,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (!down.dragging && Math.hypot(dx, dy) > DRAG_PX) down.dragging = true;
       if (down.dragging) {
         if (down.mode === "pan") {
+          userCamera = true;
           iso.panPixels(e.movementX, e.movementY);
           canvas.style.cursor = "grabbing";
         } else {
@@ -371,6 +374,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const k = e.ctrlKey ? 0.012 : 0.0016; // pinch vs wheel
+    userCamera = true;
     iso.zoomAt(Math.exp(-e.deltaY * k), toNdc(e));
   }, { passive: false });
   canvas.addEventListener("pointerleave", () => { pendingHover = null; if (bus.hovered) bus.hover(null); });
@@ -400,7 +404,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       e.preventDefault();
     } else if (k === "h") {
       const lib = store.getState().buildings.find((b) => b.kind === "gbrain");
-      if (lib) iso.focus(lib.x + 0.5, lib.y + 0.5);
+      if (lib) { userCamera = true; iso.focus(lib.x + 0.5, lib.y + 0.5); }
     }
   };
   const onKeyUp = (e: KeyboardEvent) => {
@@ -421,11 +425,34 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
     iso.resize(w, h);
+    if (!userCamera) frameContent();
+  }
+  /** Initial framing: fit zones, buildings, targets and units into the part of the canvas the HUD leaves free. */
+  function frameContent() {
+    const s = store.getState();
+    const pts: THREE.Vector3[] = [];
+    const box = (x0: number, z0: number, x1: number, z1: number, h: number) => {
+      for (const x of [x0, x1]) for (const z of [z0, z1]) pts.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x, h, z));
+    };
+    for (const c of s.components) box(c.zone.x, c.zone.y, c.zone.x + c.zone.w, c.zone.y + c.zone.h, 1.1);
+    for (const b of s.buildings) box(b.x - 1.3, b.y - 1.3, b.x + 2.3, b.y + 2.3, b.kind === "gbrain" ? 3.9 : 2.6);
+    for (const t of s.targets) box(t.pos.x, t.pos.y, t.pos.x + 1, t.pos.y + 1, 1.4);
+    for (const u of s.units) box(u.pos.x, u.pos.y, u.pos.x + 1, u.pos.y + 1, 1.6);
+    iso.fitMap(pts, hudInsets());
+  }
+  function hudInsets() {
+    // Resolve the HUD layout variables (hud.css :root) to pixels with a hidden probe; 0 when absent.
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;height:var(--hud-top,0px);width:var(--hud-bottom,0px)";
+    el.appendChild(probe);
+    const r = probe.getBoundingClientRect();
+    probe.remove();
+    const pad = 14;
+    return { top: r.height + pad, bottom: r.width + pad, left: pad, right: pad };
   }
   const ro = new ResizeObserver(resize);
   ro.observe(el);
   resize();
-  iso.fitMap();
 
   const clock = new THREE.Clock();
   let raf = 0;
@@ -438,7 +465,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       const sp = 14 * dt;
       const r = (keys.has("d") || keys.has("arrowright") ? 1 : 0) - (keys.has("a") || keys.has("arrowleft") ? 1 : 0);
       const u = (keys.has("w") || keys.has("arrowup") ? 1 : 0) - (keys.has("s") || keys.has("arrowdown") ? 1 : 0);
-      if (r || u) iso.panScreen(r * sp, u * sp * 0.5);
+      if (r || u) { userCamera = true; iso.panScreen(r * sp, u * sp * 0.5); }
     }
     applyHover();
     if (iso.version !== viewVersion) {

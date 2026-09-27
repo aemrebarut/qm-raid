@@ -58,6 +58,9 @@ function blockedTiles(components: Component[], buildings: Building[], targets: T
       for (let j = b.y - FOOTPRINT - 1; j <= b.y + FOOTPRINT + 1; j++) s.add(k(i, j));
   }
   for (const t of targets) s.add(k(t.pos.x, t.pos.y));
+  // Clear plaza around the Library: idle units stage there.
+  const lib = buildings.find((b) => b.kind === "gbrain");
+  if (lib) for (let i = lib.x - 4; i <= lib.x + 4; i++) for (let j = lib.y - 4; j <= lib.y + 4; j++) s.add(k(i, j));
   return s;
 }
 

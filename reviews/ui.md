@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current checkpoint: prior Formation, hidden run-button, spawn-draft, and initial resolved-art P2s are verified fixed. Live Form team -> Trio -> role assignment -> right-click workflow start passes on 4619 art on, with no page errors. Latest completed board suite: 17 tests / 103 assertions. Final A3 art gate checks remain in progress; no default-art flip is approved by this checkpoint.
+Current checkpoint: A3 UI art-on and off-fallback checks PASS on 4619; full Formation click-through and forged-unit selection/movement pass. All reported UI P2s in this batch are verified fixed. Latest board validation: 20 tests / 119 assertions, typecheck and build pass. No JavaScript page errors; test Forge evaluation fetch 404s remain a reported network caveat. Analyst owns the final default-art decision after the other gates.
 
 ## Review procedure
 
@@ -213,3 +213,15 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - PASS after coordinating mock-engine quiet time. Selected mixed u4/u5/u6, clicked Form team, observed POST /api/teams 200 and exact team 4. Eight preset cards appeared. Clicked Trio and observed PUT 200. Armed planner, clicked Eno's bench portrait, observed full-graph PUT 200 and bindings u5/u4/u6. A real mouse right-click on camp t108 sent {teamId:4,targetId:t108}; HTTP 200 returned running run w1, active planner, order o2.
 - pageerrors=[] and the art-on scene was ready. Earlier attempt got API 200 but a concurrent engine redeploy/reset removed the new team before the assertion. Engine lead confirmed automatic redeploys plus test resets caused those flips, and provided /tmp/engplan/with4618 for future live checks.
 - A separate 15-second scene-readiness timeout under high machine/software-render load did not recur in the successful full flow. Diagnostic console contained test-induced blocked Vite WebSocket messages and one resource 404; no caught scene mount exception was captured. Remaining A3 checks remove that interception and hold the engine test lock. No request was sent to 4610/4611.
+
+## A3 UI gate: PASS, art on and placeholder fallback
+
+- Completed on live 4619/4618, with the engine test lock for the final pass. No real-QM requests. The initial hardware-independent checks used software WebGL; this final run used Chrome ANGLE Metal on Apple M4 Max at 1512x982.
+- Art on: real mouse unit/camp/building picking, selected unit/camp rings, Forge opening, drag-box selection, Train Smoke Ranger from an existing dry-run type, selecting the new forged u7, and an actual camp order with authoritative position movement all pass. No Forge type was created or trained by the reviewer.
+- Workflow: full Form team/Trio/role swap/order flow passed earlier; final art pass also starts a real mock trio run and verifies three role badges and three run links. Explicitly resolved the test team from current membership instead of assuming team 1 remained intact across other tests.
+- Concurrent recall on u1/u2 plus remember on u3 creates visible effects. Inspected art-gate-fx.png: blue narrow beams, readable surrounding units and no broad white wedge. Includes 7eb50a6 and 28d6c15 FX tuning, 9a243cc portal, c1f21f8 contact shadows, bc80e40 banner glow, cdd1e5e world wiring, cd4c8ba labels and a727e52 scene fixes.
+- Frame sample: 61 FPS, 436 draw calls, ANGLE Metal Renderer: Apple M4 Max. This is a short loaded-machine sample, not a sustained benchmark. No JavaScript page errors or shader exceptions.
+- Network caveat reported to UI lead: Forge detail fetches for refund-ranger-2 and rule-warden evaluation records returned 404 in the first pass, plus a missing resource 404. The panel remained usable and showed scores on the later fallback capture. Do not claim an entirely empty browser console.
+- ?art=off: placeholder unit/camp picks and Forge opening pass; screenshot art-off-fallback.png inspected. Both screenshots are temporary under /tmp/raid-ui-review. Both browser scripts ended and closed their browsers.
+- PASS sent to Analyst, raid-art-plan, raid-look-dir and raid-ui-scene. Reviewer did not change demo defaults; the Analyst still requires art reviewer and visual director acceptance.
+- a194cfc GBrain lock passes the regression (checked, disabled, no phantom dirty state, plugins PATCH retains gbrain). Latest board validation: 20 tests / 119 assertions, typecheck and production build pass (71 modules, nonblocking chunk-size warning).

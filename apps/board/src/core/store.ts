@@ -12,7 +12,7 @@ export interface Store {
   subscribe(fn: (state: State) => void): () => void;
   /** Raw engine events, called after the event has been applied to the state. */
   onEvent(fn: (ev: EngineEvent, state: State) => void): () => void;
-  /** The latest workflow run for a team (running first), if any. */
+  /** The team's newest running workflow run, else its newest run, if any. */
   run(teamId: number | null | undefined): WorkflowRun | undefined;
   /** Activity feed for one unit, or the global feed when unitId is omitted. Newest last. */
   feed(unitId?: string): FeedEntry[];
@@ -216,8 +216,8 @@ export function createStore(initial: State): Store {
     team: (id) => (id == null ? undefined : state.teams.find((t) => t.id === id)),
     run: (teamId) => {
       if (teamId == null) return undefined;
-      const runs = state.workflowRuns.filter((r) => r.teamId === teamId);
-      return runs.find((r) => r.status === "running") ?? runs[runs.length - 1];
+      const runs = state.workflowRuns.filter((r) => r.teamId === teamId).reverse();
+      return runs.find((r) => r.status === "running") ?? runs[0];
     },
   };
 }

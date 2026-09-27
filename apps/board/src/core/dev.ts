@@ -40,6 +40,10 @@ export function devTools(store: Store) {
       const s = store.getState();
       const t = targetId ? store.target(targetId) : s.targets.find((x) => x.status === "open");
       if (!t) return null;
+      // One run per team: the simulated run replaces any running one (e.g. the fixture run).
+      for (const r of s.workflowRuns.filter((x) => x.teamId === teamId && x.status === "running")) {
+        store.apply({ seq: seq(), ts: now(), type: "workflow.updated", run: { ...structuredClone(r), status: "cancelled", active: [] } });
+      }
       const run: WorkflowRun = { id: `dev-w${n + 1}`, teamId, targetId: t.id, status: "running", loops: 0, active: [wf.entry], steps: [] };
       const emit = () => store.apply({ seq: seq(), ts: now(), type: "workflow.updated", run: structuredClone(run) });
       const node = (id: string) => wf.nodes.find((x) => x.id === id)!;

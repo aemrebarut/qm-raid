@@ -101,3 +101,31 @@ test("workflow runs and handoffs", () => {
   expect(store.feed("u2").map((f) => f.kind)).toEqual(["handoff", "order"]);
   expect(store.feed("u3")[0]!.text).toContain("handed off to Brom");
 });
+
+test("ordering a whole workflow team sends teamId", async () => {
+  const { commandTarget } = await import("../src/core");
+  const g = globalThis as any;
+  const orig = g.fetch;
+  const bodies: any[] = [];
+  g.fetch = async (_url: string, init: any) => { bodies.push(JSON.parse(init.body)); return new Response(JSON.stringify({ ok: true })); };
+  try {
+    const store = createStore(fixtureState());
+    const bus = createBus();
+    bus.select(["u1", "u2", "u3"]); // team 1, trio
+    await commandTarget(store, bus, "t21");
+    bus.select(["u1", "u2"]); // not the whole team
+    await commandTarget(store, bus, "t21");
+    expect(bodies).toEqual([{ teamId: 1, targetId: "t21" }, { unitIds: ["u1", "u2"], targetId: "t21" }]);
+  } finally { g.fetch = orig; }
+});
+
+test("store.run returns the newest running run", () => {
+  const store = createStore(fixtureState());
+  expect(store.run(1)?.id).toBe("w1");
+  const run = { ...structuredClone(store.run(1)!), id: "w2", loops: 0 };
+  store.apply({ seq: 90, ts: Date.now(), type: "workflow.updated", run });
+  expect(store.run(1)?.id).toBe("w2");
+  store.apply({ seq: 91, ts: Date.now(), type: "workflow.updated", run: { ...run, status: "done", active: [] } });
+  expect(store.run(1)?.id).toBe("w1"); // w1 is still running
+  expect(store.run(2)).toBeUndefined();
+});

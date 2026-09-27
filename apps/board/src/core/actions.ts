@@ -14,7 +14,20 @@ export async function commandTarget(store: Store, bus: Bus, targetId: string): P
   const unitIds = bus.selection.units.filter((id) => store.unit(id));
   if (!unitIds.length) return null;
   const t = store.target(targetId);
+  // A whole team with a workflow is ordered as the team, so the engine starts a workflow run.
+  const team = workflowTeam(store, unitIds);
+  if (team) {
+    return report(bus, await api.order({ teamId: team.id, targetId }), `${team.name} (${team.workflow!.preset}) takes ${t?.issue ?? targetId}`);
+  }
   return report(bus, await api.order({ unitIds, targetId }), `Ordered ${unitIds.length} to ${t?.issue ?? targetId}`);
+}
+
+/** The team whose members are exactly these units, if it has a workflow. */
+export function workflowTeam(store: Store, unitIds: string[]) {
+  const ids = new Set(unitIds);
+  return store.getState().teams.find(
+    (tm) => tm.workflow && tm.members.length === ids.size && tm.members.every((m) => ids.has(m)),
+  );
 }
 
 /** A unit was chosen while Adjust is pending: reassign the proposed order to that unit. Returns true if consumed. */

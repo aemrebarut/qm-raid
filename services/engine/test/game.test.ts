@@ -11,8 +11,9 @@ let sessionGen = 0; // bridge POST /units answers a fresh sessionId each time
 let brainResetGate: Promise<void> | null = null; // when set, brain POST /reset waits for it (slow reset)
 let recallGate: Promise<void> | null = null; // when set, brain POST /recall waits for it
 let issuesAnswer: { status: number; body: unknown } | null = null; // brain POST /issues answer
-const sendStatuses: number[] = [];
-const patchStatuses: number[] = []; // bridge PATCH /units/:id answers these statuses first (then 200) // bridge POST /units/:id/send answers these statuses first (then 200)
+const sendStatuses: number[] = []; // bridge POST /units/:id/send answers these statuses first (then 200)
+const patchStatuses: number[] = []; // bridge PATCH /units/:id answers these statuses first (then 200)
+let patchGate: Promise<void> | null = null; // when set, bridge PATCH /units/:id waits for it (slow loadout restore)
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
@@ -22,6 +23,7 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
   if (/\/types\/forge-scribe\/eval$/.test(String(url))) return new Response(JSON.stringify({ typeId: "forge-scribe", score: 0.82, base: 0.42 }), { status: 200 });
   if (String(url).endsWith("/catalog")) return new Response(JSON.stringify({ items: [{ id: "gbrain", name: "GBrain", description: "Team memory", kind: "plugin" }] }), { status: 200 });
   if (String(url).endsWith("/issues") && issuesAnswer) return new Response(JSON.stringify(issuesAnswer.body), { status: issuesAnswer.status });
+  if (init?.method === "PATCH" && /\/units\/[^/]+$/.test(String(url)) && patchGate) await patchGate;
   if (init?.method === "PATCH" && /\/units\/[^/]+$/.test(String(url)) && patchStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: patchStatuses.shift()! });
   if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
   if (String(url).endsWith("/units") && init?.method === "POST") {
@@ -696,4 +698,28 @@ test("Loadout P2s: every new registration re-applies a custom loadout; a PATCH 4
   expect(seq).toEqual(["PATCH New orders.", "POST u1", "PATCH New orders."]);
   expect(unit("u1").loadout!.instructions).toBe("New orders.");
   patchStatuses.length = 0;
+});
+
+test("Loadout P2 race: a send waits for the loadout restore of a registration in flight", async () => {
+  const { BRIDGE_URL } = await import("../src/config.ts");
+  unit("u1").loadout = { instructions: "Quote the rule.", skills: [], plugins: ["gbrain"] };
+  let release!: () => void;
+  patchGate = new Promise<void>((r) => { release = r; });
+  calls.length = 0;
+  game.resyncUnits(BRIDGE_URL); // bridge restart: u1 re-POSTs, then its restore PATCH is held
+  await Bun.sleep(20);
+  expect(calls.some((c) => c.url === `${BRIDGE_URL}/units` && c.body?.id === "u1")).toBe(true);
+  expect(calls.some((c) => c.url.endsWith("/units/u1") && c.body?.loadout)).toBe(true);
+  const o = orderFor(["u1"], "t101");
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  expect(unit("u1").status).toBe("working");
+  await Bun.sleep(30);
+  expect(calls.filter((c) => c.url.endsWith("/units/u1/send")).length).toBe(0);
+  release();
+  patchGate = null;
+  await Bun.sleep(30);
+  const sends = calls.filter((c) => c.url.endsWith("/units/u1/send"));
+  expect(sends.length).toBe(1);
+  expect(sends[0]!.body.orderId).toBe(o.id);
+  expect(calls.findIndex((c) => c.url.endsWith("/units/u1/send"))).toBeGreaterThan(calls.findIndex((c) => c.url.endsWith("/units/u1") && c.body?.loadout));
 });

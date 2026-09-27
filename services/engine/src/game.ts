@@ -90,23 +90,24 @@ async function loadWorld(): Promise<void> {
 // default loadout, and qm-bridge ignores an unchanged one). Callers that send a new loadout themselves pass false.
 export async function ensureSpawned(u: Unit, reapply = true): Promise<boolean> {
   const r = runtime(u.id);
+  // A registration in flight (bridge POST, then the loadout restore) is awaited first: spawned turns true before the
+  // restore PATCH ends, and no send may overtake it.
+  if (r.spawning) return r.spawning;
   if (r.spawned) return true;
-  if (!r.spawning) {
-    r.spawning = (async () => {
-      const res = await spawnOnBridge(u);
-      if (!res) return false;
-      if (unitById(u.id) !== u) {
-        // Retired (or replaced by a reset) while the bridge was registering it: do not leak the session.
-        if (!unitById(u.id)) void deleteOnBridge(u);
-        return false;
-      }
-      r.spawned = true;
-      u.qm = { sessionId: res.sessionId, sessionUrl: res.sessionUrl };
-      emit("unit.updated", { unit: u });
-      if (reapply && !resetting) await reapplyLoadout(u);
-      return true;
-    })().finally(() => { r.spawning = null; });
-  }
+  r.spawning = (async () => {
+    const res = await spawnOnBridge(u);
+    if (!res) return false;
+    if (unitById(u.id) !== u) {
+      // Retired (or replaced by a reset) while the bridge was registering it: do not leak the session.
+      if (!unitById(u.id)) void deleteOnBridge(u);
+      return false;
+    }
+    r.spawned = true;
+    u.qm = { sessionId: res.sessionId, sessionUrl: res.sessionUrl };
+    emit("unit.updated", { unit: u });
+    if (reapply && !resetting) await reapplyLoadout(u);
+    return !resetting && unitById(u.id) === u;
+  })().finally(() => { r.spawning = null; });
   return r.spawning;
 }
 

@@ -66,7 +66,7 @@ raid-eng-rev
 - R4. M3 end to end: team autopilot on, proposals appear with deadlines, cancel / go / adjust / expiry each produce a correct vetoes.jsonl row.
 
 ## M3/M4: Forge and Barracks
-- E12. `state.unitTypes`: builtins (knight, ranger, scout; ready, progress 1) + `GET $FORGE_URL/types` every 2 s (source forge), emit `forge.updated` {unitType} on change. `POST /api/forge/types` proxies. Subscribe to `$FORGE_URL/events` too; each unit remembers its bridge URL.
+- E12. `state.unitTypes`: builtins (knight, ranger, scout; ready, progress 1) + `GET $FORGE_URL/types` every 2 s (source forge), emit `forge.updated` {unitType} on change. `POST /api/forge/types` {name, description, dryRun?} proxies unchanged; every test that creates a Forge type sends `dryRun: true` (Analyst rule; real River training only for demo types). Subscribe to `$FORGE_URL/events` too; each unit remembers its bridge URL.
 - E13. `POST /api/units` {class, name?, team?}: builtin class -> model/effort from config, forge type only when ready (model = type.model, bridge = FORGE_URL); spawn next to the Barracks (first free tile around 20,20), register with its bridge, emit `unit.spawned`.
 - E13b. `DELETE /api/units/:id` -> {ok}: cancel its active or proposed order (order.updated cancelled, target back to open if no other order), bridge `DELETE /units/:id`, remove from its team (team.updated), remove the unit, emit `unit.retired` {unitId}.
 - E14. `POST /api/reset`: brain `/reset`, reload world, DELETE and re-register units, clear orders/teams/memory/stats, emit `state.snapshot`. `PATCH /api/units/:id` {team?, effort?, role?, autonomy?}.

@@ -3,7 +3,7 @@
 // emits forge.updated {unitType} only on change, and proxies POST /api/forge/types.
 // Forge down: keep the last list, log once a minute, never throw.
 import type { UnitType } from "../../../contract/types.ts";
-import { FORGE_URL } from "./config.ts";
+import { BRIDGE_URL, FORGE_URL } from "./config.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
 import { emit, store } from "./store.ts";
 
@@ -109,4 +109,37 @@ export async function forgeProxy(body: unknown): Promise<{ ok: true; typeId: str
 // A forged unit type by id (null for builtins and unknown ids).
 export function forgeType(id: string): UnitType | null {
   return store.state.unitTypes.find((t) => t.id === id && t.source === "forge") ?? null;
+}
+
+// GET /api/forge/types/:id/eval -> the Forge's GET /types/:id/eval, status and body unchanged (404 for dry runs).
+// A mock-backed engine (BRIDGE_URL on 4615, no trained models) answers a fixed plausible eval for a forged type the
+// Forge has no eval for (dry run) or while the Forge is down, flagged mock: true, so the eval panel can be built and tested.
+export async function forgeEval(id: string): Promise<{ status: number; body: unknown }> {
+  const r = await sendJson<unknown>("GET", `${FORGE_URL}/types/${encodeURIComponent(id)}/eval`, undefined, 3000);
+  if (r.status >= 200 && r.status < 300 && r.data) return { status: r.status, body: r.data };
+  const t = forgeType(id);
+  const mockBackend = new URL(BRIDGE_URL).port === "4615";
+  if (t && mockBackend && (r.status === 0 || r.status === 404)) return { status: 200, body: mockEval(t) };
+  if (r.status === 0) { logOnce("forge", `forge unreachable at ${FORGE_URL}`); return { status: 503, body: { ok: false, error: `forge unreachable at ${FORGE_URL}` } }; }
+  return { status: r.status, body: r.data ?? { ok: false, error: `forge answered ${r.status}` } };
+}
+
+// Same shape as the Forge's evalSummary (services/forge/src/server.ts): metrics trained vs base, training stats, one sample.
+function mockEval(t: UnitType) {
+  const metrics = [
+    { key: "style", label: "House style (rubric)", trained: 0.84, base: 0.51 },
+    { key: "fix", label: "Names the right fix", trained: 0.78, base: 0.55 },
+    { key: "grounded", label: "Groundedness (judge)", trained: 0.9, base: 0.62 },
+  ];
+  const avg = (k: "trained" | "base") => Math.round((metrics.reduce((a, m) => a + m[k], 0) / metrics.length) * 1000) / 1000;
+  return {
+    typeId: t.id, name: t.name, status: t.status, baseModel: "mock-base-4b", evalOrders: 24, mock: true,
+    metrics: [...metrics, { key: "overall", label: "Overall (evalScore)", trained: avg("trained"), base: avg("base") }],
+    training: { examples: 240, steps: 90, epochs: 3, lossStart: 1.92, lossEnd: 0.41, trainSeconds: 312, sessionWaitSeconds: 18, modelLoadSeconds: 9, evalSeconds: 41 },
+    sample: {
+      order: 'Order o12: work on issue LUM-103 "Refund sent twice for one dispute" (bug, severity 1).',
+      trained: `${t.name}: Recalled rules/billing-idempotency. The refund retry added the attempt number to the idempotency key, so a second refund went out. Fix: reuse inv_<invoiceId> for every retry; a regression test retries twice and asserts one refund. Saved the learning to GBrain.`,
+      base: "The refund may have been processed twice due to a retry. I recommend checking the payment logic and adding safeguards against duplicate refunds.",
+    },
+  };
 }

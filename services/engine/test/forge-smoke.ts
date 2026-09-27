@@ -4,7 +4,8 @@
 // and against an in-process fake Forge (--vanish) to check types that disappear from GET /types.
 import type { UnitType } from "../../../contract/types.ts";
 import { FORGE_URL } from "../src/config.ts";
-import { forgeProxy, forgeType, pollForge, startForge } from "../src/forge.ts";
+import { forgeEval, forgeProxy, forgeType, pollForge, startForge } from "../src/forge.ts";
+import { BRIDGE_URL } from "../src/config.ts";
 import { store, subscribe } from "../src/store.ts";
 
 let failures = 0;
@@ -19,9 +20,22 @@ const builtinIds = () => store.state.unitTypes.filter((t) => t.source === "built
 if (process.argv.includes("--vanish")) {
   // fake Forge on FORGE_URL's port: two ready types, then both vanish; a unit still uses one of them
   let list: any[] = [{ id: "fx-keep", name: "Keep", status: "ready", progress: 1, stage: "", model: "m1" }, { id: "fx-drop", name: "Drop", status: "ready", progress: 1, stage: "", model: "m2" }];
-  const srv = Bun.serve({ hostname: "127.0.0.1", port: Number(new URL(FORGE_URL).port), fetch: () => Response.json(list) });
+  const evalBody = { typeId: "fx-keep", name: "Keep", metrics: [{ key: "overall", label: "Overall", trained: 0.8, base: 0.5 }] };
+  const srv = Bun.serve({ hostname: "127.0.0.1", port: Number(new URL(FORGE_URL).port), fetch: (req) => {
+    const p = new URL(req.url).pathname;
+    if (p === "/types/fx-keep/eval") return Response.json(evalBody);
+    if (p.endsWith("/eval")) return Response.json({ ok: false, error: p.includes("fx-drop") ? "dry run: no eval" : "no such type" }, { status: 404 });
+    return Response.json(list);
+  } });
   await pollForge();
   check(forgeType("fx-keep")?.status === "ready" && forgeType("fx-drop")?.status === "ready", "fake forge: 2 types merged");
+  const mock = new URL(BRIDGE_URL).port === "4615";
+  const e1 = await forgeEval("fx-keep"), e2 = await forgeEval("fx-drop"), e3 = await forgeEval("nope");
+  check(e1.status === 200 && JSON.stringify(e1.body) === JSON.stringify(evalBody), "eval: the Forge's eval passes through unchanged");
+  check(mock
+    ? e2.status === 200 && (e2.body as any).mock === true && (e2.body as any).typeId === "fx-drop" && (e2.body as any).metrics?.some((m: any) => m.key === "overall") && !!(e2.body as any).sample
+    : e2.status === 404 && (e2.body as any).error === "dry run: no eval", mock ? "eval, mock backend: dry-run type gets the fixed plausible eval" : "eval, QM backend: dry-run 404 passes through unchanged");
+  check(e3.status === 404 && (e3.body as any).error === "no such type", "eval: unknown type 404 passes through");
   store.state.units.push({ id: "ufx", name: "Fx", class: "fx-keep", model: "m1", effort: "low", role: "worker", team: null, status: "idle", pos: { x: 0, y: 0 }, orderId: null, qm: { sessionId: null, sessionUrl: null } });
   list = [];
   const n = updates.length;
@@ -44,6 +58,7 @@ if (process.argv.includes("--down")) {
   check(builtinIds() === "knight,ranger,scout" && store.state.unitTypes.every((t) => t.source === "builtin"), `forge down (${FORGE_URL}): builtins kept, no throw`);
   const r = await forgeProxy({ name: "X", description: "y", dryRun: true });
   check(r.ok === false && /unreachable/.test((r as any).error), "forge down: forgeProxy -> {ok:false, error}");
+  check((await forgeEval("x")).status === 503, "forge down: eval of an unknown type -> 503");
   process.exit(failures ? 1 : 0);
 }
 
@@ -88,6 +103,10 @@ check(down.exitCode === 0, "forge-down run passed");
 const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
 const fakePort = probe.port; probe.stop(true);
 const vanish = Bun.spawnSync(["bun", import.meta.path, "--vanish"], { env: { ...process.env, FORGE_URL: `http://127.0.0.1:${fakePort}` }, stdout: "inherit", stderr: "inherit" });
-check(vanish.exitCode === 0, "vanished-types run passed");
+check(vanish.exitCode === 0, "vanished-types and eval run passed (mock backend)");
+const probe2 = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("") });
+const fakePort2 = probe2.port; probe2.stop(true);
+const vanishQm = Bun.spawnSync(["bun", import.meta.path, "--vanish"], { env: { ...process.env, FORGE_URL: `http://127.0.0.1:${fakePort2}`, BRIDGE_URL: "http://127.0.0.1:4614" }, stdout: "inherit", stderr: "inherit" });
+check(vanishQm.exitCode === 0, "vanished-types and eval run passed (QM backend, no bridge calls)");
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

@@ -63,3 +63,15 @@ test("bus selection and focus", () => {
   bus.clear();
   expect(got).toEqual(["units", "units", "target", "building", "null"]);
 });
+
+test("unit.retired removes the unit and drops it from selection", async () => {
+  const { linkSelection } = await import("../src/core");
+  const store = createStore(fixtureState());
+  const bus = createBus();
+  linkSelection(store, bus);
+  bus.select(["u1", "u2"]);
+  store.apply({ seq: 1, ts: 1, type: "unit.retired", unitId: "u1" });
+  expect(store.unit("u1")).toBeUndefined();
+  expect(store.team(1)!.members).not.toContain("u1");
+  expect(bus.selection.units).toEqual(["u2"]);
+});

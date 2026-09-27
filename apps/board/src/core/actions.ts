@@ -31,3 +31,11 @@ function report(bus: Bus, r: Reply, ok: string): Reply {
   else bus.toast(r.error, "error");
   return r;
 }
+
+/** Keeps bus selection consistent with the store: retired units leave the selection. */
+export function linkSelection(store: Store, bus: Bus): () => void {
+  return store.onEvent((ev) => {
+    if (ev.type !== "unit.retired") return;
+    if (bus.selection.units.includes(ev.unitId)) bus.select(bus.selection.units.filter((id) => id !== ev.unitId));
+  });
+}

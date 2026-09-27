@@ -78,6 +78,11 @@ export function createStore(initial: State): Store {
       case "unit.updated":
         upsert(state.units, ev.unit);
         return;
+      case "unit.retired": {
+        state.units = state.units.filter((u) => u.id !== ev.unitId);
+        for (const t of state.teams) t.members = t.members.filter((m) => m !== ev.unitId);
+        return;
+      }
       case "unit.moved": {
         const u = unit(ev.unitId);
         if (u) u.pos = ev.pos;

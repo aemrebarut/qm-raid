@@ -52,6 +52,7 @@ export const api = {
   spawn: (body: { class: string; name?: string; team?: number }) => call<{ unit?: unknown }>("POST", "/api/units", body),
   patchUnit: (id: string, body: { team?: number | null; effort?: string; role?: string; autonomy?: string }) =>
     call("PATCH", `/api/units/${encodeURIComponent(id)}`, body),
+  retire: (id: string) => call("DELETE", `/api/units/${encodeURIComponent(id)}`),
   message: (unitId: string, text: string) => call("POST", `/api/units/${encodeURIComponent(unitId)}/message`, { text }),
 
   // Teams

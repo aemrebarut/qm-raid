@@ -759,14 +759,15 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
     tick,
     setState(s: TargetState) {
       if (s === state) return;
+      state = s; // before resetPose: its tick must see the new state
       if (s === "resolved") {
+        clearFlash();
         if (defeatT < 0) defeatT = 999; // straight to the resolved look (no collapse replay on load)
       } else {
         defeatT = -1;
         applyResolvedMaterials(0);
         resetPose();
       }
-      state = s;
     },
     hit() {
       if (state === "resolved") return;
@@ -777,6 +778,7 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
       if (state === "resolved" && defeatT >= 0 && defeatT < DEFEAT_LEN) return;
       state = "resolved";
       defeatT = 0;
+      clearFlash();
     },
     dispose() {
       baked.dispose();
@@ -787,6 +789,15 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
       });
     },
   };
+
+  /** Drop any hit flash and recoil (entering resolved, where the flash branch no longer runs). */
+  function clearFlash() {
+    flash = 0;
+    recoil = 0;
+    flashed = false;
+    skinMatB?.emissive.setScalar(0);
+    for (const m of b.skins) m.emissive.copy(m.userData.emissive);
+  }
 
   function resetPose() {
     for (const a of b.actors) {

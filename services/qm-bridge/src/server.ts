@@ -23,15 +23,19 @@ import { normalizeTool, toolArgs, toolText } from "./tools.ts";
 
 const PORT = Number(process.env.PORT ?? 4614);
 const HOST = "127.0.0.1";
-// Unit map survives bridge restarts so in-flight units keep their QM sessions (gitignored).
-const STATE_FILE = join(import.meta.dir, "..", ".state", "units.json");
-const TIMING_FILE = join(import.meta.dir, "..", ".state", "timing.jsonl"); // one row per finished order
+// Unit map survives bridge restarts so in-flight units keep their QM sessions (gitignored). QM_BRIDGE_STATE_DIR is
+// for fake-HTTP tests, so they never touch the live bridge's state.
+const STATE_DIR = process.env.QM_BRIDGE_STATE_DIR ?? join(import.meta.dir, "..", ".state");
+const STATE_FILE = join(STATE_DIR, "units.json");
+const TIMING_FILE = join(STATE_DIR, "timing.jsonl"); // one row per finished order
 // One stable QM conversation per unit: threadRef web:<principal>:raid-<ns>-<unitId>, across respawns, resets and restarts.
 // Change QM_THREAD_NS to start every unit in a fresh conversation.
 const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
 // Plan B (flag): each unit gets its own QM project scope; a loadout change makes the agent write that scope's SOUL.
 // LOADOUT_SOUL=1 turns it on for every new unit; any other non-empty value is a unit id prefix (qmtest-) so plan B
-// can be tried on test units while the demo units stay on plan A.
+// can be tried on test units while the demo units stay on plan A. Every SOUL write (admin and agent fallback) is gated
+// by it, restored units included: a unit that has a scopeId but no longer matches keeps its scope (its session is
+// bound to it) and gets plan A only.
 const SOUL_FLAG = process.env.LOADOUT_SOUL ?? "";
 const soulFor = (id: string): boolean => SOUL_FLAG === "1" || (SOUL_FLAG !== "" && SOUL_FLAG !== "0" && id.startsWith(SOUL_FLAG));
 // After a reset (DELETE then POST of the same id) the unit's next order opens with this line; no separate turn, so a
@@ -218,6 +222,11 @@ async function begin(u: Unit, s: Send): Promise<void> {
 function pump(u: Unit): void {
   if (!booted || u.active || u.queue.length === 0 || !alive(u)) return;
   const s = u.queue.shift()!;
+  if (s.soul && !soulFor(u.id)) {
+    // Restored agent SOUL write for a unit the flag no longer covers: dropped (plan A only).
+    saveUnits();
+    return pump(u);
+  }
   begin(u, s).catch((err) => finish(u, s, { ok: false, text: `QM unavailable: ${String(err?.message ?? err)}` }));
 }
 
@@ -394,6 +403,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
 }
 
 // ---------- HTTP ----------
+const LOADOUT_SHAPE = "loadout must be {instructions, skills, plugins}";
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
@@ -421,7 +431,7 @@ function introText(u: Unit): string {
 async function applyLoadout(u: Unit, next: Loadout | null): Promise<boolean> {
   if (!next || sameLoadout(u.loadout, next)) return false;
   u.loadout = next;
-  if (u.scopeId) await writeSoul(u, next);
+  if (u.scopeId && soulFor(u.id)) await writeSoul(u, next);
   enqueue(u, { text: loadoutMarker(next), intro: true });
   return true;
 }
@@ -429,6 +439,7 @@ async function applyLoadout(u: Unit, next: Loadout | null): Promise<boolean> {
 // Plan B: SOUL through the admin relay (deterministic, no agent turn), applied only when a read-back matches; if
 // that fails, the agent writes it itself.
 async function writeSoul(u: Unit, l: Loadout): Promise<void> {
+  if (!u.scopeId || !soulFor(u.id)) return;
   const content = soulContent(l);
   try {
     await putScopeSoul(u.scopeId!, content);
@@ -475,9 +486,10 @@ function retire(u: Unit): void {
 }
 
 async function spawn(req: Request): Promise<Response> {
-  const b = await body<SpawnRequest & { loadout?: unknown }>(req);
+  const { loadout: rawLoadout, ...b } = await body<SpawnRequest & { loadout?: unknown }>(req);
   if (!b.id) return json({ ok: false, error: "id required" }, 400);
-  const loadout = normalizeLoadout(b.loadout); // optional, so the engine's 404 re-spawn keeps it
+  const loadout = normalizeLoadout(rawLoadout); // optional, so the engine's 404 re-spawn keeps it
+  if (rawLoadout != null && !loadout) return json({ ok: false, error: LOADOUT_SHAPE }, 400); // before anything is created
   const existing = units.get(b.id);
   if (existing) {
     // Same unit again (engine restart, re-spawn without delete): keep the conversation, refresh settings, no extra
@@ -650,15 +662,19 @@ const server = Bun.serve({
       if (m === "PATCH" && !parts[2]) {
         // {team?, loadout?, model?, effort?}: model/effort apply from the next turn (unknown models run on QM's
         // default, with a warning); a changed loadout queues one marker turn.
-        const b = await body<{ team: number | null; loadout: unknown; model: string; effort: string }>(req);
-        if ("team" in b) u.team = b.team ?? null;
+        // The whole body is validated before the unit changes, so a 400 leaves it as it was.
+        const b = await body<{ team: unknown; loadout: unknown; model: unknown; effort: unknown }>(req);
+        const next = "loadout" in b ? normalizeLoadout(b.loadout) : null;
+        const bad =
+          ("team" in b && b.team !== null && !Number.isFinite(b.team) && "team must be a number or null") ||
+          ("model" in b && typeof b.model !== "string" && "model must be a string") ||
+          ("effort" in b && typeof b.effort !== "string" && "effort must be a string") ||
+          ("loadout" in b && !next && LOADOUT_SHAPE);
+        if (bad) return json({ ok: false, error: bad }, 400);
+        if ("team" in b) u.team = (b.team as number | null) ?? null;
         if (typeof b.model === "string" && b.model) u.model = b.model;
         if (typeof b.effort === "string" && b.effort) u.effort = b.effort;
-        if ("loadout" in b) {
-          const next = normalizeLoadout(b.loadout);
-          if (!next) return json({ ok: false, error: "loadout must be {instructions, skills, plugins}" }, 400);
-          await applyLoadout(u, next);
-        }
+        if (next) await applyLoadout(u, next);
         saveUnits();
         return json({
           ok: true,

@@ -106,7 +106,7 @@ export class SidePanel {
 
     put(this.out, 
       h("header", { class: "hud-side-head" },
-        h("div", { class: "hud-portrait", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
+        h("div", { class: "hud-portrait", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
         h("div", null,
           h("h2", null, u.name),
           h("div", { class: "hud-sub" }, `${u.class}${team ? ` · ${team.name}` : ""}`),
@@ -126,6 +126,10 @@ export class SidePanel {
           : h("div", { class: "hud-sub" }, "No order. Right-click a camp to send this unit."),
       ),
       qmUrl ? h("a", { class: "hud-btn hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in QM") : null,
+      u.status === "error"
+        ? h("section", { class: "hud-section hud-error" }, h("h3", null, "Error"),
+            h("div", null, [...this.store.feed(u.id)].reverse().find((e) => e.kind === "error")?.text ?? "The agent reported an error."))
+        : null,
     );
     if (lastReply) this.outReply.append(h("section", { class: "hud-section" }, h("h3", null, "Last reply"), h("div", { class: "hud-reply" }, lastReply.reply)));
     if (this.feedFor !== u.id) this.renderFeed();
@@ -155,7 +159,7 @@ export class SidePanel {
           const team = s.teams.find((t) => t.id === u.team);
           return h("li", null,
             h("button", { class: "hud-roster-item", type: "button", "data-unit": u.id, onclick: () => this.bus.select([u.id]) },
-              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
+              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
               h("span", null, u.name),
               statusPill(u.status),
             ));
@@ -296,6 +300,16 @@ function row(k: string, v: string | null | undefined) {
 
 export function statusPill(status: string) {
   return h("span", { class: `hud-pill hud-st-${status}` }, status.replace("_", " "));
+}
+
+const BUILTIN_CLASSES = new Set(["knight", "ranger", "scout", "oracle"]);
+
+/** Portrait CSS vars: team colour border, plus a stable hue for forged unit types. */
+export function portraitStyle(cls: string, teamColor: string | null | undefined): string {
+  if (BUILTIN_CLASSES.has(cls)) return `--team:${safeColor(teamColor)}`;
+  let hash = 0;
+  for (const ch of cls) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return `--team:${safeColor(teamColor)};--forge-hue:${hash % 360}`;
 }
 
 export function classGlyph(cls: string): string {

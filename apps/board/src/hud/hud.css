@@ -276,3 +276,12 @@
   .hud-feed { max-height: 150px; }
   .hud-card { padding: 6px 8px; }
 }
+
+/* Clickable resources (idle agents, open issues) */
+.hud-res-btn { font: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: 3px; padding: 2px 5px; margin: 0 -5px; cursor: pointer; }
+.hud-res-btn:hover { background: rgba(0,0,0,.25); border-color: #2e2923; }
+
+/* Forged unit types get their own tint; error callout */
+.hud-portrait[style*="--forge-hue"] { background: radial-gradient(circle at 35% 30%, hsl(var(--forge-hue) 70% 92%), hsl(var(--forge-hue) 45% 58%)); }
+.hud-error { padding: 5px 8px; background: rgba(179,38,30,.12); border: 1px solid rgba(179,38,30,.5); color: #7a1c14; overflow-wrap: anywhere; }
+.hud-error h3 { color: #b3261e; border-color: rgba(179,38,30,.4); }

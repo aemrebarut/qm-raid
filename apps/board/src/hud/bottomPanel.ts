@@ -1,8 +1,8 @@
 // AoE bottom panel: command grid (left), selection summary (middle), minimap (right).
 import { api, commandTarget, type Bus, type State, type Store, type Unit } from "../core";
-import { clear, h, safeColor, safeUrl } from "./dom";
+import { clear, h, safeUrl } from "./dom";
 import { Minimap } from "./minimap";
-import { BUILDINGS, classGlyph, statusPill } from "./sidePanel";
+import { BUILDINGS, classGlyph, portraitStyle, statusPill } from "./sidePanel";
 
 interface Cmd { glyph: string; label: string; title: string; enabled: boolean; run?: () => void }
 
@@ -161,7 +161,7 @@ export class BottomPanel {
       const target = order ? s.targets.find((t) => t.id === order.targetId) : undefined;
       sig = `u:${u.id}:${u.status}:${u.model}:${u.effort}:${team?.color}:${target?.id}`;
       node = h("div", { class: "hud-sum-one" },
-        h("div", { class: "hud-portrait hud-portrait-lg", style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
+        h("div", { class: "hud-portrait hud-portrait-lg", style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
         h("div", null,
           h("div", { class: "hud-sum-name" }, u.name),
           h("div", { class: "hud-sum-sub" }, `${u.class}${team ? ` · ${team.name}` : ""} · ${u.model} (${u.effort})`),
@@ -172,7 +172,7 @@ export class BottomPanel {
       node = h("div", { class: "hud-sum-many" }, units.slice(0, 18).map((u) => {
         const team = s.teams.find((t) => t.id === u.team);
         return h("button", { class: "hud-portrait hud-portrait-md", type: "button", title: `${u.name} (${u.status})`, "data-status": u.status,
-          style: `--team:${safeColor(team?.color)}`, onclick: () => this.bus.select([u.id]) }, classGlyph(u.class));
+          style: portraitStyle(u.class, team?.color), onclick: () => this.bus.select([u.id]) }, classGlyph(u.class));
       }));
     } else {
       sig = "none";

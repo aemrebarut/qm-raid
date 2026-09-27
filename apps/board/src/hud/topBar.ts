@@ -15,13 +15,15 @@ export class TopBar {
     res("\u{1FA99}", "Tokens", this.tokens),
     res("\u{1F4B0}", "Spend", this.spend),
     res("\u{1F4DA}", "Library pages", this.pages),
-    res("\u{1F9CD}", "Idle agents", this.idle),
-    res("\u{1F47E}", "Open issues", this.open),
+    res("\u{1F9CD}", "Idle agents: click to cycle through them", this.idle, () => this.cycleIdle()),
+    res("\u{1F47E}", "Open issues: click to cycle through them", this.open, () => this.cycleOpen()),
     res("\u{1F310}", "Backend", this.backend),
     this.teams,
   );
   private teamsSig: string | null = null;
   private last: State | null = null;
+  private idleAt = -1;
+  private openAt = -1;
 
   constructor(private bus: Bus) {}
 
@@ -60,6 +62,23 @@ export class TopBar {
     this.bus.toast(r.ok ? `${t.name}: autopilot ${t.autopilot ? "off" : "on"}` : r.error, r.ok ? "info" : "error");
   }
 
+  // AoE idle-villager button: each click selects the next idle unit and centres the camera on it.
+  private cycleIdle(): void {
+    const idle = (this.last?.units ?? []).filter((u) => u.status === "idle");
+    if (!idle.length) return this.bus.toast("No idle agents.");
+    const u = idle[(this.idleAt = (this.idleAt + 1) % idle.length)];
+    this.bus.select([u.id]);
+    this.bus.focusTile(u.pos.x, u.pos.y);
+  }
+
+  private cycleOpen(): void {
+    const open = (this.last?.targets ?? []).filter((t) => t.status !== "resolved").sort((a, b) => b.severity - a.severity);
+    if (!open.length) return this.bus.toast("No open issues.");
+    const t = open[(this.openAt = (this.openAt + 1) % open.length)];
+    this.bus.selectTarget(t.id);
+    this.bus.focusTile(t.pos.x, t.pos.y);
+  }
+
   private conn: Connection = "connecting";
   private lastBackend = "";
 
@@ -79,8 +98,10 @@ function value() {
   return h("b", { class: "hud-res-val" }, "-");
 }
 
-function res(icon: string, label: string, val: HTMLElement) {
-  return h("span", { class: "hud-res", title: label }, h("span", { class: "hud-res-icon" }, icon), val);
+function res(icon: string, label: string, val: HTMLElement, onClick?: () => void) {
+  return onClick
+    ? h("button", { class: "hud-res hud-res-btn", type: "button", title: label, onclick: onClick }, h("span", { class: "hud-res-icon" }, icon), val)
+    : h("span", { class: "hud-res", title: label }, h("span", { class: "hud-res-icon" }, icon), val);
 }
 
 function compact(n: number): string {

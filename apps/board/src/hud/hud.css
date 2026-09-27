@@ -128,3 +128,23 @@
 }
 .hud-roster-item:hover { background: rgba(255,255,255,.6); }
 .hud-roster-item .hud-pill { margin: 0 0 0 auto; }
+
+/* Toasts (bottom centre) and the pending-command hint (top centre) */
+.hud-toasts {
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+  display: flex; flex-direction: column-reverse; align-items: center; gap: 6px;
+  pointer-events: none !important;
+}
+.hud-toast {
+  padding: 6px 16px; border: 2px solid #2e2923; border-radius: 3px; font-size: 14px;
+  text-shadow: 0 1px 0 #000; transition: opacity .3s, transform .3s;
+}
+.hud-toast[data-level="error"] { color: #ffb4a4; border-color: #7a1c14; }
+.hud-toast[data-leaving="true"] { opacity: 0; transform: translateY(6px); }
+.hud-command {
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px;
+  border: 2px solid #2e2923; border-radius: 3px; font-size: 14px; color: #ffd98a; text-shadow: 0 1px 0 #000;
+}
+.hud-command[hidden] { display: none; }
+.hud-btn-sm { padding: 2px 10px; font-size: 13px; }

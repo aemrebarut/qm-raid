@@ -192,9 +192,31 @@ Reviewed all changed files. The two P2 findings from `38f0358` are resolved: res
 
 **P2: multiline custom reviewer instructions bypass verdict enforcement.** roleOf captures only the first instruction line. The engine supports a custom node's full instruction string and appends it after `Role: reviewer.`. An instruction with `Review against rules.` followed by a newline and `End with VERDICT: APPROVED or VERDICT: CHANGES: <what>.` is parsed without the verdict requirement. Injected model output stating the refund check still needs work was emitted after one ask with no verdict or visible default, so the engine can assume approval. Preserve the full own-instruction block before Previous work, or recognize judging roles independently of one line's keyword. Both new P2s sent to `raid-river` in Herdr session `default`.
 
+## 2026-09-27: Brain spawned issues `68fa5e9`, graph performance `44ef3c0`, component pool `77441cb`
+
+Reviewed all three diffs and the 15-entry issue pool. The corrected component-pool SHA is `77441cb`, not `592f74d`. Inspected installed GBrain operation definitions: list_pages supports offset/updated_asc with a remote 100-row cap; get_links returns outgoing links. No game-brain CLI or service restart was used.
+
+- `SMOKE_WRITE=1 bun run test`: PASS, including immediate recall of a spawned issue/customer/component, remember edges, three parallel unique ids, supplied fields, 400 validation, and cleanup. Runtime validation spanned the owner's notified restarts. The component-pool change was inspected and its new ordinary search case was in the smoke revision read during this review.
+- Direct `/graph` and `4618/api/brain/graph`: PASS with all required component/product nodes. Observed warm direct calls at 0.018/0.001 seconds and the proxy at 0.001 seconds; graph population changed with other agents' activity, so these were not a 27-node empty-world benchmark. After this review created one custom issue, graph rebuilt in 0.098 seconds and included it immediately. The issue was cleaned up.
+- Offline 205-row pagination returned every row using offsets 0, 100, 200. An isolated graph-cache probe confirmed simultaneous callers share one build and a pre-write build cannot overwrite a newer cached graph. PASS.
+- Spawned-target reconstruction reads persisted page frontmatter/body, so restart recovery has no process-local target registry to lose. Destructive `SMOKE_RESET=1` was inspected but not run against the shared Brain during rehearsal preparation; reset code enumerates all learning/unit/spawned-issue pages and rewrites seeds. The write smoke's cleanup/refill checks passed without a global reset.
+
+**P2: adding a link strips spawned-target metadata.** `services/brain/src/server.ts:276` rewrites a page with only type/title frontmatter. A live review-created feature target with severity 1 at (18,12) became a bug with severity 2 at (0,0) in GET /world after successful MCP add_link. The new target reconstruction depends on the discarded kind/severity/position fields. Preserve existing frontmatter when appending links. The review target was deleted via /forget in a finally block.
+
+**P2: exhausted component pools relabel unrelated issue facts.** In `77441cb`, createIssue falls back to any unused pool entry when the requested component has none, then replaces its component with the request value. Executed the committed function offline with all three search entries marked used: a search request produced the billing refund-webhook issue as component search, retaining billing/refund_webhook text. Recall then selects search rules for billing work. Return an explicit component-exhausted response so the engine can choose another zone, or supply matching facts; do not relabel another component's issue. Both P2s sent to `raid-gbrain` in Herdr session `default`.
+
+## 2026-09-27: Rebinding/role fixes and Forge loadout `9f94683`
+
+Reviewed the full diff and current Loadout contract. Both P2s from `bc19a57` are resolved: missing-type recovery uses a real-only selector and otherwise emits an order-correlated error without rebinding; roleOf retains multiline instructions before Previous work. No new actionable finding in the submitted loadout change.
+
+- `bun run test:units`: PASS, including no dry replacement when no River type is ready, multiline instructions, standing orders reaching ask, and zero Brain calls with gbrain disabled.
+- Additional offline checks PASS for loadout/type persistence across createUnits reconstruction, selecting a ready replacement model, an invalid-model note without changing the type, and standing orders in the Python system message including follow-up turns. Environment-file loading was disabled for the Python check.
+- `bun run smoke && bun run smoke:bridge`: PASS on the owner-restarted Forge reported as PID 37798. Created `forge-smoke-ranger-4` with dryRun and used the existing dry `forge-smoke-ranger` for the bridge reply. No real training, provider call, or engine order was made.
+- Subsequent reviewer-profile/section-parser changes visible in the shared tree were outside this submitted SHA and were not accepted as part of this review.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved. Awaiting POST /issues implementation for the new-issue feature; allocation/registration contract gaps resolved in `8babc2a`.
-- `raid-river`: reviewed through `bc19a57`. Earlier reported findings are resolved. Open P2s: deleted-type rebinding to smoke when no real type is ready, and multiline custom reviewer instructions bypassing verdict enforcement. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence.
+- `raid-gbrain`: reviewed through `77441cb`, including `68fa5e9` and `44ef3c0`. Open P2s: add_link strips spawned-target metadata, and exhausted component pools relabel unrelated issues. Earlier Brain findings and allocation/registration contract gaps are resolved. Destructive reset smoke was not run during rehearsal preparation.
+- `raid-river`: reviewed through `9f94683`; all reported River/Forge findings resolved. Loadout offline checks and live dryRun/bridge checks pass. Subsequent reviewer-profile changes await their submitted SHA.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

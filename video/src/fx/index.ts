@@ -13,4 +13,6 @@ export { PunchIn } from "./PunchIn";
 export { ScoreRace } from "./ScoreRace";
 export { SpeedWipe } from "./SpeedWipe";
 export { Stamp } from "./Stamp";
+export { HeroLockup } from "./HeroLockup";
+export { SmashCut, SMASH_FRAMES } from "./SmashCut";
 export { FxGallery, FX_GALLERY_FRAMES } from "./FxGallery";

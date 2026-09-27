@@ -15,6 +15,8 @@ import { FocusLines, ImpactFlash, shake } from "./primitives";
 import { ScoreRace, ScoreRaceProps } from "./ScoreRace";
 import { SpeedWipe } from "./SpeedWipe";
 import { Stamp } from "./Stamp";
+import { HeroLockup } from "./HeroLockup";
+import { SMASH_FRAMES, SmashCut } from "./SmashCut";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 import type { FxColor } from "./theme";
 
@@ -68,6 +70,8 @@ function scoreText(text?: string): Partial<ScoreRaceProps> {
 }
 
 export const CUES: Record<string, Cue> = {
+  heroLockup: { frames: 60, C: ({ text, x, y }) => React.createElement(HeroLockup, { sub: text, x, y }), note: "frame 0 thumbnail lockup, fully drawn at frame 0; text = subtitle; x,y top-left" },
+  smashCut: { frames: SMASH_FRAMES, C: ({ x, y }) => React.createElement(SmashCut, { x, y }), note: "hard cut lands at local frame 2" },
   punchIn: { frames: PUNCH_FRAMES, C: PunchOverlay, note: "x,y focus; also drives punchTransform" },
   callout: { frames: 60, C: callout("gold", "LOOK!"), note: "gold ring+arrow; text 'LABEL|small line'" },
   calloutRecall: { frames: 60, C: callout("recall", "RECALL"), note: "blue, for the recall beam" },

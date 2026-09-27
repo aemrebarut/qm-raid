@@ -8,6 +8,8 @@ import { FX, HEAD } from "./theme";
 
 type Demo = { kind: string; text?: string; x?: number; y?: number };
 const DEMOS: Demo[] = [
+  { kind: "heroLockup" },
+  { kind: "smashCut" },
   { kind: "punchIn", x: 1300, y: 420 },
   { kind: "callout", text: "THE LIBRARY|GBrain, shared memory", x: 560, y: 420 },
   { kind: "calloutRecall", text: "RECALL", x: 1400, y: 500 },
@@ -67,7 +69,7 @@ export const FxGallery: React.FC = () => {
           </Sequence>
         );
       })}
-      <div style={{ position: "absolute", left: 24, top: 18, fontFamily: HEAD, fontWeight: 800, fontSize: 30, color: FX.ink, opacity: 0.8, letterSpacing: "0.08em" }}>
+      <div style={{ position: "absolute", right: 24, bottom: 18, fontFamily: HEAD, fontWeight: 800, fontSize: 30, color: FX.ink, opacity: 0.8, letterSpacing: "0.08em" }}>
         FX GALLERY {cur + 1}/{DEMOS.length}: {DEMOS[cur].kind}
       </div>
     </AbsoluteFill>

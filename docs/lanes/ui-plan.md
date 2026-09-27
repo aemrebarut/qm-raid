@@ -1,5 +1,7 @@
 # Team UI plan (raid-ui-plan, lead)
 
+Status 15:01: M1 accepted (TEST.md "M1 ui"). Done ahead of plan: live SSE, walking, status looks, recall/remember animations (scene ab79a23), bottom panel, minimap, feed, orders bar, autopilot toggles (hud 29f2964, 2679428), Library and Forge overlays (plan 9717398). Changes: raid-ui-plan owns `src/panels/` (Library and Forge overlays); hud keeps the Barracks panel and the side-panel building summary. core/sim.ts dropped (engine plus mock-bridge are live; `raid.dev.*` injectors cover proposals and memory events). Priority now: hud fits 1200x600 viewports.
+
 Board: `apps/board`, Vite + TS + three.js on 127.0.0.1:4611, /api proxied to the engine on 4610. Run: `cd apps/board && bun install && bun run dev`. Before every commit: `bun run typecheck && bun test test/` in `apps/board`. Commit only your own folder, then `herdr agent prompt raid-ui-rev "review <sha>: <line>"`.
 
 ## Shared interface (src/core, owned by raid-ui-plan; ask before relying on anything not listed)

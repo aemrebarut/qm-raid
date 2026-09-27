@@ -101,11 +101,22 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
   const comp = componentId ?? target?.component;
   const slugs: string[] = [];
   const add = (s: string) => { if (s && !slugs.includes(s)) slugs.push(s); };
+  const pages = new Map<string, NonNullable<Awaited<ReturnType<typeof getPage>>>>();
+  const load = async (s: string) => {
+    if (!pages.has(s)) { const p = await getPage(s); if (p) pages.set(s, p); }
+    return pages.get(s);
+  };
+  // Component and its house rules (rules read from the page's wikilinks).
   if (comp) {
-    add(`components/${comp}`);
-    const out = await tool<Link[]>("get_links", { slug: `components/${comp}` }).catch(() => [] as Link[]);
-    for (const l of out) if (l.to_slug.startsWith("rules/")) add(l.to_slug);
+    const c = await load(`components/${comp}`);
+    if (c) {
+      add(c.slug);
+      for (const l of wikilinks(c.body)) if (l.startsWith("rules/")) add(l);
+    }
   }
+  // Past learnings about this component or issue, newest first (read from page bodies, no wait for gbrain's link sweep).
+  const learned = await learningsFor(comp, target ? issueSlug(target.issue) : undefined);
+  for (const l of learned) add(l);
   if (target) {
     add(issueSlug(target.issue));
     for (const c of target.customers) {
@@ -114,13 +125,14 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
       if (contact) add(contact);
     }
   }
-  // Past learnings about this component or issue (read from page bodies, so no wait for gbrain's link sweep).
-  for (const l of await learningsFor(comp, target ? issueSlug(target.issue) : undefined)) add(l);
   if (query) for (const r of await search(query)) add(r.slug);
   const parts: string[] = [];
+  if (learned.length) parts.push(`${learned.length} past learning(s) from other agents are included below; apply them.`);
   for (const s of slugs) {
-    const p = await getPage(s);
-    if (p) parts.push(`# ${p.title} (${s})\n${p.body.trim().slice(0, 1500)}`);
+    const p = await load(s);
+    if (!p) continue;
+    const label = s.startsWith("learnings/") ? "Past learning: " : "";
+    parts.push(`# ${label}${p.title} (${s})\n${p.body.trim().slice(0, 1500)}`);
   }
   return { slugs, context: parts.join("\n\n") };
 }
@@ -153,7 +165,7 @@ async function remember(unitId: string, targetId: string | undefined, text: stri
   const unitSlug = await ensureUnitPage(unitId);
   const about = target ? `About [[${issueSlug(target.issue)}]] in [[components/${target.component}]]. ` : "";
   const title = `Learning${target ? ` on ${target.issue}` : ""} by ${unitId}`;
-  const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim()}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
+  const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim().slice(0, 2000)}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
   // A repeated remember on the same slug overwrites that learning.
   await tool("put_page", { slug, content }).catch(() => tool("put_page", { slug, content, force: true }));
   graphCache = null;

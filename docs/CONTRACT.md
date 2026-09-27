@@ -74,6 +74,7 @@ A team may carry a `workflow`: a small graph of role nodes, each bound to one me
 | test engine on mock (automated tests and reviewers only) | services/engine with PORT=4618, BRIDGE_URL=4615 | 4618 | raid-eng | mock-bridge, brain |
 | test board (reviews and smokes, on the 4618 test engine) | apps/board with ENGINE_URL=http://127.0.0.1:4618 | 4619 | raid-ui | test engine |
 | art showroom (asset library preview) | packages/art | 4620 | raid-art | nothing |
+| demo board (frozen build of committed HEAD, refreshed only on the Analyst's go) | /tmp/raid-board-demo via apps/board/tools/demo-snapshot.sh | 4621 | raid-ui-plan | engine 4610 |
 | gbrain MCP for QM agents | services/brain (gbrain serve) | 4617 if HTTP | raid-gbrain | QM |
 
 Rules: no service imports another service's code. Shared TypeScript types live only in `contract/types.ts` (owned by the Analyst; ask for changes). Each service has its own package.json, `bun run dev`, README.md, `GET /health` returning `{"ok": true, "service": "<name>"}`, and a smoke test in its own `test/` folder. The engine picks the bridge with `BRIDGE_URL` (default http://127.0.0.1:4615, QM is http://127.0.0.1:4614) and the proposer with `PROPOSER_URL` (default http://127.0.0.1:4613, River is http://127.0.0.1:4612). If a dependency is down, the caller degrades (logs, keeps running) and never crashes.

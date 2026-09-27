@@ -17,9 +17,10 @@ const MAX_IDS = 40;
 // GBrain is locked on for every unit (Analyst): plugins always include it, a PATCH without it keeps it, and the catalog
 // marks it locked. CatalogItem has no field for that, so the hint leads the description.
 const GBRAIN = "gbrain";
-const LOCK_HINT = "The Library: always on.";
+// qm-bridge 4614 already sends "The Library: always on" (no period), so the check ignores the period and case.
+const LOCK_HINT = "The Library: always on";
 const withGbrain = (plugins: string[]) => (plugins.includes(GBRAIN) ? plugins : [GBRAIN, ...plugins]);
-const lockedGbrain = (desc: string): string => (desc.startsWith(LOCK_HINT) ? desc : `${LOCK_HINT} ${desc}`.trim());
+const lockedGbrain = (desc: string): string => (desc.toLowerCase().startsWith(LOCK_HINT.toLowerCase()) ? desc : `${LOCK_HINT}. ${desc}`.trim());
 
 export async function getCatalog(unitId?: string | null): Promise<{ ok: true; items: CatalogItem[] } | Fail> {
   let base = BRIDGE_URL;

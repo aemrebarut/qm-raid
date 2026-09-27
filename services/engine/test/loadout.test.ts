@@ -66,6 +66,20 @@ test("catalog: GBrain is always listed and marked locked, even if the bridge lea
   expect((r as any).items.at(-1).description.startsWith("The Library: always on.")).toBe(true);
 });
 
+test("catalog: a bridge that already sends the hint (qm-bridge: no period) is not prefixed twice", async () => {
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => json({ items: [{ id: "gbrain", name: "GBrain", kind: "plugin", description: "The Library: always on" }] })) as unknown as typeof fetch;
+  const a = await getCatalog();
+  globalThis.fetch = (async () => json({ items: [{ id: "gbrain", name: "GBrain", kind: "plugin", description: "The Library: always on. Team memory" }] })) as unknown as typeof fetch;
+  const b = await getCatalog();
+  globalThis.fetch = (async () => json({ items: [{ id: "gbrain", name: "GBrain", kind: "plugin", description: "" }] })) as unknown as typeof fetch;
+  const c = await getCatalog();
+  globalThis.fetch = orig;
+  expect((a as any).items[0].description).toBe("The Library: always on");
+  expect((b as any).items[0].description).toBe("The Library: always on. Team memory");
+  expect((c as any).items[0].description).toBe("The Library: always on.");
+});
+
 test("patch: GBrain is locked on (a PATCH without it keeps it; a bridge answer without it is corrected)", async () => {
   const u = unit();
   await patchLoadout(u.id, { plugins: ["github"] });

@@ -38,3 +38,12 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - **P1, services/qm-bridge/src/qm.ts:78: waitRun treats pending as terminal.** QM's run-store status union is pending/running/done/failed and app-turn.ts returns that status unchanged. A newly queued or retried run can therefore make waitRun return result:null before execution and make the smoke fail spuriously. Return only for done/failed, or include pending in the nonterminal states.
 - Reproduction: temporarily substituted fetch in an isolated Bun process with synthetic pending -> running -> done responses. waitRun returned pending after one read; expected done after three reads. No live service was replaced or stopped.
 - Sent the finding and successful live smoke evidence to raid-qm-impl and raid-qm-plan in the default Herdr session. Queue-state fix and regression check remain open; Bridge API/MCP behavior is not part of this commit and remains unverified.
+
+## 2026-09-27 14:52 PDT: b697d86 polling fix, M1 accepted
+
+- The requested SHA 24bf23b is a concurrent UI commit. The actual QM polling fix is b697d86; reviewed that full diff and notified the implementer of the SHA correction.
+- **Resolved P1 from 4e099bb.** runFinished now waits through pending/running and returns on done/failed or a result, matching QM's run-events terminal condition.
+- Executed `cd services/qm-bridge && bun test test/qm.test.ts`: 2 passed, 0 failed. The tests cover pending -> running -> done with three fetches, and pending -> failed.
+- Repeated `bun test/smoke.ts` after the fix: exit 0 in 3.1 s, done/ok, nonempty sessionId, and a five-word model reply. M1 is accepted with no remaining client findings.
+- Read the updated Codex class map in docs/CONTRACT.md. The live portal advertises gpt-6-astra, gpt-6-sol, and gpt-6-luna under its sole approved harness, codex. This confirms model availability, not per-class execution or effort settings, which remain for M3.
+- Bridge service routes, agent-originated GBrain tools, and queued Bridge orders remain future acceptance work.

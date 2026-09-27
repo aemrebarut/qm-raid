@@ -189,12 +189,14 @@ export class LibraryPanel {
     this.graph.select(slug);
     this.pageBox.hidden = false;
     this.pageBox.classList.add("pnl-page-loading");
+    this.revealPage();
     const r = await api.page(slug);
     if (gen !== this.pageGen) return;
     this.pageBox.classList.remove("pnl-page-loading");
     const close = h("button", { class: "pnl-x", title: "Close page", onclick: () => this.closePage() }, icon("close"));
     if (!r.ok) {
       this.pageBox.replaceChildren(h("div", { class: "pnl-page-head" }, h("span", { class: "pnl-page-t" }, this.titleOf(slug)), close), h("p", { class: "pnl-err" }, r.error));
+      this.revealPage();
       return;
     }
     const type = this.graph.type(r.slug ?? slug);
@@ -204,6 +206,16 @@ export class LibraryPanel {
         h("span", { class: "pnl-page-t", title: r.slug ?? slug }, pageTitle(r.title || this.titleOf(slug))), close),
       renderMarkdown(r.body ?? "", (s) => this.openPage(s), (s) => this.titleOf(s)),
     );
+    this.pageBox.scrollTop = 0;
+    this.revealPage();
+  }
+
+  /** Bring the page into view in the side column (it may have been opened from far down the index). */
+  private revealPage(): void {
+    const col = this.pageBox.parentElement;
+    if (!col || !this.root.isConnected || typeof col.scrollTo !== "function") return;
+    const c = col.getBoundingClientRect(), p = this.pageBox.getBoundingClientRect();
+    if (p.top < c.top || p.top > c.bottom - 80) col.scrollTo({ top: col.scrollTop + p.top - c.top - 8, behavior: "smooth" });
   }
 
   private closePage(): void {

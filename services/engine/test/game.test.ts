@@ -122,3 +122,8 @@ test("autopilot proposes, and go / adjust / cancel / expiry each resolve and log
   expect(rows[0].context.units.length).toBe(3);
   proposeAnswer = { proposals: [] };
 });
+
+test("a plain gbrain search naming a component recalls its page", () => {
+  onBridgeEvent({ type: "activity", unitId: "u6", kind: "tool", text: "s", tool: "gbrain.search", args: { query: "billing retries" } });
+  expect(store.state.memory.recent.at(-1)!.slugs).toEqual(["components/billing"]);
+});

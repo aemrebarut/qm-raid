@@ -263,7 +263,13 @@ function slugsFrom(args: any): string[] {
   if (cid) out.push(`components/${cid}`);
   const t = targetById(argStrings(args, ["targetId"])[0] ?? "");
   if (t) out.push(`issues/${t.issue.toLowerCase()}`, ...t.customers.map((c) => `companies/${c}`));
-  if (!out.length) out.push(...(argStrings(args, ["query", "q"])[0] ?? "").match(/[a-z]+\/[a-z0-9][a-z0-9._-]*/gi) ?? []);
+  if (!out.length) {
+    const q = argStrings(args, ["query", "q"])[0] ?? "";
+    out.push(...(q.match(/[a-z]+\/[a-z0-9][a-z0-9._-]*/gi) ?? []));
+    // A plain search like "billing" still points the recall beam at the component page.
+    const words = new Set(q.toLowerCase().split(/[^a-z0-9-]+/));
+    for (const c of S().components) if (words.has(c.id.toLowerCase()) || words.has(c.name.toLowerCase())) out.push(`components/${c.id}`);
+  }
   return [...new Set(out)];
 }
 

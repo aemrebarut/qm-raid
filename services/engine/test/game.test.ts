@@ -11,7 +11,8 @@ let sessionGen = 0; // bridge POST /units answers a fresh sessionId each time
 let brainResetGate: Promise<void> | null = null; // when set, brain POST /reset waits for it (slow reset)
 let recallGate: Promise<void> | null = null; // when set, brain POST /recall waits for it
 let issuesAnswer: { status: number; body: unknown } | null = null; // brain POST /issues answer
-const sendStatuses: number[] = []; // bridge POST /units/:id/send answers these statuses first (then 200)
+const sendStatuses: number[] = [];
+const patchStatuses: number[] = []; // bridge PATCH /units/:id answers these statuses first (then 200) // bridge POST /units/:id/send answers these statuses first (then 200)
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
@@ -21,6 +22,7 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
   if (/\/types\/forge-scribe\/eval$/.test(String(url))) return new Response(JSON.stringify({ typeId: "forge-scribe", score: 0.82, base: 0.42 }), { status: 200 });
   if (String(url).endsWith("/catalog")) return new Response(JSON.stringify({ items: [{ id: "gbrain", name: "GBrain", description: "Team memory", kind: "plugin" }] }), { status: 200 });
   if (String(url).endsWith("/issues") && issuesAnswer) return new Response(JSON.stringify(issuesAnswer.body), { status: issuesAnswer.status });
+  if (init?.method === "PATCH" && /\/units\/[^/]+$/.test(String(url)) && patchStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: patchStatuses.shift()! });
   if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
   if (String(url).endsWith("/units") && init?.method === "POST") {
     const id = `s${++sessionGen}`;
@@ -667,4 +669,31 @@ test("E18 with a real trio run: restart while the planner works, its reply still
   expect(text).toContain("Role: implementer.");
   expect(text).toContain(`- planner (${plan.unitId}): 1. retry with the idempotency key`);
   expect(store.state.targets.find((t) => t.id === "t102")!.status).toBe("engaged");
+});
+
+test("Loadout P2s: every new registration re-applies a custom loadout; a PATCH 404 registers the unit again first", async () => {
+  const { BRIDGE_URL } = await import("../src/config.ts");
+  const { handle } = await import("../src/app.ts");
+  const custom = { instructions: "Quote the rule.", skills: ["debug"], plugins: ["gbrain", "github"] };
+  unit("u1").loadout = { ...custom };
+  // (1) a bridge restart: the SSE reconnect re-registers idle units, and u1 gets its loadout back; default ones get no PATCH.
+  game.resyncUnits(BRIDGE_URL);
+  await Bun.sleep(30);
+  calls.length = 0;
+  game.resyncUnits(BRIDGE_URL);
+  await Bun.sleep(30);
+  const patches = calls.filter((c) => /\/units\/u\d+$/.test(c.url) && c.body?.loadout);
+  expect(patches.map((c) => c.url.replace(/^.*\/units\//, ""))).toEqual(["u1"]);
+  expect(patches[0]!.body.loadout).toEqual(custom);
+  expect(calls.filter((c) => c.url === `${BRIDGE_URL}/units`).length).toBe(6); // every idle unit re-POSTed
+
+  // (2) PATCH /api/units/:id when the bridge lost the unit: 404 -> POST /units -> PATCH again with the new loadout.
+  calls.length = 0;
+  patchStatuses.push(404);
+  const r = await handle(new Request("http://127.0.0.1:4610/api/units/u1", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ instructions: "New orders." }) }));
+  expect(r.status).toBe(200);
+  const seq = calls.map((c) => `${c.url.endsWith("/units") ? "POST" : c.body?.loadout ? "PATCH" : "?"} ${c.body?.loadout?.instructions ?? c.body?.id ?? ""}`);
+  expect(seq).toEqual(["PATCH New orders.", "POST u1", "PATCH New orders."]);
+  expect(unit("u1").loadout!.instructions).toBe("New orders.");
+  patchStatuses.length = 0;
 });

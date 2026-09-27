@@ -86,7 +86,9 @@ async function loadWorld(): Promise<void> {
 
 // ---------- bridge ----------
 
-export async function ensureSpawned(u: Unit): Promise<boolean> {
+// reapply: after a new registration push the unit's loadout again (the bridge may have lost it; a no-op for the
+// default loadout, and qm-bridge ignores an unchanged one). Callers that send a new loadout themselves pass false.
+export async function ensureSpawned(u: Unit, reapply = true): Promise<boolean> {
   const r = runtime(u.id);
   if (r.spawned) return true;
   if (!r.spawning) {
@@ -101,6 +103,7 @@ export async function ensureSpawned(u: Unit): Promise<boolean> {
       r.spawned = true;
       u.qm = { sessionId: res.sessionId, sessionUrl: res.sessionUrl };
       emit("unit.updated", { unit: u });
+      if (reapply && !resetting) await reapplyLoadout(u);
       return true;
     })().finally(() => { r.spawning = null; });
   }
@@ -116,6 +119,14 @@ function resyncUnits(base: string): void {
     if (u.status === "idle" && !u.orderId && !r.spawning) r.spawned = false;
     void ensureSpawned(u);
   }
+}
+
+// Registers the unit again even if it was registered (the bridge answered 404), without pushing the old loadout:
+// for PATCH /api/units/:id, which sends the new loadout right after.
+export function reRegister(u: Unit): Promise<boolean> {
+  const r = runtime(u.id);
+  if (!r.spawning) r.spawned = false;
+  return ensureSpawned(u, false);
 }
 
 function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string {
@@ -163,8 +174,7 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   if (status === 404 && current()) {
     // Bridge restarted and forgot the unit: spawn again and retry once.
     r.spawned = false;
-    const again = await ensureSpawned(u);
-    if (again) await reapplyLoadout(u); // the bridge lost the unit, so also its loadout
+    const again = await ensureSpawned(u); // registers again and restores the loadout
     if (!current()) return;
     if (again) status = await sendToBridge(u, req);
   }
@@ -606,7 +616,6 @@ export async function messageUnit(id: string, body: any): Promise<Result> {
     // Bridge restarted and forgot the unit: spawn again and retry once (as dispatchOrder).
     runtime(u.id).spawned = false;
     if (!(await ensureSpawned(u))) return fail(`bridge unavailable at ${bridgeFor(u)}`, 502);
-    await reapplyLoadout(u);
     if (!alive()) return fail("unit retired or reset running", 409);
     status = await sendToBridge(u, { text: body.text });
   }

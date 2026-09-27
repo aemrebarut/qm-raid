@@ -5,7 +5,7 @@ import { sseResponse } from "./sse.ts";
 import { forgeEval, forgeProxy } from "./forge.ts";
 import { spawnTarget } from "./targets.ts";
 import { getCatalog, patchLoadout } from "./loadout.ts";
-import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, ensureSpawned, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
+import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, isResetting, messageUnit, patchTeam, patchUnit, reRegister, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
 
 // Only listed browser origins get CORS headers; any other page can neither read nor change engine state.
 function corsHeaders(req: Request): Record<string, string> {
@@ -46,7 +46,7 @@ async function brainProxy(path: string, search: string): Promise<Response> {
 const LOADOUT_KEYS = ["instructions", "skills", "plugins", "model", "effort"];
 async function patchUnitRoute(id: string, b: any): Promise<Response> {
   if (!b || typeof b !== "object" || !LOADOUT_KEYS.some((k) => k in b)) return reply(patchUnit(id, b));
-  const r = await patchLoadout(id, b, ensureSpawned);
+  const r = await patchLoadout(id, b, reRegister); // a 404 means the bridge lost the unit: register it again
   if (!r.ok) return json({ ok: false, error: r.error }, r.status);
   if (b.team !== undefined || b.role !== undefined) {
     const t = patchUnit(id, { team: b.team, role: b.role });

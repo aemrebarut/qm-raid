@@ -65,6 +65,8 @@ const HELPERS = `window.__look = {
     for (const t of raid.store.getState().teams) if (t.id !== id && t.members.some(m => members.includes(m)))
       raid.store.apply({ seq: -(900000 + ++this.n), ts: Date.now(), type: 'team.updated', team: { ...t, members: t.members.filter(m => !members.includes(m)) } });
     raid.store.apply({ seq: -(900000 + ++this.n), ts: Date.now(), type: 'team.updated', team });
+    // Keep the fixture consistent: each member's unit.team points at the new team (roster tags, role lookups).
+    for (const m of members) { const u = raid.store.unit(m); if (u && u.team !== id) raid.store.apply({ seq: -(900000 + ++this.n), ts: Date.now(), type: 'unit.updated', unit: { ...u, team: id } }); }
     return team;
   },
 };`;
@@ -86,7 +88,7 @@ const states: State[] = [
   { name: "presets", setup: `(async () => { const t = await __look.team(1, ${firstIds(3)}, false); raid.bus.select(t.members); })()`, settle: 1200, check: `raid.store.team(1)?.workflow === null && ${sel(3)}` },
   { name: "rolepick", setup: `(async () => { const t = await __look.team(1, ${firstIds(3)}, true); raid.bus.select(t.members); await new Promise(r => setTimeout(r, 300)); raid.bus.setCommand({ kind: 'role', teamId: 1, nodeId: t.workflow.entry }); })()`, settle: 1200, check: `raid.bus.command?.kind === 'role'` },
   // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
-  { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500, check: `!![...document.querySelectorAll('#hud [role=tab][aria-selected=true]')].find(e => /loadout/i.test(e.textContent))` },
+  { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500, check: `!![...document.querySelectorAll('#hud [role=tab][aria-selected=true]')].find(e => /loadout/i.test(e.textContent)) && ![...document.querySelectorAll('#hud .hud-wf-presets')].some(e => e.offsetParent)` },
   // --live only: real orders and a forged unit on the mock test engine 4618 (art gate: units selectable and movable).
   { name: "order", live: true, setup: `(async () => { const s = raid.store.getState(); const u = s.units.find(x => x.status === 'idle') ?? s.units[0]; const t = s.targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000, check: sel(1) },
   { name: "forged", live: true, setup: `(async () => { const s = raid.store.getState(); const base = ['knight','ranger','scout','oracle']; let u = s.units.find(x => !base.includes(x.class)); if (!u) { const ty = s.unitTypes.find(x => !base.includes(x.id) && x.status === 'ready'); if (ty) { const r = await raid.api.spawn({ class: ty.id }); u = r.unit; } } await new Promise(r => setTimeout(r, 1500)); u = u && raid.store.unit(u.id); if (!u) return; const t = raid.store.getState().targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000, check: sel(1) },

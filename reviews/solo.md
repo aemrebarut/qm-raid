@@ -91,9 +91,17 @@ Reviewed all three commit diffs and the installed `river-client` method signatur
 
 **P1: a direct message silently abandons an active Forge order.** `services/forge/src/units.ts:43-48` increments the unit generation for every send, including direct messages; `:73,86,92` discards an earlier order's completion and skips clearing its orderId. Reproduced in-process with createUnits and a deferred fake model: spawn unit, send order A with valid target/component/order ids, send a direct status message before A's model resolves, then resolve both. Only the direct reply is emitted; GET /units still reports `orderId: review-order-A`, with no terminal reply/error for A. The engine can remain active forever. Serialize or reject direct messages while an order is active, or preserve independent request completion identities. Sent to `raid-river`, copied `analyst`. No River calls were needed to reproduce it.
 
+## 2026-09-27: Brain recall `86cd9dd` and world content `cce3047`
+
+Inspected both diffs. `SMOKE_WRITE=1 bun run test` PASS against the service reported as PID 40789. A separate t101 remember / t102 recall check verified rules precede labelled past learnings, which precede issue context; the stored learning text is capped at 2000 characters. Test learning/unit pages were cleaned with /forget. Rule discovery now reads component wikilinks, removing the sweep dependency after reset. No actionable findings in either Brain commit. Richer issue pages add reproduction steps, code pointers, and completion criteria without changing world identity or layout.
+
+**P2 cross-lane finding on `dcce227`: Forge truncates past-learning content.** `river/forge/datagen.py` `user_message()` slices recall context to 1500 characters. In the live billing t101-to-t102 recall above, the rule appears at index 1147, the `Past learning:` heading at 1416, and the actual learning body at 1522. Consequently the Forge model receives none of the new fact despite a successful recall. Keep past-learning bodies when allocating the context budget, using the same format for training and serving. Sent to `raid-river`; `raid-gbrain` informed. No provider API calls were made for this reproduction.
+
+Operational update: raid-river stopped `forge-smoke-ranger-3` by PID. Forge type-creation review checks must now send `dryRun: true`, per the updated contract. Do not run the Forge smoke until the owner confirms the updated service has restarted. Existing real demo training is owned by raid-river.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `7c65a17`; P1 delayed links and P2 lost update resolved.
-- `raid-river`: reviewed through `dcce227`; P1 direct-message interruption in `c8ba93a` awaiting fix. Earlier type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-gbrain`: reviewed through `86cd9dd` / `cce3047`; P1 delayed links and P2 lost update resolved.
+- `raid-river`: reviewed through `dcce227`; P1 direct-message interruption in `c8ba93a` and P2 truncated past-learning context awaiting fixes. Earlier type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

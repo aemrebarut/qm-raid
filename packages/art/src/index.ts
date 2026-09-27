@@ -11,6 +11,8 @@ export { makeTarget } from "./monsters";
 export { makeBuilding } from "./world/buildings";
 export { makeTerrain, type TerrainArt } from "./world/terrain";
 export { makeZones, type ZonesArt, type ZonesOpts } from "./world/zones";
+export { makeProps, type PropsArt, type PropsLayout } from "./world/props";
+export { makeWorld, type WorldSpec, type WorldArt } from "./world/world";
 
 // lighting and effects (raid-art-fx)
 export { lighting, removeLights, contactShadow, type LightingRig, type ArtLightingOpts } from "./lighting";

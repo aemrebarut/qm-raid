@@ -70,7 +70,8 @@ raid-eng-rev
 - E13. `POST /api/units` {class, name?, team?}: builtin class -> model/effort from config, forge type only when ready (model = type.model, bridge = FORGE_URL); spawn next to the Barracks (first free tile around 20,20), register with its bridge, emit `unit.spawned`.
 - E13b. `DELETE /api/units/:id` -> {ok}: cancel its active or proposed order (order.updated cancelled, target back to open if no other order), bridge `DELETE /units/:id`, remove from its team (team.updated), remove the unit, emit `unit.retired` {unitId}.
 - E14. `POST /api/reset`: brain `/reset`, reload world, DELETE and re-register units, clear orders/teams/memory/stats, emit `state.snapshot`. `PATCH /api/units/:id` {team?, effort?, role?, autonomy?}.
-- K8. mock-bridge `POST /reset` hook not needed (engine re-registers); instead a demo script mode `MOCK_SCRIPT=demo` where wave 1 on billing remembers a rule and wave 2 recalls that slug.
+- K8. Demo safety net if QM is down: `MOCK_SCRIPT=demo` (or `/debug/config {script:"demo"}`): wave 1 on a billing target remembers `learnings/<issue>-<unit>-<ms>` stating the idempotency rule (links rules/billing-idempotency); a later billing order recalls that exact slug and quotes it in the reply.
+- K9. autopilot reasons mention the memory text when it names the component or a learning ("team learned the idempotency rule").
 
 ## M5 (16:25): demo path twice in a row, reset clean, no crash after 10 minutes of autopilot.
 

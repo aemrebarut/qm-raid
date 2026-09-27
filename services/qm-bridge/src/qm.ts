@@ -101,3 +101,9 @@ export async function findSessionId(threadRef: string): Promise<string | null> {
 export async function archiveSession(sessionId: string): Promise<void> {
   await api("POST", `/api/sessions/${encodeURIComponent(sessionId)}`, { archived: true });
 }
+
+/** Org-wide model spend so far (admin relay; the local portal user is org admin). Per-run token counts are not exposed. */
+export async function orgSpend(): Promise<{ tokens: number; costUsd: number }> {
+  const s = await api<{ org?: { tokens?: number; costUsd?: number } }>("GET", "/admin/api/spend");
+  return { tokens: Number(s.org?.tokens ?? 0), costUsd: Number(s.org?.costUsd ?? 0) };
+}

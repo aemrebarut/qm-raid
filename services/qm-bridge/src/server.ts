@@ -7,6 +7,7 @@ import {
   archiveSession,
   findSessionId,
   getRun,
+  orgSpend,
   principal,
   runFinished,
   runtimeConfig,
@@ -33,6 +34,7 @@ interface Unit extends SpawnRequest {
 }
 
 const units = new Map<string, Unit>();
+const lastWork = new Map<string, number>(); // unitId -> last time it had a run (usage attribution)
 const alive = (u: Unit): boolean => units.get(u.id) === u;
 
 function saveUnits(): void {
@@ -135,6 +137,7 @@ async function begin(u: Unit, s: Send): Promise<void> {
   const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u));
   if (!u.active || u.active.send !== s) return;
   u.active.runId = runId;
+  lastWork.set(u.id, Date.now());
   if (alive(u)) saveUnits();
   void follow(u, s, runId);
 }
@@ -149,6 +152,7 @@ function pump(u: Unit): void {
 function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void {
   if (!u.active || u.active.send !== s) return;
   u.active = null;
+  lastWork.set(u.id, Date.now());
   if (!alive(u)) return;
   saveUnits();
   if (s.intro) {
@@ -342,6 +346,30 @@ async function spawn(req: Request): Promise<Response> {
   return json({ sessionId: u.sessionId, sessionUrl: u.sessionId ? sessionUrl(u.sessionId) : null });
 }
 
+// ---------- usage ----------
+// QM exposes only org-wide spend, so each 5 s tick splits the token delta across units that were working in that window.
+let spendBase: { tokens: number; costUsd: number } | null = null;
+setInterval(async () => {
+  const now = Date.now();
+  for (const u of units.values()) if (u.active) lastWork.set(u.id, now);
+  const working = [...lastWork].filter(([, t]) => now - t < 15_000).map(([id]) => id);
+  if (spendBase && working.length === 0) return;
+  try {
+    const cur = await orgSpend();
+    const base = spendBase;
+    spendBase = cur;
+    if (!base || working.length === 0) return;
+    const tokens = cur.tokens - base.tokens;
+    const usd = cur.costUsd - base.costUsd;
+    if (tokens <= 0 && usd <= 0) return;
+    for (const unitId of working) {
+      emit({ type: "usage", unitId, tokens: Math.round(tokens / working.length), usd: usd / working.length });
+    }
+  } catch {
+    // spend is optional; ignore while QM is unreachable
+  }
+}, 5_000);
+
 loadUnits();
 
 const server = Bun.serve({
@@ -418,6 +446,7 @@ principal()
   .then(async (p) => {
     const cfg = await runtimeConfig();
     codexModels = cfg.modelsByHarness?.codex ?? [];
+    spendBase ??= await orgSpend().catch(() => null);
     console.log(`[qm-bridge] QM principal ${p}; harnesses ${cfg.approvedHarnesses?.join(",")}; codex models ${codexModels.join(",")}`);
   })
   .catch((err) => console.warn(`[qm-bridge] QM not reachable yet: ${String(err?.message ?? err)}`));

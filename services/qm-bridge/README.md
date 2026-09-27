@@ -14,6 +14,8 @@ Files:
 - `test/bridge-smoke.ts`: spawn, one order, wait for its terminal event, delete.
 - `test/qm.test.ts`: unit tests with a fetch fixture (`bun test`).
 
+Usage: QM exposes only org-wide spend (portal `/admin/api/spend`), so every 5 s the bridge splits the token delta across units that had a run in the last 15 s and emits `usage {unitId, tokens, usd}`. usd is what QM reports (0 on the ChatGPT OAuth harness). Approximate per unit, right in total.
+
 Model and effort: `model` is passed to QM only when it is one of the Codex models QM allows (GET /api/runtime-config modelsByHarness.codex, for example gpt-5.6-sol, gpt-5.6-luna, gpt-6-sol); `effort` is passed as thinkingLevel when it is auto, low, medium, high or xhigh. Otherwise QM's defaults apply.
 
 Plan and QM API notes: docs/lanes/qm-plan.md.

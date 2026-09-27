@@ -1,10 +1,11 @@
-// Video capture (raid-video-cap): one raw 1920x1080 clip per capability, recorded with Playwright recordVideo,
+// Video capture (raid-video-cap): one raw 1920x1080 clip per capability, recorded as a CDP screencast (mp4),
 // driven by real mouse clicks on the board (camps and units are projected from window.raidScene), plus a markers
 // JSON per clip with event times (ms from the first video frame) from the engine SSE and from our own actions,
 // so the editor (raid-video, Remotion) can cut and speed-ramp.
 // Usage: bun apps/board/tools/video/capture.ts --take dry1 [--url 'http://127.0.0.1:4619/?art=on'] [--only orders,teams]
-//        [--out ~/Workspace/qm-raid-video/clips] [--forge-submit] [--parallel] [--mp4]
-// Output (raid-video's contract): <out>/<id>.webm and <out>/<id>.markers.json = {clip, events: [{t: seconds from clip
+//        [--out ~/Workspace/qm-raid-video/clips] [--forge-submit] [--parallel] [--debug] [--keep-frames]
+//        [--ranger forge-refund-ranger-2] [--reviewer forge-rule-warden] [--loadout-wait 150000]
+// Output (raid-video's contract): <out>/<id>.mp4 and <out>/<id>.markers.json = {clip, events: [{t: seconds from clip
 // start, name, x?, y?}]} (x, y screen px when known), ids orders, teams, forge, autopilot, loadout; a copy of each
 // take also goes to ~/Workspace/qm-raid-video/<take>/clips.
 // Dry runs on the test board 4619 (mock engine 4618); takes on the frozen demo board 4621 (real engine 4610).
@@ -122,19 +123,29 @@ class Clip {
   constructor(public name: string) {}
 
   named: { t: number; name: string; x?: number; y?: number; [k: string]: unknown }[] = [];
+  failures: { t: number; text: string }[] = [];
+  /** A failure note for the reviewer and editor (timeouts, API fallbacks, errors). */
+  note_(text: string) { this.failures.push({ t: (Date.now() - this.t0) / 1000, text }); say(`[${this.name}] NOTE ${text}`); }
   lastXY: { x: number; y: number } | null = null;
 
   /** A scripted action: goes to the raw marks and, under the same name, to the editor's named events at the cursor. */
   mark(label: string, extra: Record<string, unknown> = {}, xy: { x: number; y: number } | null = this.lastXY) {
     const t = Date.now() - this.t0;
     this.marks.push({ t, label, ...extra });
-    this.named.push({ t: t / 1000, name: label.replace(/-/g, "_"), ...(xy ? { x: xy.x, y: xy.y } : {}), ...extra });
+    this.named.push({ t: t / 1000, ...extra, name: label.replace(/-/g, "_"), ...(xy ? { x: xy.x, y: xy.y } : {}) });
     say(`[${this.name}] ${(t / 1000).toFixed(1)}s ${label}${Object.keys(extra).length ? " " + JSON.stringify(extra) : ""}`);
+  }
+
+  /** Raw only (not an editor event): duplicates of engine events, kept for debugging. */
+  log(label: string, extra: Record<string, unknown> = {}) {
+    const t = Date.now() - this.t0;
+    this.marks.push({ t, label, ...extra });
+    say(`[${this.name}] ${(t / 1000).toFixed(1)}s (${label})`);
   }
 
   /** An engine event the editor cares about, placed at the unit or camp it concerns (screen px, resolved async). */
   private note(t: number, name: string, extra: Record<string, unknown>, at?: ["unit" | "target", string], to?: ["unit" | "target", string]) {
-    const ev: { t: number; name: string; x?: number; y?: number; [k: string]: unknown } = { t: t / 1000, name, ...extra };
+    const ev: { t: number; name: string; x?: number; y?: number; [k: string]: unknown } = { t: t / 1000, ...extra, name };
     this.named.push(ev);
     say(`[${this.name}] ${(t / 1000).toFixed(1)}s * ${name}`);
     const locate = (k: string, id: string) => this.page?.evaluate(`window.capPos ? capPos(${JSON.stringify(k)}, ${JSON.stringify(id)}) ?? capPosAny(${JSON.stringify(k)}, ${JSON.stringify(id)}) : null`).catch(() => null);
@@ -152,8 +163,14 @@ class Clip {
         const st = e.order?.status, reply = String(e.order?.reply ?? "");
         if (st === "active") return this.note(t, "order_active", { orderId: e.order.id, unitId: uid, source: e.order.source }, ["unit", uid]);
         if (st === "done") {
-          const v = /VERDICT:\s*APPROVED/i.test(reply) ? "verdict_approved" : /VERDICT:\s*CHANGES/i.test(reply) ? "verdict_changes" : "reply";
-          return this.note(t, v, { orderId: e.order.id, unitId: uid, text: reply.slice(0, 240) }, ["unit", uid]);
+          // The final VERDICT line decides (a quoted earlier verdict does not count), as in the engine.
+          const lines = [...reply.matchAll(/^[\s*>_#-]*VERDICT:\s*(APPROVED|CHANGES)\b.*$/gim)];
+          const last = lines.at(-1);
+          const v = last ? (last[1].toUpperCase() === "APPROVED" ? "verdict_approved" : "verdict_changes") : "reply";
+          const extra: Record<string, unknown> = { orderId: e.order.id, unitId: uid, source: e.order.source, text: reply.slice(0, 600) };
+          if (last) extra.verdictLine = last[0].trim().slice(0, 200);
+          else if (e.order.source === "workflow") extra.verdictNote = "no VERDICT line: if this was the reviewer step the engine counts it as approved by default";
+          return this.note(t, v, extra, ["unit", uid]);
         }
         if (st === "failed" || st === "cancelled") return this.note(t, `order_${st}`, { orderId: e.order.id, unitId: uid }, ["unit", uid]);
         return;
@@ -218,8 +235,10 @@ class Clip {
 
   /** Resolves with the first matching event (also one already seen since `since`), or null on timeout. */
   waitFor(pred: (e: Ev) => boolean, timeoutMs: number, label?: string): Promise<Ev | null> {
+    const past = this.events.find(pred); // events that already arrived in this clip count too
+    if (past) return Promise.resolve(past);
     return new Promise((res) => {
-      const timer = setTimeout(() => { this.waiters = this.waiters.filter((w) => w.res !== done); if (label) say(`[${this.name}] timeout waiting for ${label}`); res(null); }, timeoutMs);
+      const timer = setTimeout(() => { this.waiters = this.waiters.filter((w) => w.res !== done); if (label) this.note_(`timeout waiting for ${label}`); res(null); }, timeoutMs);
       const done = (e: Ev | null) => { clearTimeout(timer); res(e); };
       this.waiters.push({ pred, res: done });
     });
@@ -233,7 +252,7 @@ const browser = await chromium.launch({
   args: ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist", "--enable-webgl", "--hide-scrollbars"],
 });
 const pid = browser.process?.()?.pid;
-say(`browser pid ${pid} (stop only this PID), url ${url}, out ${outDir}`);
+say(`pid ${process.pid} (stop only this PID; it owns the headless browser${pid ? ` ${pid}` : ""}), url ${url}, out ${outDir}`);
 
 const claimed = new Set<string>(); // units and camps used by earlier clips in this take
 const js = (page: Page, code: string) => page.evaluate(code);
@@ -294,7 +313,19 @@ async function orderCamp(c: Clip, unitIds: string[], near?: { x: number; y: numb
     await glide(c, p.x, p.y, 30);
     await wait(350); // crosshair hover
     await clickAt(c, p, "right");
-    c.mark("order", { targetId: t.id, issue: t.issue, title: t.title, unitIds });
+    c.mark("order", { targetId: t.id, issue: t.issue, title: t.title, unitIds }, p);
+    if (has("debug")) await c.page.screenshot({ path: join(archiveDir, `${c.name}-rightclick.png`) });
+    // The click must have produced an order within 3 s, else order through the API (same engine call the board makes).
+    let ok = false;
+    for (let i = 0; i < 12 && !ok; i++) {
+      await wait(250);
+      ok = await js(c.page, `raid.store.getState().orders.some(o => o.targetId === ${JSON.stringify(t.id)} && ['active', 'done'].includes(o.status)) || (raid.store.getState().workflowRuns ?? []).some(r => r.targetId === ${JSON.stringify(t.id)})`);
+    }
+    if (!ok) {
+      await js(c.page, `raid.api.order(${JSON.stringify(teamId != null ? { teamId, targetId: t.id } : { unitIds, targetId: t.id })})`);
+      c.log("order-via-api", { targetId: t.id });
+      c.note_(`right-click on ${t.id} made no order in 3 s; ordered through the API instead`);
+    }
     return t.id;
   }
   const t = openTargets(s, near)[0];
@@ -327,16 +358,16 @@ const clips: Record<string, Script> = {
     claimed.add(u.id);
     const pages0 = s.memory?.pages;
     await selectUnit(c, u);
-    c.mark("select", { unitId: u.id, name: u.name, class: u.class, model: u.model });
+    c.mark("select", { unitId: u.id, unitName: u.name, class: u.class, model: u.model });
     await wait(1400);
     const tid = await orderCamp(c, [u.id], u.pos);
     if (!tid) return;
     const mine = (e: Ev) => (e.unitId ?? e.order?.unitId) === u.id;
-    c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.mark("recall", { slugs: e.slugs }));
+    c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.log("recall", { slugs: e.slugs }));
     const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === u.id && ["done", "failed", "cancelled"].includes(e.order?.status), 240000, "order end");
-    if (end) c.mark(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
+    if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
     const rem = await c.waitFor((e) => e.type === "memory.remember" && mine(e), 15000, "remember");
-    if (rem) c.mark("remember", { slug: rem.slug });
+    if (rem) c.log("remember", { slug: rem.slug });
     await wait(3500);
     const lib = (await state(c.page)).buildings.find((b: any) => b.kind === "gbrain");
     if (lib) {
@@ -349,14 +380,23 @@ const clips: Record<string, Script> = {
 
   // Clip 2: select three units, Form team, Trio, right-click a camp; handoffs to VERDICT: APPROVED.
   async teams(c) {
-    const s = await state(c.page);
-    let pool = idleUnits(s, (x) => x.team == null);
-    if (pool.length < 3) pool = idleUnits(s);
-    const three = pool.slice(0, 3);
+    let s = await state(c.page);
+    // The reviewer is a River-trained Rule Warden (Forge type forge-rule-warden): reuse an idle one or train one now.
+    const RW = flag("reviewer", "forge-rule-warden");
+    let warden = idleUnits(s, (x) => x.class === RW)[0];
+    if (!warden && s.unitTypes.some((t: any) => t.id === RW && t.status === "ready")) {
+      const sp = c.waitFor((e) => e.type === "unit.spawned" && e.unit?.class === RW, 20000, "warden spawned");
+      await js(c.page, `raid.api.spawn({ class: ${JSON.stringify(RW)} })`);
+      const e = await sp;
+      if (e) { c.mark("warden-trained", { unitId: e.unit.id, unitName: e.unit.name }, null); await wait(4500); s = await state(c.page); warden = s.units.find((u: any) => u.id === e.unit.id); }
+    }
+    let pool = idleUnits(s, (x) => x.team == null && x.id !== warden?.id && x.class !== RW);
+    if (pool.length < (warden ? 2 : 3)) pool = idleUnits(s, (x) => x.id !== warden?.id && x.class !== RW);
+    const three = warden ? [...pool.slice(0, 2), warden] : pool.slice(0, 3); // member order = planner, implementer, reviewer
     if (three.length < 3) return c.mark("need-3-idle-units");
     three.forEach((u: any) => claimed.add(u.id));
     for (let i = 0; i < 3; i++) { await selectUnit(c, three[i], i > 0); await wait(350); }
-    c.mark("select3", { unitIds: three.map((u: any) => u.id), names: three.map((u: any) => u.name) });
+    c.mark("select3", { unitIds: three.map((u: any) => u.id), unitNames: three.map((u: any) => u.name), reviewer: three[2].id, reviewerClass: three[2].class });
     await wait(900);
     if (!(await clickHud(c, ".hud-wf-form"))) await js(c.page, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }))");
     c.mark("form-team");
@@ -373,7 +413,7 @@ const clips: Record<string, Script> = {
     const handoffs = (e: Ev): boolean => { if (e.type === "workflow.handoff") { n++; c.mark(`handoff-${n}`, { from: e.fromUnitId, to: e.toUnitId, nodeId: e.nodeId }); } return false; };
     c.waitFor(handoffs, 600000);
     const end = await c.waitFor((e) => e.type === "workflow.updated" && e.run?.targetId === tid && ["done", "failed", "cancelled", "needs_human"].includes(e.run?.status), 420000, "run end");
-    if (end) c.mark(`run-${end.run.status}`);
+    if (end) c.log(`run-${end.run.status}`);
     await wait(4000);
   },
 
@@ -399,20 +439,38 @@ const clips: Record<string, Script> = {
     }
     // The ready Refund Ranger card: scroll it into view, open the held-out sample, press Train.
     const types = (await state(c.page)).unitTypes.filter((t: any) => t.source === "forge" && t.status === "ready");
-    const rr = types.find((t: any) => /refund/i.test(t.name)) ?? types[0];
-    if (!rr) return c.mark("no-ready-forged-type");
-    await js(c.page, `(() => { const b = document.querySelector('button[title=${JSON.stringify(`Train a ${rr.name}`)}]'); b?.closest('.pnl-type')?.scrollIntoView({ block: 'center', behavior: 'smooth' }); })()`);
-    await wait(1200);
-    c.mark("card", { typeId: rr.id, name: rr.name });
-    await wait(2500);
+    const RR = flag("ranger", "forge-refund-ranger-2"); // exact checkpoint: 0.82 vs 0.42 overall
+    const rr = types.find((t: any) => t.id === RR);
+    if (!rr) { c.note_(`${RR} not ready on this engine`); return c.mark("no-ready-forged-type"); }
+    // The exact numbers the card shows, from the same engine proxy the board calls.
+    const evalFor = (id: string) => js(c.page, `raid.api.get("/api/forge/types/" + encodeURIComponent(${JSON.stringify(id)}) + "/eval")`).then((r: any) => {
+      if (!r?.ok) { c.note_(`eval for ${id} unavailable through the engine: ${r?.error}`); return { evalError: r?.error ?? "unavailable" }; }
+      const m = (r.metrics ?? []).find((x: any) => x.key === "overall");
+      return { baseModel: r.baseModel ?? null, evalOrders: r.evalOrders ?? null, overallTrained: m?.trained ?? null, overallBase: m?.base ?? null, metrics: r.metrics };
+    }).catch(() => ({ evalError: "request failed" }));
+    const cardXY = (typeId: string) => js(c.page, `(() => { const t = raid.store.getState().unitTypes.find(x => x.id === ${JSON.stringify(typeId)}); const b = t && document.querySelector('button[title=' + JSON.stringify('Train a ' + t.name) + ']'); const card = b?.closest('.pnl-type'); if (!card) return null; card.scrollIntoView({ block: 'center', behavior: 'smooth' }); const r = card.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    // Both River cards: the Rule Warden first, then the Refund Ranger we train.
+    const rw = types.find((t: any) => t.id === "forge-rule-warden");
+    if (rw) {
+      const xy = await cardXY(rw.id);
+      await wait(900);
+      if (xy) await glide(c, xy.x, xy.y);
+      c.mark("card", { typeId: rw.id, typeName: rw.name, model: rw.model, ...(await evalFor(rw.id)) }, xy);
+      await wait(3000);
+    }
+    const xy = await cardXY(rr.id);
+    await wait(900);
+    if (xy) await glide(c, xy.x, xy.y);
+    c.mark("card", { typeId: rr.id, typeName: rr.name, model: rr.model, ...(await evalFor(rr.id)) }, xy);
+    await wait(3000);
     const spawned = c.waitFor((e) => e.type === "unit.spawned" && e.unit?.class === rr.id, 20000, "unit.spawned");
     if (!(await clickHud(c, `button[title=${JSON.stringify(`Train a ${rr.name}`)}]`))) await js(c.page, `raid.api.spawn({ class: ${JSON.stringify(rr.id)} })`);
-    c.mark("train");
+    c.mark("train", { typeId: rr.id, model: rr.model });
     const sp = await spawned;
     if (!sp) return;
     const uid = sp.unit.id;
     claimed.add(uid);
-    c.mark("spawned", { unitId: uid, name: sp.unit.name });
+    c.mark("spawned", { unitId: uid, unitName: sp.unit.name });
     await wait(1000);
     await js(c.page, "raid.bus.clear()");
     await wait(3000); // walks out of the Forge
@@ -423,9 +481,9 @@ const clips: Record<string, Script> = {
     const tid = await orderCamp(c, [uid], u.pos);
     if (!tid) return;
     const mine = (e: Ev) => (e.unitId ?? e.order?.unitId) === uid;
-    c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.mark("recall", { slugs: e.slugs }));
+    c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.log("recall", { slugs: e.slugs }));
     const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === uid && ["done", "failed", "cancelled"].includes(e.order?.status), 150000, "order end");
-    if (end) c.mark(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
+    if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
     await wait(4000);
   },
 
@@ -452,7 +510,7 @@ const clips: Record<string, Script> = {
     const firstProp = c.waitFor((e) => { if (e.type === "order.proposed") proposals.push(e); return e.type === "order.proposed"; }, 40000, "order.proposed");
     const toggled = await clickHud(c, `button.hud-team[title^=${JSON.stringify(`${team.name}, group ${team.id}`)}]`);
     if (!toggled) await js(c.page, `raid.api.patchTeam(${team.id}, { autopilot: true })`);
-    c.mark("autopilot-on", { teamId: team.id, name: team.name });
+    c.mark("autopilot-on", { teamId: team.id, teamName: team.name });
     const p1 = await firstProp;
     if (!p1) return;
     c.mark("proposed", { orderId: p1.order.id, unitId: p1.order.unitId, targetId: p1.order.targetId, vetoDeadline: p1.order.vetoDeadline });
@@ -484,10 +542,10 @@ const clips: Record<string, Script> = {
     const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s)[0] ?? s.units[0];
     claimed.add(u.id);
     await selectUnit(c, u);
-    c.mark("select", { unitId: u.id, name: u.name });
+    c.mark("select", { unitId: u.id, unitName: u.name });
     await wait(1200);
     await clickHud(c, "#hud button.hud-tab", "Loadout");
-    c.mark("loadout-tab");
+    c.mark("loadout-open");
     await wait(1800);
     await clickHud(c, "button.ldo-chip", "House rules");
     await wait(700);
@@ -499,55 +557,93 @@ const clips: Record<string, Script> = {
     await wait(1000);
     const upd = c.waitFor((e) => e.type === "unit.updated" && e.unit?.id === u.id, 30000, "unit.updated");
     await clickHud(c, "button.ldo-btn", "Apply");
-    c.mark("apply");
+    c.mark("save");
     const e = await upd;
-    if (e) c.mark("applied", { instructions: String(e.unit?.loadout?.instructions ?? "").slice(0, 200), skills: e.unit?.loadout?.skills });
-    await wait(3500);
+    if (e) c.mark("applied", { unitId: u.id, instructions: String(e.unit?.loadout?.instructions ?? "").slice(0, 400), skills: e.unit?.loadout?.skills, plugins: e.unit?.loadout?.plugins });
+    await wait(2500);
+    // The next order carries the new standing orders: order a camp and record the unit's first messages.
+    await clickHud(c, "#hud button.hud-tab", "Activity");
+    await wait(600);
+    const me = await js(c.page, `raid.store.unit(${JSON.stringify(u.id)})`);
+    const tid = await orderCamp(c, [u.id], me?.pos);
+    if (!tid) return;
+    const mine = (x: Ev) => (x.unitId ?? x.order?.unitId) === u.id;
+    c.waitFor((x) => x.type === "unit.activity" && x.kind === "message" && mine(x), 90000).then((x) => x && c.mark("first-message", { text: String(x.text ?? "").slice(0, 300) }, null));
+    const end = await c.waitFor((x) => x.type === "order.updated" && x.order?.unitId === u.id && ["done", "failed", "cancelled"].includes(x.order?.status), Number(flag("loadout-wait", "150000")), "loadout order end");
+    if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 400) });
+    await wait(3000);
   },
 };
 
+// Recording: a CDP screencast (JPEG frames with swap timestamps) re-timed by ffmpeg into a 30 fps H.264 mp4.
+// (Playwright recordVideo hung on close under Bun and is capped near 1 Mbit/s VP8.) The clip starts once the board is
+// loaded, so t = 0 is a ready board; marker times are shifted to the first frame.
 async function run(name: string, script: Script) {
   const c = new Clip(name);
-  const vidTmp = join(tmpdir(), `raid-cap-${take}-${name}-${process.pid}`);
-  rmSync(vidTmp, { recursive: true, force: true });
-  c.ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1, recordVideo: { dir: vidTmp, size: { width: W, height: H } } });
+  const frameDir = join(tmpdir(), `raid-cap-${take}-${name}-${process.pid}`);
+  rmSync(frameDir, { recursive: true, force: true });
+  mkdirSync(frameDir, { recursive: true });
+  c.ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   await c.ctx.addInitScript(CURSOR);
   c.page = await c.ctx.newPage();
-  c.t0 = Date.now(); // the video starts with the page
-  c.page.on("pageerror", (e: Error) => c.mark("pageerror", { text: e.message.slice(0, 200) }));
-  void c.listen();
+  c.page.on("pageerror", (e: Error) => { if (c.t0) c.note_("pageerror: " + e.message.slice(0, 200)); });
   await c.page.goto(url, { waitUntil: "load" });
   await c.page.waitForFunction("window.raid && window.raidScene && raid.store.getState().units.length > 0", null, { timeout: 20000 }).catch(() => {});
   await js(c.page, HELPERS);
   await js(c.page, CURSOR);
   await c.page.mouse.move(W - 260, H / 2 - 120);
-  await wait(3000); // SSE snapshot, scene build, first frames
-  c.mark("ready");
+  await wait(2500); // SSE snapshot, scene build, first frames
+  const backend = await js(c.page, "raid.store.getState().backend").catch(() => "unknown");
+  const frames: { file: string; ts: number }[] = [];
+  const cdp = await c.ctx.newCDPSession(c.page);
+  cdp.on("Page.screencastFrame", (f: any) => {
+    const file = join(frameDir, `f${String(frames.length).padStart(6, "0")}.jpg`);
+    writeFileSync(file, Buffer.from(f.data, "base64"));
+    frames.push({ file, ts: (f.metadata?.timestamp ?? Date.now() / 1000) * 1000 });
+    cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
+  });
+  c.t0 = Date.now();
+  void c.listen();
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 86, maxWidth: W, maxHeight: H, everyNthFrame: 1 });
+  await wait(1200);
+  c.mark("ready", { backend });
   try {
     await script(c);
   } catch (err) {
+    c.note_("script error: " + String((err as Error).message).split("\n")[0]);
     c.mark("script-error", { text: String((err as Error).message).split("\n")[0] });
   }
+  await wait(1500);
   c.mark("end");
   c.stop();
-  const video = c.page.video();
+  await cdp.send("Page.stopScreencast").catch(() => {});
+  await wait(500);
   await c.ctx.close();
-  await wait(600); // late marker positions
-  const webm = join(outDir, `${name}.webm`);
-  await video.saveAs(webm);
-  rmSync(vidTmp, { recursive: true, force: true });
-  if (has("mp4")) {
-    const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-i", webm, "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-an", join(outDir, `${name}.mp4`)]);
-    if (ff.status !== 0) say(`[${name}] ffmpeg failed: ${String(ff.stderr).slice(0, 200)}`);
-  }
-  const doc = { clip: name, take, file: webm, url, width: W, height: H, startedAt: new Date(c.t0).toISOString(), duration: (c.marks.at(-1)?.t ?? 0) / 1000,
-    note: "t is seconds from the first video frame; x, y are screen px (x2, y2 the receiver of a handoff); raw holds every scripted mark and engine SSE event (t in ms)",
-    events: c.named.sort((a, b) => a.t - b.t), raw: c.marks };
+  // Re-time: each frame lasts until the next one; the concat demuxer plus cfr gives a steady 30 fps.
+  const first = frames[0]?.ts ?? c.t0;
+  const shift = first - c.t0;
+  const list = join(frameDir, "list.txt");
+  const lines: string[] = [];
+  frames.forEach((f, i) => { lines.push(`file '${f.file}'`, `duration ${(Math.max(1, (frames[i + 1]?.ts ?? f.ts + 33) - f.ts) / 1000).toFixed(4)}`); });
+  if (frames.length) lines.push(`file '${frames.at(-1)!.file}'`);
+  writeFileSync(list, lines.join("\n"));
+  const mp4 = join(outDir, `${name}.mp4`);
+  const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-fps_mode", "cfr", "-r", "30",
+    "-vf", `scale=${W}:${H}:flags=lanczos,format=yuv420p`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-movflags", "+faststart", mp4]);
+  if (ff.status !== 0) c.note_(`ffmpeg failed: ${String(ff.stderr).slice(0, 300)}`);
+  if (!has("keep-frames")) rmSync(frameDir, { recursive: true, force: true });
+  for (const m of c.marks) m.t -= shift;
+  for (const e of c.named) e.t = Math.round((e.t - shift / 1000) * 1000) / 1000;
+  const duration = frames.length ? (frames.at(-1)!.ts - first) / 1000 : 0;
+  const doc = { clip: name, take, file: mp4, url, backend, width: W, height: H, fps: 30, frames: frames.length, duration,
+    startedAt: new Date(first).toISOString(), startedAtMs: Math.round(first),
+    note: "t is seconds from the first video frame (source time in this file); x, y are screen px (x2, y2 = receiver of a handoff); raw has every scripted mark and engine SSE event (t in ms); failures lists timeouts, API fallbacks and errors",
+    failures: c.failures, events: c.named.sort((a, b) => a.t - b.t), raw: c.marks };
   const mfile = join(outDir, `${name}.markers.json`);
   writeFileSync(mfile, JSON.stringify(doc, null, 2));
-  copyFileSync(webm, join(archiveDir, `${name}.webm`));
+  if (existsSync(mp4)) copyFileSync(mp4, join(archiveDir, `${name}.mp4`));
   copyFileSync(mfile, join(archiveDir, `${name}.markers.json`));
-  say(`[${name}] saved ${webm} (${doc.duration.toFixed(1)} s, ${doc.events.length} events)`);
+  say(`[${name}] saved ${mp4} (${duration.toFixed(1)} s, ${frames.length} frames, ${doc.events.length} events, ${c.failures.length} failure notes)`);
   return doc;
 }
 

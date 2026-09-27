@@ -6,7 +6,7 @@ import { CUES } from "../fx";
 import { END_FRAMES, FPS, HERO_FRAMES, INTRO_FRAMES, clipFrames, clips, planned } from "../timeline";
 import { Hero } from "./Hero";
 import { Clip } from "./Clip";
-import { EndCard } from "./EndCard";
+import { EndCardAnime } from "../intro/EndCard";
 
 // The full cut: 2 s gameplay hero (frame 0 = thumbnail), 13 s anime intro, five capability clips, end card. Audio (VO, music, sfx) is layered here
 // from video/audio/manifest.json once raid-video-vo delivers it.
@@ -56,7 +56,7 @@ export const Main: React.FC = () => (
         </Series.Sequence>
       ))}
       <Series.Sequence durationInFrames={END_FRAMES}>
-        <EndCard />
+        <EndCardAnime />
       </Series.Sequence>
     </Series>
     {WIPE

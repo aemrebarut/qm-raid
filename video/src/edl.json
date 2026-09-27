@@ -601,16 +601,8 @@
       },
       {
         "at": 14.91,
-        "kind": "punchIn",
-        "x": 1839,
-        "y": 157
-      },
-      {
-        "at": 14.91,
         "kind": "forgedBurst",
-        "text": "Refund Ranger 8",
-        "x": 1839,
-        "y": 157
+        "text": "Refund Ranger 8"
       }
     ],
     "events": [

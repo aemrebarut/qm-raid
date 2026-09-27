@@ -58,7 +58,7 @@ const RULES: Record<string, Rule> = {
     fx: {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
       card: [{ kind: "scoreRace", noXY: true, lead: 0.3, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" }, { kind: "mascotCheer", text: "Trained beats base!", lead: 1.5 }],
-      spawned: [{ kind: "punchIn" }, { kind: "forgedBurst", text: "$name" }],
+      spawned: { kind: "forgedBurst", text: "$name", noXY: true }, // event xy is the Train button at the edge
     },
     caps: { forge_open: "The Forge: describe a new unit type", card: "River-trained vs base model, held-out test orders", spawned: "River-trained unit, straight to work" },
     vo: { vo_forge_1: "forge_open", vo_forge_2: "card", vo_forge_3: "train" },

@@ -1,0 +1,17 @@
+{
+  "name": "@qm-raid/art",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Procedural low-poly Three.js asset factories for the QM Raid board (no game logic). Showroom on 127.0.0.1:4620.",
+  "scripts": {
+    "link": "sh scripts/link.sh",
+    "showroom": "sh scripts/link.sh && vite --config vite.config.ts",
+    "dev": "sh scripts/link.sh && vite --config vite.config.ts",
+    "typecheck": "sh scripts/link.sh && tsc --noEmit",
+    "test": "sh scripts/link.sh && bun test test/"
+  },
+  "peerDependencies": {
+    "three": "^0.186.1"
+  }
+}

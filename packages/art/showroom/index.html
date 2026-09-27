@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>QM Raid art showroom</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1d2616; font: 13px/1.35 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif; color: #2b1d0e; }
+    #app { position: fixed; inset: 0; }
+    #side { position: fixed; top: 8px; left: 8px; bottom: 8px; width: 250px; overflow: auto; padding: 10px 12px;
+      background: linear-gradient(#f1e3bf, #d9c393); border: 3px solid #6b4e2a; border-radius: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.45); }
+    #side h1 { font-size: 17px; margin: 0 0 4px; }
+    #side h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; margin: 12px 0 4px; color: #6b4e2a; border-bottom: 1px solid #b89a63; }
+    .ex { margin: 5px 0 7px; }
+    .ex .name { cursor: pointer; font-weight: 600; }
+    .ex .name:hover { text-decoration: underline; }
+    .ex button { font: inherit; font-size: 11px; margin: 2px 2px 0 0; padding: 1px 6px; background: #efe0b8; border: 1px solid #6b4e2a; border-radius: 4px; cursor: pointer; }
+    .ex button:hover { background: #fff3cf; }
+    .ex.err .name { color: #b0281c; }
+    .ex .msg { color: #b0281c; font-size: 11px; white-space: pre-wrap; }
+    #bar { position: fixed; top: 8px; right: 8px; padding: 6px 10px; background: rgba(20,16,10,.78); color: #f1e3bf; border-radius: 6px; font: 12px ui-monospace, Menlo, monospace; }
+    #bar label { margin-left: 8px; cursor: pointer; }
+    .hint { font-size: 11px; color: #6b4e2a; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="side"><h1>Art showroom</h1><div id="list"></div>
+    <div class="hint">Drag rotates, right-drag pans, wheel zooms. Click a name to focus. <br>URL: ?area=units, ?focus=Knight, ?board=1 (board camera angle, no turntable).</div></div>
+  <div id="bar"><span id="stats"></span>
+    <label><input type="checkbox" id="turn" checked /> turntable</label>
+    <label><input type="checkbox" id="iso" /> board camera</label></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>

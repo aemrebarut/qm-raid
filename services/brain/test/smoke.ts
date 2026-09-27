@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 // Smoke test: run with the service up (bun run dev), then `bun run test`.
 const BASE = process.env.BRAIN_URL ?? "http://127.0.0.1:4616";
+// MCP facade: BRAIN_MCP_URL, else the brain port + 1 (4617).
+const MCP = process.env.BRAIN_MCP_URL ?? BASE.replace(/:(\d+)$/, (_m, p) => `:${Number(p) + 1}`) + "/mcp";
 let failed = 0;
 async function check(name: string, fn: () => Promise<boolean>) {
   try {
@@ -43,14 +46,14 @@ if (process.env.SMOKE_WRITE === "1") {
     const edgesNow = ["issues/lum-101", "components/billing", "units/smoke"].every((to) => g.edges.some((e: any) => e.from === slug && e.to === to));
     if (!edgesNow) console.log("  learning edges missing from /graph");
     // Regression (raid-rev): parallel add_link on one page must keep both links.
-    const mcp = (id: number, args: object) => fetch(BASE.replace(/:4616$/, ":4617") + "/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "add_link", arguments: args } }) }).then((r) => r.json());
+    const mcp = (id: number, args: object) => fetch(MCP, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id, method: "tools/call", params: { name: "add_link", arguments: args } }) }).then((r) => r.json());
     await Promise.all([mcp(1, { from: slug, to: "companies/orchard-education" }), mcp(2, { from: slug, to: "companies/brightpath-clinics" })]);
     const page = await get("/page?slug=" + encodeURIComponent(slug));
     const bothLinks = page.body.includes("[[companies/orchard-education]]") && page.body.includes("[[companies/brightpath-clinics]]");
     if (!bothLinks) console.log("  parallel add_link lost a link");
     // Engine-assigned slug is used as given (MCP remember).
     const want = `learnings/lum-101-smoke-${Date.now()}`;
-    const res = await fetch(BASE.replace(/:4616$/, ":4617") + "/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "remember", arguments: { slug: want, targetId: "t101", unitId: "smoke", text: "Smoke learning with a given slug." } } }) }).then((r) => r.json());
+    const res = await fetch(MCP, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "remember", arguments: { slug: want, targetId: "t101", unitId: "smoke", text: "Smoke learning with a given slug." } } }) }).then((r) => r.json());
     const givenOk = JSON.parse(res.result.content[0].text).slug === want && (await get("/page?slug=" + encodeURIComponent(want))).slug === want;
     if (!givenOk) console.log("  remember ignored the given slug");
     await post("/forget", { slug: want });
@@ -82,10 +85,24 @@ if (process.env.SMOKE_WRITE === "1") {
     const B = await post("/issues", { pos: { x: 18, y: 12 }, title: "Smoke spawned issue", component: "search", kind: "feature", severity: 1, customers: ["kestrel-labs", "nope"] });
     const b = B.target;
     const bOk = b.component === "search" && b.kind === "feature" && b.severity === 1 && b.customers.join() === "kestrel-labs" && b.title === "Smoke spawned issue";
-    // Random spawn with a component draws that component's pool issue.
-    const C = (await post("/issues", { pos: { x: 18, y: 13 }, component: "search" })).target;
-    const cOk = C.component === "search" && /search|autocomplete|reindex|archived/i.test(C.title);
-    await post("/forget", { slug: `issues/lum-${C.id.slice(1)}` });
+    // Regression (raid-rev): add_link on a spawned issue keeps its kind, severity and pos.
+    await fetch(MCP, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "add_link", arguments: { from: `issues/lum-${b.id.slice(1)}`, to: "companies/orchard-education" } } }) });
+    const bw = (await get("/world")).targets.find((t: any) => t.id === b.id);
+    const fmOk = bw && bw.kind === "feature" && bw.severity === 1 && bw.pos.x === 18 && bw.pos.y === 12 && bw.component === "search";
+    if (!fmOk) console.log("  add_link changed the spawned issue:", JSON.stringify(bw));
+    // Regression (raid-rev): random spawns for a component only draw that component's pool issues, then 409.
+    const searchTitles = new Set(JSON.parse(readFileSync(new URL("../../../world/issue-pool.json", import.meta.url), "utf8")).filter((i: any) => i.component === "search").map((i: any) => i.title));
+    const drawn: any[] = [];
+    let last = 0;
+    for (let i = 0; i < 5; i++) {
+      const res = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pos: { x: 18, y: 13 }, component: "search" }) });
+      last = res.status;
+      if (res.status !== 200) break;
+      drawn.push((await res.json()).target);
+    }
+    for (const t of drawn) await post("/forget", { slug: `issues/lum-${t.id.slice(1)}` });
+    const cOk = last === 409 && drawn.every((t) => t.component === "search" && searchTitles.has(t.title));
+    if (!cOk) console.log("  component pool draw:", last, drawn.map((t) => t.title));
         const bad = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pos: { x: 1, y: 1 }, title: "x", component: "nope" }) });
     const noPos = await fetch(BASE + "/issues", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     for (const x of par) await post("/forget", { slug: `issues/lum-${x.target.id.slice(1)}` });
@@ -95,7 +112,7 @@ if (process.env.SMOKE_WRITE === "1") {
     await post("/forget", { slug: `issues/lum-${b.id.slice(1)}` });
     const again = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
     await post("/forget", { slug: `issues/lum-${again.id.slice(1)}` });
-    const ok = n > 109 && shapeOk && worldOk && recallOk && linkOk && uniqueOk && bOk && cOk && bad.status === 400 && noPos.status === 400 && again.title === a.title;
+    const ok = n > 109 && shapeOk && worldOk && recallOk && linkOk && uniqueOk && bOk && cOk && fmOk && bad.status === 400 && noPos.status === 400 && again.title === a.title;
     if (!ok) console.log("  ", JSON.stringify({ a, shapeOk, worldOk, recallOk, linkOk, ids, bOk, cOk, bad: bad.status, noPos: noPos.status, again: again?.title }));
     return ok;
   });

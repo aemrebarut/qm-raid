@@ -268,12 +268,24 @@ async function search(q: string) {
 }
 
 // add_link is refused on a managed brain, so a link is a wikilink appended to the from page (swept into a link by gbrain).
+// Flat frontmatter to YAML; strings and nested values as JSON, which YAML reads as-is.
+function toYaml(fm: Record<string, unknown>): string {
+  let out = "";
+  for (const [k, v] of Object.entries(fm)) {
+    if (!/^[A-Za-z0-9_-]+$/.test(k) || v === null || v === undefined) continue;
+    out += `${k}: ${typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v)}\n`;
+  }
+  return out;
+}
+
 async function addLink(from: string, to: string, linkType?: string) {
   const p = await getPage(from);
   if (!p) throw new Error(`no page ${from}`);
   if (!(await getPage(to))) throw new Error(`no page ${to}`);
   const line = `Related${linkType ? ` (${linkType.replace(/[^a-z_ ]/gi, "")})` : ""}: [[${to}]]`;
-  const content = `---\ntype: ${p.type || "concept"}\ntitle: "${p.title.replace(/"/g, "'")}"\n---\n${p.body.trim()}\n\n${line}\n`;
+  // Keep every frontmatter field (spawned issues hold kind, severity and pos there).
+  const fm = { ...p.fm, type: p.fm.type ?? (p.type || "concept"), title: p.fm.title ?? p.title };
+  const content = `---\n${toYaml(fm)}---\n${p.body.trim()}\n\n${line}\n`;
   await tool("put_page", { slug: from, content, force: true });
   invalidateGraph();
   return { ok: true, from, to };
@@ -292,9 +304,9 @@ async function createIssue(b: any) {
   if (!b.title) {
     const pool: PoolIssue[] = JSON.parse(readFileSync(POOL_FILE, "utf8"));
     const used = new Set(existing.map((r) => dropPrefix(r.title)));
-    // Prefer an unused pool issue of the requested component (the engine's tile is in that zone), else any.
-    const next = pool.find((p) => !used.has(p.title) && (!b.component || p.component === b.component)) ?? pool.find((p) => !used.has(p.title));
-    if (!next) throw new HttpError(409, "issue pool exhausted; POST /reset refills it");
+    // An issue's facts belong to its component: never relabel another component's pool issue.
+    const next = pool.find((p) => !used.has(p.title) && (!b.component || p.component === b.component));
+    if (!next) throw new HttpError(409, b.component ? `no unused pool issue left for ${b.component}; pick another component or POST /reset` : "issue pool exhausted; POST /reset refills it");
     spec = { ...next, component: b.component ?? next.component };
   } else {
     let component = b.component;

@@ -1,5 +1,6 @@
-// Smoke test for src/forge.ts (E12) against the live Forge: bun test/forge-smoke.ts [--wait-ready]
-// Creates one dry-run type on the Forge. Also re-runs itself with FORGE_URL on a dead port (--down) to check degradation.
+// Smoke test for src/forge.ts (E12) against the live Forge: bun test/forge-smoke.ts [--create [--wait-ready]]
+// Default is read-only. --create makes one type on the Forge, always with dryRun: true (a Forge in river mode
+// would otherwise start real, paid training); only use it on a Forge that honors dryRun. Also re-runs itself with FORGE_URL on a dead port (--down) to check degradation.
 import type { UnitType } from "../../../contract/types.ts";
 import { FORGE_URL } from "../src/config.ts";
 import { forgeProxy, forgeType, pollForge, startForge } from "../src/forge.ts";
@@ -17,7 +18,7 @@ const builtinIds = () => store.state.unitTypes.filter((t) => t.source === "built
 if (process.argv.includes("--down")) {
   await pollForge();
   check(builtinIds() === "knight,ranger,scout" && store.state.unitTypes.every((t) => t.source === "builtin"), `forge down (${FORGE_URL}): builtins kept, no throw`);
-  const r = await forgeProxy({ name: "X", description: "y" });
+  const r = await forgeProxy({ name: "X", description: "y", dryRun: true });
   check(r.ok === false && /unreachable/.test((r as any).error), "forge down: forgeProxy -> {ok:false, error}");
   process.exit(failures ? 1 : 0);
 }
@@ -38,7 +39,9 @@ const readyUpdates = updates.slice(n0).filter((u) => forged.find((f) => f.id ===
 check(readyUpdates.length === 0, "no forge.updated for unchanged ready types on the next poll");
 
 check((await forgeProxy({ name: "" })).ok === false, "forgeProxy without name/description -> {ok:false}");
-const r = await forgeProxy({ name: "Smoke Scout", description: "engine forge.ts smoke test type; safe to ignore" });
+check(forgeType("knight") === null && forgeType("nope") === null && (forged[0] ? forgeType(forged[0].id)?.id === forged[0].id : true), "forgeType(id) lookup (forge only)");
+if (process.argv.includes("--create")) {
+const r = await forgeProxy({ name: "Smoke Scout", description: "engine forge.ts smoke test type; safe to ignore", dryRun: true });
 check(r.ok === true && typeof (r as any).typeId === "string", `forgeProxy -> {ok:true, typeId: ${(r as any).typeId}}`);
 const typeId = (r as any).typeId as string;
 const t1 = Date.now();
@@ -52,6 +55,7 @@ if (process.argv.includes("--wait-ready")) {
   const seen = updates.filter((u) => u.id === typeId).map((u) => `${u.status} ${u.progress.toFixed(2)}`);
   console.log(`     progress: ${seen.join(" | ")}`);
   check(forgeType(typeId)?.status === "ready" && !!forgeType(typeId)?.model, `new type ready with a model after ${((Date.now() - t2) / 1000).toFixed(0)} s`);
+}
 }
 stop();
 

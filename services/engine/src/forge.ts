@@ -82,13 +82,15 @@ export function startForge(): () => void {
   return () => { if (timer) clearInterval(timer); timer = null; };
 }
 
-// POST /api/forge/types {name, description} -> POST $FORGE_URL/types
+// POST /api/forge/types {name, description, dryRun?} -> POST $FORGE_URL/types
+// dryRun: true (Forge extension) forces the 60 s fake pipeline; without it a Forge in river mode starts real, paid training.
 export async function forgeProxy(body: unknown): Promise<{ ok: true; typeId: string } | { ok: false; error: string }> {
-  const b = (body && typeof body === "object" ? body : {}) as { name?: unknown; description?: unknown };
+  const b = (body && typeof body === "object" ? body : {}) as { name?: unknown; description?: unknown; dryRun?: unknown };
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const description = typeof b.description === "string" ? b.description.trim() : "";
   if (!name || !description) return { ok: false, error: "name and description required" };
-  const r = await sendJson<{ typeId?: unknown; error?: unknown }>("POST", `${FORGE_URL}/types`, { name, description }, 8000);
+  const payload = b.dryRun !== undefined ? { name, description, dryRun: b.dryRun } : { name, description }; // dryRun forwarded unchanged
+  const r = await sendJson<{ typeId?: unknown; error?: unknown }>("POST", `${FORGE_URL}/types`, payload, 8000);
   if (r.status === 0) { logOnce("forge", `forge unreachable at ${FORGE_URL}/types`); return { ok: false, error: `forge unreachable at ${FORGE_URL}` }; }
   if (r.status >= 400 || typeof r.data?.typeId !== "string") {
     return { ok: false, error: typeof r.data?.error === "string" ? r.data.error : `forge answered ${r.status}` };

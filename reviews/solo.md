@@ -126,9 +126,32 @@ Inspected all three commit diffs and relevant current files. Runtime validation 
 
 **P2: replay finished progress before deciding a pipeline was interrupted.** In `d8000aa`, `services/forge/src/server.ts:44-46` only follows progress when the stored PID is alive. If training finishes while Forge is down (or in the polling/save gap), the PID is gone but progress.jsonl contains a terminal ready event and checkpoint. Startup instead marks the type failed and leaves its model null. An isolated execution of the committed load function with a stale training store, dead PID, and final ready record confirmed only types.json was read and the result was `failed: interrupted by a forge restart`. Replay persisted progress regardless of PID liveness; follow only unfinished live children. Sent to `raid-river`. This reproduction did not restart the shared service, touch demo types, or call River.
 
+## 2026-09-27: Groundedness judge `b2f8b5e`, workflow verdict `2c8b600`, M3 evidence `bc79ea1`
+
+Inspected all three commit diffs. No new training or judge API requests were made. Offline probes disabled environment-file loading and used fake provider clients and temporary files.
+
+**P2: unavailable judge results become published numeric scores.** `river/forge/pipeline.py:139-142` converts `None` to zero and reports a ready blended score. Injecting timeouts into every judge request produced `(None, None)`; running the pipeline with those results and style scores 0.80/0.60 emitted `ready`, `evalScore: 0.40`, and groundedness 0.00/0.00 despite no completed judgments. Partial failures are also averaged on independently filtered trained/base subsets without coverage. `judge_one` treats an unparsable response as zero and accepts values outside the requested 0/0.5/1 rubric. Keep unavailable/invalid grades distinct from zero, validate responses, and require complete or explicitly paired sufficient coverage before publishing a blended score; otherwise report evaluation incomplete/null or retry. Sent to `raid-river` in Herdr session `default`.
+
+**P2: any VERDICT prefix bypasses final-verdict validation.** In `2c8b600`, `services/forge/src/units.ts:108` checks only whether some line starts with `VERDICT:`. Executing the committed source with an injected model emitted `VERDICT: NEEDS WORK` unchanged, with one model call and no follow-up. An answer beginning `VERDICT: CHANGES: fix duplicate capture` and ending with a Remember section was likewise emitted without the required terminal verdict. Validate the final line against APPROVED or CHANGES with an explanation, preserve valid CHANGES found earlier, and request the follow-up for invalid verdicts. Sent to `raid-river`. The normal two-turn CHANGES case passed, including preservation of the initial answer as the assistant turn. A failed follow-up currently synthesizes APPROVED; the contract permits assumed approval for missing verdicts, but the assumption should remain visible in the reply/summary.
+
+Validation:
+
+- Both existing demo `eval.json` files contain 32 valid groundedness grades for each model. Recomputed row means match stored aggregates; applying the pipeline blend matches live `evalScore` 0.663 for `forge-refund-ranger` and 0.821 for `forge-refund-ranger-2`. These runs are not affected by the missing-grade reproduction. The rounded numbers in `bc79ea1` match the evidence.
+- `bun run smoke`: PASS in river mode with `dryRun: true`, creating `forge-smoke-ranger-3` and observing template-generation progress. The lane owner subsequently reported deleting that fixture during cleanup; the smoke had already passed. Full completion was not asserted for this fixture.
+- The committed Python follow-up messages preserve system, original user/context, previous assistant answer, and follow-up user turns. PASS with no provider call.
+- A bridge-smoke selector probe stopped before any request because the owner changed the selector concurrently. The unmodified updated bridge smoke passed in the following batch.
+
+## 2026-09-27: Concurrent serving/fallback `c225ce0` and warm-up `890e335`
+
+Inspected both diffs and the installed River SDK sampling signature. No new actionable findings in these changes. Existing findings below remain open.
+
+- Offline concurrent-handler probe: PASS. A held fake River request and a dry request run concurrently; the dry reply releases the held request, and both JSON responses retain their correct request ids. The warm request opens only the session and returns its own id.
+- Offline execution of `c225ce0` units: PASS. An injected provider timeout selects the dry template, emits a labeled fallback reply with the original orderId, emits nonterminal error activity, and clears the unit's active order. All Brain calls were stubbed.
+- `cd services/forge && bun run smoke:bridge`: PASS against the owner-restarted service, reported PID 39865. No ready dry type was available at selection time, so the smoke used the existing `forge-refund-ranger` checkpoint for one direct status reply and deleted its test unit. No training, Brain write, engine request, or real-type deletion was performed.
+
 ## Lane review queue
 
 - `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved.
-- `raid-river`: reviewed through `d8000aa`, `e2a6671`, `3a7b55e`; P1 direct-message interruption and P2 recovery of pipelines completed during downtime awaiting fixes. Live dryRun, bridge, and commander checks pass. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-river`: reviewed through `890e335`, including `b2f8b5e`, `2c8b600`, `bc79ea1`, and `c225ce0`. Open: P1 direct-message interruption; P2 finished-pipeline recovery, unavailable judge grades, and final-verdict validation. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

@@ -95,3 +95,9 @@
 .hud-run-card .hud-card-title { display: block; }
 .hud-run-card .hud-card-reason { display: flex; align-items: center; gap: 6px; }
 .hud-run-loops { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-3, #6f6a60); }
+
+/* Orders bar overflow: hud.css shows 2 runs and 3 proposals; "+N more" sets data-all-* and the bar scrolls */
+.hud-orders[data-all-runs="true"] .hud-run-card:nth-child(n + 3 of .hud-run-card),
+.hud-orders[data-all-props="true"] .hud-card:not(.hud-run-card):nth-child(n + 4 of .hud-card:not(.hud-run-card)) { display: grid; }
+.hud-orders-more { align-self: flex-start; flex: none; font-size: 11px; letter-spacing: .06em; }
+.hud-orders-more[data-urgent="true"] { color: var(--danger, #d65a45); border-color: var(--danger, #d65a45); }

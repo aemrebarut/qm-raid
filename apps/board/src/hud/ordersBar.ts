@@ -1,5 +1,5 @@
 // Orders bar: team workflow runs (node chain, loop count, Cancel), then one card per proposed
-// (autopilot) order with a countdown ring to vetoDeadline and Cancel / Adjust / Go now.
+// (autopilot) order with a countdown ring to vetoDeadline and Veto / Adjust / Go. "+N more" opens capped rows.
 // Cards are diffed, not rebuilt, so the ticking ring never eats clicks.
 import { api, type Bus, type Order, type Reply, type State, type Team, type WorkflowRun } from "../core";
 import { icon } from "../theme/icons";
@@ -13,6 +13,8 @@ const SVG = "http://www.w3.org/2000/svg";
 
 const DONE_LINGER_MS = 8_000; // a finished or cancelled run stays this long
 const ALERT_LINGER_MS = 5 * 60_000; // a run that needs a human or failed stays until dismissed, at most this long
+const RUN_ROWS = 2; // hud.css shows this many run cards and PROPOSAL_ROWS proposals; "+N more" opens the rest
+const PROPOSAL_ROWS = 3;
 
 interface Card { el: HTMLElement; ring: SVGCircleElement; secs: HTMLElement; title: HTMLElement; reason: HTMLElement; deadline: number | null; unitId: string }
 interface RunCard { el: HTMLElement; title: HTMLElement; sub: HTMLElement; chain: HTMLElement; cancel: HTMLButtonElement; dismiss: HTMLButtonElement; chainSig: string; teamId: number; orderId: string | null; expires: number }
@@ -20,7 +22,9 @@ interface RunCard { el: HTMLElement; title: HTMLElement; sub: HTMLElement; chain
 export class OrdersBar {
   private runHead = h("h3", { class: "hud-orders-head" }, "Runs");
   private head = h("h3", { class: "hud-orders-head", title: "Autopilot proposals: veto, adjust or approve" }, "Proposals");
-  readonly root = h("section", { class: "hud-orders", hidden: true }, this.runHead, this.head);
+  private runMore = h("button", { class: "hud-btn hud-btn-sm hud-orders-more", type: "button", hidden: true, title: "Show every run", onclick: () => this.expand("allRuns") });
+  private propMore = h("button", { class: "hud-btn hud-btn-sm hud-orders-more", type: "button", hidden: true, title: "Show every proposal", onclick: () => this.expand("allProps") });
+  readonly root = h("section", { class: "hud-orders", hidden: true }, this.runHead, this.runMore, this.head, this.propMore);
   private cards = new Map<string, Card>();
   private runs = new Map<string, RunCard>();
   private seen = new Map<string, WorkflowRun["status"]>(); // last status per run, to spot endings
@@ -64,6 +68,7 @@ export class OrdersBar {
     const cmd = this.bus.command;
     if (cmd?.kind === "adjust" && gone.has(cmd.orderId)) this.bus.setCommand(null); // its card just went away
     this.markAdjusting();
+    this.more();
     this.tick();
     const busy = this.cards.size + this.runs.size > 0;
     if (busy && !this.timer) this.timer = setInterval(() => this.tick(), 250);
@@ -104,13 +109,13 @@ export class OrdersBar {
     const cancel = h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel hud-btn-icon", type: "button", title: "Cancel run (stops its active order)", "aria-label": "Cancel run",
       onclick: () => card.orderId && void this.act(api.cancelOrder(card.orderId), "Run cancelled") }, icon("close", 14));
     const dismiss = h("button", { class: "hud-btn hud-btn-sm hud-btn-icon", type: "button", title: "Dismiss", "aria-label": "Dismiss",
-      onclick: () => { this.dismissed.add(id); card.el.remove(); this.runs.delete(id); this.root.hidden = this.cards.size === 0 && this.runs.size === 0; } }, icon("close", 14));
+      onclick: () => { this.dismissed.add(id); card.el.remove(); this.runs.delete(id); this.root.hidden = this.cards.size === 0 && this.runs.size === 0; this.more(); } }, icon("close", 14));
     const el = h("article", { class: "hud-card hud-run-card", "data-run": id },
       h("div", { class: "hud-card-body", title: "Select the team", onclick: () => this.selectTeam(card.teamId) }, title, chain, sub),
       h("div", { class: "hud-card-btns" }, cancel, dismiss));
     const card: RunCard = { el, title, sub, chain, cancel, dismiss, chainSig: "", teamId: run.teamId, orderId: null, expires: Infinity };
     this.runs.set(id, card);
-    this.root.insertBefore(el, this.head); // runs sit above the proposals
+    this.root.insertBefore(el, this.runMore); // runs sit above the proposals
     return card;
   }
 
@@ -187,8 +192,26 @@ export class OrdersBar {
     );
     const card: Card = { el, ring, secs, title, reason, deadline: o.vetoDeadline, unitId: o.unitId }; // handlers read it later
     this.cards.set(id, card);
-    this.root.append(el);
+    this.root.insertBefore(el, this.propMore);
     return card;
+  }
+
+  // hud.css caps the rows; "+N more" opens the rest (the bar scrolls) so every Veto, Go and Cancel stays reachable.
+  private more(): void {
+    for (const [btn, key, n, rows] of [[this.runMore, "allRuns", this.runs.size, RUN_ROWS], [this.propMore, "allProps", this.cards.size, PROPOSAL_ROWS]] as const) {
+      const extra = n - rows;
+      if (extra <= 0) delete this.root.dataset[key];
+      const open = this.root.dataset[key] === "true";
+      btn.hidden = extra <= 0;
+      btn.textContent = open ? "Show fewer" : `+${extra} more`;
+      btn.setAttribute("aria-expanded", String(open));
+    }
+  }
+
+  private expand(key: "allRuns" | "allProps"): void {
+    this.root.dataset[key] = String(this.root.dataset[key] !== "true");
+    this.more();
+    this.tick();
   }
 
   private async act(p: Promise<Reply>, ok: string): Promise<void> {
@@ -213,6 +236,9 @@ export class OrdersBar {
       c.secs.textContent = c.deadline == null ? "∞" : String(Math.ceil(left / 1000));
       c.el.dataset.urgent = String(c.deadline != null && left < 5000);
     }
+    // A capped row that needs attention colours its "+N more" button.
+    this.propMore.dataset.urgent = String([...this.cards.values()].slice(PROPOSAL_ROWS).some((c) => c.el.dataset.urgent === "true"));
+    this.runMore.dataset.urgent = String([...this.runs.values()].slice(RUN_ROWS).some((c) => c.el.dataset.status === "needs_human" || c.el.dataset.status === "failed"));
   }
 }
 

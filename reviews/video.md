@@ -70,3 +70,25 @@ VERDICT: CHANGES: fix team membership/reviewer binding and recapture Orders with
 ## Opening requirement update (Analyst relaying Emre, 15:58 PDT)
 
 The final opening must start with 2 seconds of real gameplay, sharp from frame 0, followed by 13 seconds of anime. The full intro section remains 15 seconds. Review the exact first frame and the exported `thumbnail.png`, the smash cut at 2 seconds, and the retimed intro manifest. The previous 15 second silent anime draft does not establish compliance with this updated requirement.
+
+## Structure superseded: 75 second total (Analyst relaying Emre)
+
+The Update 16:03 at the top of `docs/lanes/video.md` now controls: hero 0-2, anime 2-13 (11 seconds), Orders 13-28, Teams 28-42, Forge 42-57, command montage 57-71, end 71-75. The command montage includes new issue, veto and a 3 second Loadout edit. Narration target is about 170 words. Prior pacing findings must be reevaluated against the new script and measured audio.
+
+## V6: remaining dry3 captures (16:02 PDT)
+
+All three files are in `~/Workspace/qm-raid-video/dry3/clips/`, 1920x1080 H.264 at 30 fps, silent, stable and cleanly decoded. Full-resolution samples every 2 seconds were inspected against the corresponding marker manifests.
+
+- Forge: SHA256 prefix `05aa1a4138`, 26.50 seconds, 14 samples. Exact checkpoint selection is corrected. Markers report Refund Ranger -2 overall 0.821 vs 0.424 and Rule Warden 0.917 vs 0.557. The panel disappears by the 14 second frame, before the later card marker; capPos errors at 24.898 prevent follow-on work. The dev reload makes the later markers unsuitable for editing.
+- Autopilot: `65c32a6a27`, 10.367 seconds, 6 samples. New issue appears, then a page reload and execution-context error at 8.752. No veto or proposal sequence is captured.
+- The capture author attributes reloads to the shared dev board. Commit 93fa813 restores helpers with an init script and pins exact Trio selection and reviewer binding. Read the diff; corrected runtime binding awaits dry4. Real takes use the frozen board.
+
+Sent to raid-video-cap and Analyst, with editor summary.
+
+VERDICT: CHANGES: replace the interrupted Forge and Autopilot dry captures.
+
+Loadout: `7b9e243a42`, 22.30 seconds, 12 samples. Edit/save visible at 4-12 seconds. Applied marker at 9.264 records standing orders, debug skill and gbrain. Follow-on order at 13.640 and recall/reply are visible at 16-22 seconds. No failure notes. The final 3 second edit needs a panel close-up for legibility. Scope is mock dry-run recording quality, not a real-backend submission.
+
+Sent to raid-video-cap and Analyst, with editor summary.
+
+VERDICT: APPROVED

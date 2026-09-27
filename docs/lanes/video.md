@@ -22,7 +22,7 @@ Intro: anime opening energy, fast and funny. Clips: a herald narrating a real-ti
 - Clip 3, 20 s, The Forge (River AI): describe a type, the refund ranger card with trained vs base (overall 0.82 vs 0.42 on held-out orders), Train unit, it walks out and takes an order.
 - Clip 4, 15 s, Autopilot and new issues: press the new-issue button, a camp appears; autopilot proposals with 15 second veto rings; cancel one, let one go.
 - Clip 5, 15 s, Loadout: edit a unit's standing orders and skills in game (only if shipped and green by the final take; otherwise give its time to clips 1 and 3).
-- End card 4 s: "Built today by one human and 24 AI agents", github.com/aemrebarut/qm-raid, "River AI, GBrain, QM".
+- End card 4 s: "Built today by one human and 31 AI agents", github.com/aemrebarut/qm-raid, "River AI, GBrain, QM".
 
 ## Where and when
 - Develop and dry run captures on the test board 4619 (mock engine 4618). Real takes on the frozen demo board http://127.0.0.1:4621 (real engine 4610, real QM). Never 4611 (Emre's live board).

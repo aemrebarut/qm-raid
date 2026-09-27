@@ -28,7 +28,10 @@ const TIMING_FILE = join(import.meta.dir, "..", ".state", "timing.jsonl"); // on
 // Change QM_THREAD_NS to start every unit in a fresh conversation.
 const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
 // Plan B (flag): each unit gets its own QM project scope; a loadout change makes the agent write that scope's SOUL.
-const LOADOUT_SOUL = process.env.LOADOUT_SOUL === "1";
+// LOADOUT_SOUL=1 turns it on for every new unit; any other non-empty value is a unit id prefix (qmtest-) so plan B
+// can be tried on test units while the demo units stay on plan A.
+const SOUL_FLAG = process.env.LOADOUT_SOUL ?? "";
+const soulFor = (id: string): boolean => SOUL_FLAG === "1" || (SOUL_FLAG !== "" && SOUL_FLAG !== "0" && id.startsWith(SOUL_FLAG));
 const ROUND_MARKER = "New round: the board was reset. Recall from GBrain before each order. Reply with one short line.";
 
 interface Send extends SendRequest {
@@ -467,7 +470,7 @@ async function spawn(req: Request): Promise<Response> {
   let u: Unit | null = null;
   try {
     u = await createUnit({ ...b, id: b.id, ...(loadout ? { loadout } : {}) });
-    if (LOADOUT_SOUL) {
+    if (soulFor(u.id)) {
       // Own project scope per unit, created once and reused on respawn (its SOUL survives DELETE).
       let p = projects.get(u.id);
       if (!p) {

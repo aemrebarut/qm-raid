@@ -1,4 +1,4 @@
-// Local demo world used when the brain service is down. Synthetic data only.
+// Local demo world used when the brain service is down; mirrors the brain world (world/layout.json). Synthetic data only.
 import type { State, Unit, Target, UnitType } from "../../../contract/types.ts";
 import { CLASS_MODELS } from "./config.ts";
 
@@ -35,10 +35,10 @@ export function fixtureUnits(): Unit[] {
 export function fixtureState(): State {
   return {
     components: [
-      { id: "billing", name: "Billing", zone: { x: 1, y: 1, w: 7, h: 6 } },
-      { id: "auth", name: "Auth", zone: { x: 16, y: 1, w: 7, h: 6 } },
-      { id: "search", name: "Search", zone: { x: 1, y: 9, w: 7, h: 6 } },
-      { id: "notifications", name: "Notifications", zone: { x: 16, y: 9, w: 7, h: 6 } },
+      { id: "billing", name: "Billing", zone: { x: 1, y: 1, w: 8, h: 7 } },
+      { id: "auth", name: "Auth", zone: { x: 15, y: 1, w: 8, h: 7 } },
+      { id: "onboarding", name: "Onboarding", zone: { x: 1, y: 10, w: 7, h: 7 } },
+      { id: "search", name: "Search", zone: { x: 16, y: 10, w: 7, h: 7 } },
     ],
     buildings: [
       { id: "library", kind: "gbrain", x: 11, y: 11 },
@@ -47,15 +47,15 @@ export function fixtureState(): State {
     ],
     units: fixtureUnits(),
     targets: [
-      target("t12", "LUM-12", "Retry double-charges a card", "billing", "bug", 3, 4, 3, ["acme-robotics"]),
-      target("t13", "LUM-13", "Invoice PDF shows wrong currency", "billing", "bug", 2, 2, 5, ["northwind-bakery"]),
-      target("t14", "LUM-14", "Add annual plan discount", "billing", "feature", 1, 6, 2, []),
-      target("t21", "LUM-21", "Session expires during checkout", "auth", "bug", 3, 18, 3, ["acme-robotics", "globex-freight"]),
-      target("t22", "LUM-22", "Support passkey login", "auth", "feature", 2, 21, 5, ["globex-freight"]),
-      target("t31", "LUM-31", "Search ignores accented letters", "search", "bug", 2, 3, 11, ["northwind-bakery"]),
-      target("t32", "LUM-32", "Saved searches", "search", "feature", 1, 6, 13, []),
-      target("t41", "LUM-41", "Duplicate password reset emails", "notifications", "bug", 3, 18, 11, ["acme-robotics"]),
-      target("t42", "LUM-42", "Digest email opt out link broken", "notifications", "bug", 1, 21, 13, ["globex-freight"]),
+      target("t101", "LUM-101", "Payment retry double-charges a card", "billing", "bug", 3, 3, 3, ["acme-robotics"]),
+      target("t102", "LUM-102", "Prorated refunds on plan downgrade", "billing", "feature", 2, 6, 3, ["brightpath-clinics"]),
+      target("t103", "LUM-103", "Invoice PDF shows the wrong currency symbol for CAD", "billing", "bug", 1, 4, 6, ["kestrel-labs"]),
+      target("t104", "LUM-104", "SSO users are logged out every 10 minutes", "auth", "bug", 3, 17, 3, ["northwind-freight"]),
+      target("t105", "LUM-105", "Passkey login", "auth", "feature", 1, 20, 5, ["kestrel-labs"]),
+      target("t106", "LUM-106", "Invite emails arrive after the trial clock starts", "onboarding", "bug", 2, 3, 12, ["acme-robotics", "orchard-education"]),
+      target("t107", "LUM-107", "Bulk invite teammates from a CSV", "onboarding", "feature", 2, 5, 15, ["brightpath-clinics"]),
+      target("t108", "LUM-108", "Search shows archived projects from other workspaces", "search", "bug", 3, 18, 12, ["northwind-freight"]),
+      target("t109", "LUM-109", "Typo-tolerant search", "search", "feature", 1, 20, 15, ["orchard-education"]),
     ],
     teams: [
       { id: 1, name: "Red", color: "#d64545", autopilot: false, members: ["u1", "u2", "u3"] },

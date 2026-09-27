@@ -1,7 +1,7 @@
 // Engine service: game state, orders, teams and the SSE event stream on 127.0.0.1:4610.
 import { BRAIN_URL, BRIDGE_URL, HOST, PORT } from "./config.ts";
 import { listenerCount, recentEvents, snapshotChunk, store, subscribe } from "./store.ts";
-import { assignTeam, cancelOrder, createOrders, messageUnit, patchTeam, patchUnit, resetWorld, spawnUnit, startGame } from "./game.ts";
+import { assignTeam, cancelOrder, createOrders, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit, startGame } from "./game.ts";
 
 process.on("unhandledRejection", (err) => console.error("[engine] unhandled rejection:", err));
 process.on("uncaughtException", (err) => console.error("[engine] uncaught exception:", err));
@@ -68,6 +68,10 @@ async function route(req: Request): Promise<Response> {
     return json({ ok: false, error: "not found" }, 404);
   }
 
+  if (m === "DELETE") {
+    const mm = p.match(/^\/api\/units\/([^/]+)$/);
+    return mm ? reply(retireUnit(decodeURIComponent(mm[1]!))) : json({ ok: false, error: "not found" }, 404);
+  }
   if (m !== "POST" && m !== "PATCH") return json({ ok: false, error: "method not allowed" }, 405);
   const b = await body(req);
   if (b === undefined) return json({ ok: false, error: "invalid JSON body" }, 400);

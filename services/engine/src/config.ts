@@ -6,11 +6,11 @@ export const BRAIN_URL = (process.env.BRAIN_URL ?? "http://127.0.0.1:4616").repl
 export const PROPOSER_URL = (process.env.PROPOSER_URL ?? "http://127.0.0.1:4613").replace(/\/$/, "");
 export const FORGE_URL = (process.env.FORGE_URL ?? "http://127.0.0.1:4612").replace(/\/$/, "");
 
-// Built-in unit classes and the model each one runs (Barracks spawn uses this).
+// Built-in unit classes and the model each one runs (Barracks spawn uses this). QM runs HARNESS=codex.
 export const CLASS_MODELS: Record<string, { name: string; model: string; effort: string }> = {
-  knight: { name: "Knight", model: "claude-opus-5-5", effort: "high" },
-  ranger: { name: "Ranger", model: "claude-sonnet-5", effort: "medium" },
-  scout: { name: "Scout", model: "claude-haiku-4-5-20251001", effort: "low" },
+  knight: { name: "Knight", model: "gpt-6-astra", effort: "high" },
+  ranger: { name: "Ranger", model: "gpt-6-sol", effort: "medium" },
+  scout: { name: "Scout", model: "gpt-6-luna", effort: "low" },
 };
 
 export const TILES_PER_SEC = 3;

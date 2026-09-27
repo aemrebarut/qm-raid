@@ -24,6 +24,10 @@ export const VETO_WINDOW_MS = 15000;
 // SSE: a client with more unread events than this is dropped (it reconnects and gets a fresh snapshot).
 export const SSE_MAX_QUEUE = 2000;
 
+// Browser origins allowed to call the engine (the board on 4611, the test board on 4619); CORS_ORIGINS (comma-separated) adds more.
+export const CORS_ORIGINS = ["http://127.0.0.1:4611", "http://localhost:4611", "http://127.0.0.1:4619", "http://localhost:4619",
+  ...(process.env.CORS_ORIGINS ?? "").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean)];
+
 export const TILES_PER_SEC = 3;
 export const GRID = 24;
 export const MEMORY_RECENT_MAX = 20;

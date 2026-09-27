@@ -5,10 +5,12 @@ import type { Order } from "../../../contract/types.ts";
 // Bridge and brain calls succeed without a network; /propose answers with `proposeAnswer`.
 let proposeAnswer: unknown = { proposals: [] };
 let proposeGate: Promise<void> | null = null; // when set, /propose waits for it (a slow proposer)
+let spawnGate: Promise<void> | null = null; // when set, bridge POST /units waits for it (slow registration)
 const calls: { url: string; body: any }[] = [];
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
+  if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
   return new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 });
 }) as unknown as typeof fetch;
 const VETO = `/tmp/engine-test-vetoes-${process.pid}.jsonl`;
@@ -229,3 +231,52 @@ test("SSE: a client that stops reading is dropped instead of buffering forever; 
   expect(listenerCount()).toBe(base);
   void slow;
 });
+
+test("CORS allowlist and CSRF guards", async () => {
+  const { handle } = await import("../src/app.ts");
+  const board = "http://127.0.0.1:4611";
+  const evil = "https://evil.example";
+  const pre = await handle(new Request("http://e/api/orders", { method: "OPTIONS", headers: { origin: board } }));
+  expect(pre.status).toBe(204);
+  expect(pre.headers.get("access-control-allow-origin")).toBe(board);
+  const read = await handle(new Request("http://e/api/state", { headers: { origin: evil } }));
+  expect(read.headers.get("access-control-allow-origin")).toBeNull();
+  const preEvil = await handle(new Request("http://e/api/orders", { method: "OPTIONS", headers: { origin: evil } }));
+  expect(preEvil.headers.get("access-control-allow-origin")).toBeNull();
+  // Bodyless no-cors POST from another site: refused before it can reset or order anything.
+  const csrf = await handle(new Request("http://e/api/reset", { method: "POST", headers: { origin: evil } }));
+  expect(csrf.status).toBe(403);
+  const form = await handle(new Request("http://e/api/orders", { method: "POST", headers: { "content-type": "text/plain" }, body: '{"unitIds":["u1"],"targetId":"t101"}' }));
+  expect(form.status).toBe(415);
+  expect(store.state.orders.length).toBe(0);
+  const ok = await handle(new Request("http://e/api/orders", { method: "POST", headers: { origin: board, "content-type": "application/json" }, body: '{"unitIds":["u1"],"targetId":"t101"}' }));
+  expect(ok.status).toBe(200);
+  expect(ok.headers.get("access-control-allow-origin")).toBe(board);
+  // The board posts bodyless commands without a content-type.
+  const cancel = await handle(new Request(`http://e/api/orders/${store.state.orders[0]!.id}/cancel`, { method: "POST", headers: { origin: board } }));
+  expect(cancel.status).toBe(200);
+  const noOrigin = await handle(new Request("http://e/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: '{"unitIds":["u2"],"targetId":"t102"}' }));
+  expect(noOrigin.status).toBe(200); // curl, tests and services send no Origin
+});
+
+for (const action of ["retire", "cancel", "reset"] as const) {
+  test(`P1: a slow bridge registration never sends a ${action}ed order`, async () => {
+    let release!: () => void;
+    spawnGate = new Promise<void>((r) => { release = r; });
+    const u = (game.spawnUnit({ class: "ranger" }) as { unit: any }).unit;
+    const live = unit(u.id);
+    live.pos = { x: 4, y: 4 }; // next to t101 (3,3): arrives on the first tick
+    const o = orderFor([u.id], "t101");
+    game.tick();
+    expect(live.status).toBe("working");
+    calls.length = 0;
+    if (action === "retire") game.retireUnit(u.id);
+    if (action === "cancel") cancelOrder(o.id);
+    if (action === "reset") await resetWorld();
+    release();
+    spawnGate = null;
+    await Bun.sleep(30);
+    expect(calls.filter((c) => c.url.endsWith(`/units/${u.id}/send`))).toEqual([]);
+    if (action === "retire") expect(calls.some((c) => c.url.endsWith(`/units/${u.id}`))).toBe(true); // late session deleted
+  });
+}

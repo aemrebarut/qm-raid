@@ -84,12 +84,14 @@ async function ensureSpawned(u: Unit): Promise<boolean> {
     r.spawning = (async () => {
       const res = await spawnOnBridge(u);
       if (!res) return false;
-      r.spawned = true;
-      const live = unitById(u.id);
-      if (live) {
-        live.qm = { sessionId: res.sessionId, sessionUrl: res.sessionUrl };
-        emit("unit.updated", { unit: live });
+      if (unitById(u.id) !== u) {
+        // Retired (or replaced by a reset) while the bridge was registering it: do not leak the session.
+        if (!unitById(u.id)) void deleteOnBridge(u);
+        return false;
       }
+      r.spawned = true;
+      u.qm = { sessionId: res.sessionId, sessionUrl: res.sessionUrl };
+      emit("unit.updated", { unit: u });
       return true;
     })().finally(() => { r.spawning = null; });
   }
@@ -118,12 +120,18 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   r.gbrainWrites = 0;
   r.learningSlug = `learnings/${t.issue}-${u.id}-${Date.now()}`.toLowerCase();
   const req = { text: orderPrompt(u, o, t, r.learningSlug), orderId: o.id, targetId: t.id, componentId: t.component };
-  if (!(await ensureSpawned(u))) return failOrder(o, `bridge unavailable at ${bridgeFor(u)}`);
+  // Every await may see a cancel, retire, adjust or reset: re-check before each send.
+  const current = () => isLive(o) && o.status === "active" && unitById(u.id) === u && u.orderId === o.id;
+  const spawned = await ensureSpawned(u);
+  if (!current()) return;
+  if (!spawned) return failOrder(o, `bridge unavailable at ${bridgeFor(u)}`);
   let status = await sendToBridge(u, req);
-  if (status === 404) {
+  if (status === 404 && current()) {
     // Bridge restarted and forgot the unit: spawn again and retry once.
     r.spawned = false;
-    if (await ensureSpawned(u)) status = await sendToBridge(u, req);
+    const again = await ensureSpawned(u);
+    if (!current()) return;
+    if (again) status = await sendToBridge(u, req);
   }
   if (status < 200 || status >= 300) failOrder(o, `bridge send failed (status ${status})`);
 }

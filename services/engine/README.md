@@ -8,10 +8,14 @@ cd services/engine
 bun run dev            # 127.0.0.1:4610, watch mode
 bun test/smoke.ts      # against the running engine and bridge
 ```
-Env: `PORT` (4610), `BRIDGE_URL` (mock http://127.0.0.1:4615; QM http://127.0.0.1:4614), `BRAIN_URL` (http://127.0.0.1:4616), `PROPOSER_URL` (4613), `FORGE_URL` (4612), `VETO_LOG` (repo `data/vetoes.jsonl`), `BRAIN_RESET` (default 1; `0` makes `POST /api/reset` skip brain `/reset`, required for test instances such as `PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 BRAIN_RESET=0`).
+Env: `PORT` (4610), `BRIDGE_URL` (mock http://127.0.0.1:4615; QM http://127.0.0.1:4614), `BRAIN_URL` (http://127.0.0.1:4616), `PROPOSER_URL` (4613), `FORGE_URL` (4612), `VETO_LOG` (repo `data/vetoes.jsonl`), `BRAIN_RESET` (default 1; `0` makes `POST /api/reset` skip brain `/reset`, required for test instances such as `PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 BRAIN_RESET=0`), `CORS_ORIGINS` (comma-separated browser origins added to the allowlist).
+
+Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost on 4611 and 4619, plus `CORS_ORIGINS`). POST/PATCH/DELETE with any other `Origin` get 403 (blocks bodyless cross-site posts); a non-empty body must be `application/json` (415 otherwise). Requests without `Origin` (curl, services, tests) are allowed.
 
 ## Files
-- `src/index.ts` HTTP routes (Bun.serve, `idleTimeout: 0` for SSE), Library proxies, error handling
+- `src/index.ts` boot: startGame, Bun.serve (`idleTimeout: 0` for SSE)
+- `src/app.ts` HTTP routes, CORS allowlist and CSRF guards, Library proxies, error handling
+- `src/sse.ts` GET /api/events, drops clients with more than 2000 unread events
 - `src/game.ts` world load, orders, movement tick, bridge event mapping, teams, spawn, reset
 - `src/store.ts` state holder, typed `emit()` (seq, epoch ms ts), SSE fan-out, last 200 events
 - `src/bridge.ts` Bridge API client and SSE follower with reconnect

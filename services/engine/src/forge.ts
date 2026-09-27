@@ -54,9 +54,15 @@ export async function pollForge(): Promise<void> {
       taken.add(t.id);
       next.push(t);
     }
-    // A type that vanished from a running Forge (Forge restarted) stays listed as failed, so units and UI stay consistent.
+    // A type that vanished from a running Forge (DELETE /types/:id, or a Forge restart): while a unit still has that
+    // class it stays listed as failed "gone from the Forge"; otherwise it is dropped after one last forge.updated
+    // (failed, "removed from the Forge"), because boards only upsert types and drop them at the next snapshot.
+    const used = new Set(store.state.units.map((u) => u.class));
+    const removed: UnitType[] = [];
     for (const p of prev) {
-      if (!taken.has(p.id)) next.push(p.status === "failed" && p.stage === "gone from the Forge" ? p : { ...p, status: "failed", stage: "gone from the Forge" });
+      if (taken.has(p.id)) continue;
+      if (used.has(p.id)) next.push(p.status === "failed" && p.stage === "gone from the Forge" ? p : { ...p, status: "failed", stage: "gone from the Forge" });
+      else removed.push({ ...p, status: "failed", stage: "removed from the Forge" });
     }
     store.state.unitTypes = [...builtins, ...next];
     const before = new Map(prev.map((t) => [t.id, t]));
@@ -64,6 +70,7 @@ export async function pollForge(): Promise<void> {
       const b = before.get(t.id);
       if (!b || !same(b, t)) emit("forge.updated", { unitType: t });
     }
+    for (const t of removed) emit("forge.updated", { unitType: t });
   } catch (e) {
     logOnce("forge-err", `forge poll failed: ${e}`);
   } finally {

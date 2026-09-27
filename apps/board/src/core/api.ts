@@ -1,6 +1,6 @@
 // Engine API client. Every call resolves (never throws): {ok: false, error} on network or HTTP failure.
 // All paths are relative to the board origin; Vite proxies /api to the engine on 4610.
-import type { State, Workflow, Team, Target } from "./types";
+import type { State, Workflow, Team, Target, Unit, CatalogItem } from "./types";
 
 export type Reply<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -50,8 +50,11 @@ export const api = {
 
   // Units
   spawn: (body: { class: string; name?: string; team?: number }) => call<{ unit?: unknown }>("POST", "/api/units", body),
-  patchUnit: (id: string, body: { team?: number | null; effort?: string; role?: string; autonomy?: string }) =>
-    call("PATCH", `/api/units/${encodeURIComponent(id)}`, body),
+  /** Also the loadout: instructions (system prompt and standing orders), skills and plugins (catalog ids), model, effort. */
+  patchUnit: (id: string, body: { team?: number | null; effort?: string; role?: string; autonomy?: string; model?: string; instructions?: string; skills?: string[]; plugins?: string[] }) =>
+    call<{ unit?: Unit }>("PATCH", `/api/units/${encodeURIComponent(id)}`, body),
+  /** Skills and plugins a unit can carry (engine proxies the bridge catalog). */
+  catalog: () => call<{ items?: CatalogItem[] }>("GET", "/api/catalog"),
   retire: (id: string) => call("DELETE", `/api/units/${encodeURIComponent(id)}`),
   message: (unitId: string, text: string) => call("POST", `/api/units/${encodeURIComponent(unitId)}/message`, { text }),
 

@@ -2,7 +2,7 @@
 export type {
   UnitStatus, UnitClass, Pos, Component, Building, UnitType, Unit, Target, Team, Order, MemoryOp, State, Customer,
   Proposal, EngineEvent, EngineEventType, ActivityKind,
-  Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, WorkflowStep,
+  Workflow, WorkflowNode, WorkflowEdge, WorkflowRun, WorkflowStep, Loadout, CatalogItem,
 } from "../../../../contract/types";
 import type { ActivityKind } from "../../../../contract/types";
 

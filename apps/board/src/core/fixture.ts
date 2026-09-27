@@ -20,8 +20,8 @@ export function fixtureState(): State {
       { id: "forge", kind: "river", x: 3, y: 20 },
     ],
     units: [
-      { id: "u1", name: "Ada", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "working", pos: { x: 5, y: 4 }, orderId: "o1", qm: { sessionId: "s-ada", sessionUrl: null } },
-      { id: "u2", name: "Brom", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "idle", pos: { x: 13, y: 14 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
+      { id: "u1", name: "Ada", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "working", pos: { x: 5, y: 4 }, orderId: "o1", qm: { sessionId: "s-ada", sessionUrl: null }, loadout: { instructions: "Recall first. Cite the house rules you applied.", skills: ["raid-board"], plugins: ["gbrain"] } },
+      { id: "u2", name: "Brom", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "idle", pos: { x: 13, y: 14 }, orderId: null, qm: { sessionId: null, sessionUrl: null }, loadout: { instructions: "Recall first. Write the failing test before the fix.", skills: ["raid-board"], plugins: ["gbrain"] } },
       { id: "u3", name: "Cyra", class: "ranger", model: "gpt-6-sol", effort: "medium", role: "worker", team: 1, status: "recalling", pos: { x: 12, y: 13 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
       { id: "u4", name: "Dain", class: "ranger", model: "gpt-6-sol", effort: "medium", role: "worker", team: 2, status: "moving", pos: { x: 16, y: 12 }, orderId: "o2", qm: { sessionId: null, sessionUrl: null } },
       { id: "u5", name: "Esme", class: "scout", model: "gpt-6-luna", effort: "low", role: "worker", team: 2, status: "idle", pos: { x: 19, y: 18 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },

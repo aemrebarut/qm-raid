@@ -2,7 +2,7 @@
 import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, World } from "../../../contract/types.ts";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { AUTOPILOT_EVERY_MS, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
+import { AUTOPILOT_EVERY_MS, BRAIN_RESET, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
 import { fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
@@ -156,8 +156,11 @@ function releaseUnit(o: Order): void {
   emit("unit.status", { unitId: u.id, status: u.status });
 }
 
+// An order object from before a reset is no longer in the state; late async work on it must not emit.
+const isLive = (o: Order) => orderById(o.id) === o;
+
 function completeOrder(o: Order, reply: string): void {
-  if (o.status !== "active") return;
+  if (o.status !== "active" || !isLive(o)) return;
   const r = runtime(o.unitId);
   const used = { reads: r.gbrainReads, writes: r.gbrainWrites };
   o.status = "done";
@@ -199,7 +202,7 @@ async function brainFallback(o: Order, reply: string, used: { reads: number; wri
 }
 
 function failOrder(o: Order, reason: string): void {
-  if (o.status !== "active" && o.status !== "proposed") return;
+  if ((o.status !== "active" && o.status !== "proposed") || !isLive(o)) return;
   o.status = "failed";
   o.reply = reason;
   emit("unit.activity", { unitId: o.unitId, orderId: o.id, kind: "error", text: reason });
@@ -333,6 +336,7 @@ export function onBridgeEvent(e: BridgeEvent): void {
   if (!u) return;
   switch (e.type) {
     case "activity": {
+      if (e.orderId && !orderById(e.orderId)) return; // an order from before a reset
       emit("unit.activity", { unitId: u.id, orderId: e.orderId, kind: e.kind, text: e.text ?? "", tool: e.tool, args: e.args });
       if (e.kind === "tool" && typeof e.tool === "string" && /gbrain/i.test(e.tool)) handleGbrainTool(u, e.tool, e.args, e.text ?? "", e.orderId);
       break;
@@ -602,8 +606,10 @@ export async function resetWorld(): Promise<Result> {
   rt.clear();
   history.clear();
   proposals.clear();
-  const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
-  if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
+  if (BRAIN_RESET) {
+    const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
+    if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
+  }
   await Promise.all(oldUnits.map((u) => deleteOnBridge(u)));
   await loadWorld();
   S().unitTypes = [...S().unitTypes, ...forged];

@@ -8,7 +8,7 @@ cd services/engine
 bun run dev            # 127.0.0.1:4610, watch mode
 bun test/smoke.ts      # against the running engine and bridge
 ```
-Env: `PORT` (4610), `BRIDGE_URL` (mock http://127.0.0.1:4615; QM http://127.0.0.1:4614), `BRAIN_URL` (http://127.0.0.1:4616), `PROPOSER_URL` (4613), `FORGE_URL` (4612).
+Env: `PORT` (4610), `BRIDGE_URL` (mock http://127.0.0.1:4615; QM http://127.0.0.1:4614), `BRAIN_URL` (http://127.0.0.1:4616), `PROPOSER_URL` (4613), `FORGE_URL` (4612), `VETO_LOG` (repo `data/vetoes.jsonl`), `BRAIN_RESET` (default 1; `0` makes `POST /api/reset` skip brain `/reset`, required for test instances such as `PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 BRAIN_RESET=0`).
 
 ## Files
 - `src/index.ts` HTTP routes (Bun.serve, `idleTimeout: 0` for SSE), Library proxies, error handling

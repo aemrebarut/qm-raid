@@ -13,6 +13,9 @@ export const CLASS_MODELS: Record<string, { name: string; model: string; effort:
   scout: { name: "Scout", model: "gpt-6-luna", effort: "low" },
 };
 
+// POST /api/reset also resets the shared game brain unless BRAIN_RESET=0 (test instances must never wipe it).
+export const BRAIN_RESET = process.env.BRAIN_RESET !== "0";
+
 // Autopilot veto log, read by raid-river (repo data/vetoes.jsonl, gitignored).
 export const VETO_LOG = process.env.VETO_LOG ?? new URL("../../../data/vetoes.jsonl", import.meta.url).pathname;
 export const AUTOPILOT_EVERY_MS = 3000;

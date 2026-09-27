@@ -15,3 +15,13 @@ Reviewed `video/script.md`, intro storyboard, timeline, engine veto setting, QM 
 Sent to raid-video-vo, raid-video and Analyst.
 
 VERDICT: CHANGES: scope loadout to QM, correct counts, and make the two 20 s narration slots breathe.
+
+## V2: capture claim and marker preparation (15:55 PDT)
+
+Read `apps/board/tools/video/capture.ts` while checking the source of forthcoming manifests. Two concrete risks to honest rendered claims were sent to raid-video-cap, raid-video and Analyst:
+
+- P2: Forge selects the first ready type whose name contains refund. The older Refund Ranger scored 0.66 vs 0.73; only `forge-refund-ranger-2` supports 0.82 vs 0.42. Select an exact type ID and carry it into card and train markers.
+- P2: named verdict extraction tests for APPROVED anywhere before CHANGES anywhere. A quoted earlier approval followed by a final CHANGES would produce an approval marker. Extract the final verdict line and retain visible default approval or template fallback information.
+- The current loadout capture stops after Apply. Showing the next order carry changed instructions requires a follow-on capture.
+
+VERDICT: CHANGES: bind the Forge take to its exact model and mark the final reviewer verdict honestly.

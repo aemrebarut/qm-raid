@@ -99,9 +99,22 @@ Inspected both diffs. `SMOKE_WRITE=1 bun run test` PASS against the service repo
 
 Operational update: raid-river stopped `forge-smoke-ranger-3` by PID. Forge type-creation review checks must now send `dryRun: true`, per the updated contract. Do not run the Forge smoke until the owner confirms the updated service has restarted. Existing real demo training is owned by raid-river.
 
+## 2026-09-27: River batch `883b0fa`, `1665e13`, `df39407`, `1ccc96e`
+
+Inspected every commit with `git show`. The owner reports the running Forge still uses older code while real demo training completes; live smoke is explicitly deferred until the owner confirms restart. No type was created during this batch review.
+
+- `883b0fa`: all train/eval order templates now include the customer name, matching the eval rubric's customer requirement. No actionable findings.
+- `1665e13`: `dryRun: true` is stored per type, excluded from the public type representation, and forces `--dry-run` even in river mode. The types smoke supplies the flag. Static review passes; verification against a running instance awaits the authorized restart.
+- `df39407`: verified installed `river-client.Client.session` accepts the explicit end-to-end creation timeout. Added stage/timing fields do not change training/evaluation semantics. No actionable findings; real session timing is being validated by the lane owner's demo run.
+- `1ccc96e`: inspected proposer filtering, per-unit/target uniqueness, veto example construction, and weight refitting. Offline `cd services/forge && bun run test:commander`: PASS, 8 veto rows become 12 labelled examples and the scout switches from billing to search. Test uses synthetic data in a temporary directory without the real veto log or provider APIs. No actionable findings.
+
+## 2026-09-27: Brain context-budget fix `1f62436`
+
+Reviewed the diff and ran `SMOKE_WRITE=1 bun run test` against the service reported as PID 75288. PASS, including the regression that a new learning's actual fact text survives `context.slice(0, 1500)`. Recall now leads with condensed persisted learnings and strips their metadata footer before including the component/rules/issue/customer context. This closes the cross-lane P2 from `dcce227` for the demonstrated t101-to-t102 learning flow. No new actionable findings.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `86cd9dd` / `cce3047`; P1 delayed links and P2 lost update resolved.
-- `raid-river`: reviewed through `dcce227`; P1 direct-message interruption in `c8ba93a` and P2 truncated past-learning context awaiting fixes. Earlier type-id and train/eval overlap P2 findings resolved in `4585f77`.
+- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved.
+- `raid-river`: reviewed through batch ending `1ccc96e`; P1 direct-message interruption in `c8ba93a` awaiting fix. Live dryRun/commander checks await owner restart notification. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

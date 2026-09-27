@@ -10,7 +10,10 @@ export interface Unit {
   id: string; name: string; class: UnitClass; model: string; effort: string; role: string;
   team: number | null; status: UnitStatus; pos: Pos; orderId: string | null;
   qm: { sessionId: string | null; sessionUrl: string | null };
+  loadout?: Loadout;
 }
+export interface Loadout { instructions: string; skills: string[]; plugins: string[] } // instructions = the unit's system prompt / standing orders
+export interface CatalogItem { id: string; name: string; description: string; kind: "skill" | "plugin" }
 export interface Target {
   id: string; issue: string; title: string; component: string; kind: "bug" | "feature";
   severity: 1 | 2 | 3; status: "open" | "engaged" | "resolved"; pos: Pos; customers: string[];

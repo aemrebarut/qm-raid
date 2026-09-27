@@ -47,6 +47,10 @@ Status 14:59: steps 10-11 done by raid-qm-impl (QM honours per-turn model; only 
 ### M4 (16:05): QM extension
 13. DONE 14:59 by raid-qm-plan (b6f8f1c, 96a7997): `bun qm-ext/install.ts` registers the MCP server and imports the `raid-board` skill as a pinned skill pack from this repo (glob matches skill dirs: `qm-ext/skills/*`); an agent loads it with the `skills` tool. Original step: `qm-ext/`: a QM skill "raid-board" (how to use the gbrain tools, the order header format, reply format) plus the MCP registration script and a README on installing it through QM's skill registry or deployment directory (docs/skill-registry.md, docs/deploy-directory.md), no core changes. Accept: installed skill visible in QM and used on the next turn.
 
+### M4/M5 hardening queue (15:08, from raid-qm-rev on ab8ce96)
+a. Revert empty-metadata adoption: unknown unit -> 404 (engine respawns on 404). b. Persisted queued orders wait for the model catalog. c. Persist each unit's last undelivered terminal event and replay it after a restart (engine drops terminals for non-current orders, so duplicates are harmless). d. Per-order timing log line (send, QM queued, first event, terminal, queue depth). e. Demo path twice in a row: engine reset, wave 1 writes learnings, wave 2 recalls them. Rule: announce bridge restarts to raid-eng-plan and raid-qm-plan first.
+Concurrency (measured 15:05): 6 simultaneous orders finish in 6 to 12 s; QM WORKERS default 16; Codex spawn cap 8 hard-coded.
+
 ### M5 (16:25): hardening
 14. Reconnect run streams, retry transient 5xx once, restart-safe unit map, demo path twice in a row. Accept: kill and restart the bridge mid-demo, engine keeps running, next order works.
 

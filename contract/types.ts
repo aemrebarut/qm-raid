@@ -20,7 +20,7 @@ export interface World { components: Component[]; buildings: Building[]; targets
 // Team workflows: an agent graph inside a team (planner -> implementer -> reviewer, loops, fan-out).
 export interface WorkflowNode { id: string; role: string; unitId: string; instructions?: string } // role: planner | implementer | reviewer | any label
 export interface WorkflowEdge { from: string; to: string; on: "done" | "approved" | "changes" }
-export interface Workflow { preset: "solo" | "pair" | "trio" | "fanout" | "recon" | "testfirst" | "herald" | "duel" | "custom"; entry: string; nodes: WorkflowNode[]; edges: WorkflowEdge[]; maxLoops: number }
+export interface Workflow { preset: "solo" | "pair" | "trio" | "fanout" | "recon" | "testfirst" | "herald" | "duel" | "custom"; entry: string; entries?: string[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]; maxLoops: number }
 export interface WorkflowStep { nodeId: string; unitId: string; orderId: string; status: "active" | "done" | "approved" | "changes" | "failed"; summary: string; ts: number }
 export interface WorkflowRun { id: string; teamId: number; targetId: string; status: "running" | "done" | "needs_human" | "failed" | "cancelled"; loops: number; active: string[]; steps: WorkflowStep[] }
 export interface Team { id: number; name: string; color: string; autopilot: boolean; members: string[]; workflow: Workflow | null }

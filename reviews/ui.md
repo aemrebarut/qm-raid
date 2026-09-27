@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current checkpoint: A3 UI art-on and off-fallback checks PASS on 4619; full Formation click-through and forged-unit selection/movement pass. All reported UI P2s in this batch are verified fixed. Latest board validation: 20 tests / 119 assertions, typecheck and build pass. No JavaScript page errors; test Forge evaluation fetch 404s remain a reported network caveat. Analyst owns the final default-art decision after the other gates.
+Current checkpoint: A3 UI art-on and off-fallback checks PASS on 4619; full Formation click-through and forged-unit selection/movement pass. All reported UI P2s in this batch are verified fixed. Authorized default-art flip a456886 and shared Forge plate 98de3e8 accepted. Latest board validation: 22 tests / 127 assertions pass; typecheck currently fails in uncommitted HUD Loadout edits, reported to the owner. Previous typecheck and build passed. No JavaScript page errors; test Forge evaluation fetch 404s remain a reported network caveat.
 
 ## Review procedure
 
@@ -231,3 +231,10 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Accepted with no new actionable finding. Focused checks pass structured proposal title and full tooltip, stable children on unchanged state, icon aria labels, Adjust command toggle, run's reached-node fallback after team workflow removal, terminal status pill with stable sub-line, and CommandHint naming the pending implementer role.
 - Existing run-card tests still pass current-order cancellation, current-member selection, 8-second live/loaded completion expiry, 5-minute alert expiry and dismissal persistence. Board smoke: 20 tests / 119 assertions and typecheck pass. No browser launched for this small DOM change.
 - Post-capture cleanup read showed every unit idle with no order and no running workflow; the earlier review trio was absent. No cancellation was issued. Capture-hold wrapper completed and released its lock. All reviewer browsers and mutation scripts are closed.
+
+## Art default and Forge plate: a456886, 98de3e8
+
+- Both accepted with no new actionable finding. Default-art authorization follows the completed A3 gates. Flag checks pass unset/on enabling all eight areas, off disabling all, URL precedence over saved preferences, comma-separated areas, empty query, and unavailable localStorage fallback. The explicit off fallback remains available.
+- Real Chrome canvas check imports the building component from 4619 without mounting the board or sending engine requests. Both default art and ?art=off use the same 512x64 Forge plate at width 3.9. Initial hidden state, setWork hide/show, and pixel samples for half/full River-blue fill pass.
+- Inspected the full texture and overview-scale image in /tmp/raid-ui-review/forge-plate.png: condensed caps and the thin progress bar remain readable. No page errors; the single browser closed after the check.
+- Board tests pass: 22 tests / 127 assertions. Current working-tree typecheck fails at uncommitted hud/loadout.ts:296 because the retired property is inferred unknown for the disabled attribute. Sent exact error and boolean-narrowing suggestion to raid-ui-hud, who forwarded it to Loadout owner raid-ui-plan; this error is outside the two reviewed scene commits.

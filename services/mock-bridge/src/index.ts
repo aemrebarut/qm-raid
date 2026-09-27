@@ -21,21 +21,18 @@ const config = {
 // Demo memory: learnings the mock agents remembered, oldest first. Cleared by POST /debug/reset or when the last unit is deleted.
 let learnings: Learning[] = [];
 
-// Loadout catalog (GET /catalog): a fixed, plausible list of QM skills and plugins. GBrain is locked on for every unit
-// (Analyst): its description leads with "The Library: always on." and a loadout PATCH without it keeps it.
+// Loadout catalog (GET /catalog): mirrors qm-bridge 4614, which offers only an allowlist of QM skills (raid-qm-plan:
+// admin, browse, send, publish and credential skills must never be steerable from a game toggle), raid-board first,
+// and GBrain as the only plugin. Names are the skill ids, as on qm-bridge. A loadout naming anything else gets 400.
+// GBrain is locked on for every unit (Analyst): its description leads with "The Library: always on." and a loadout
+// PATCH without it keeps it.
 const CATALOG: CatalogItem[] = [
-  { id: "debug", name: "Debug", description: "Reproduce first, bisect, then fix the root cause", kind: "skill" },
-  { id: "write-tests", name: "Write tests", description: "Regression test first, then the fix", kind: "skill" },
-  { id: "code-review", name: "Code review", description: "Review a diff against the house rules and flag risks", kind: "skill" },
-  { id: "security-review", name: "Security review", description: "Check auth, tenancy and secrets handling in a change", kind: "skill" },
-  { id: "plan", name: "Plan", description: "Break a task into short numbered steps before coding", kind: "skill" },
-  { id: "customer-reply", name: "Customer reply", description: "Write customer updates in the house tone", kind: "skill" },
-  { id: "refactor", name: "Refactor", description: "Small safe refactors with tests kept green", kind: "skill" },
+  { id: "raid-board", name: "raid-board", description: "Work as a unit on the QM Raid board.", kind: "skill" },
+  { id: "memory", name: "memory", description: "Save and recall notes across conversations.", kind: "skill" },
+  { id: "miniapp", name: "miniapp", description: "Build and update small web mini apps.", kind: "skill" },
+  { id: "popular-web-designs", name: "popular-web-designs", description: "Borrow layouts from well known web designs.", kind: "skill" },
+  { id: "taste-skill", name: "taste-skill", description: "Check UI work against design taste rules.", kind: "skill" },
   { id: "gbrain", name: "GBrain", description: "The Library: always on. Team memory: recall pages and learnings, remember what you learned", kind: "plugin" },
-  { id: "github", name: "GitHub", description: "Read issues and pull requests, open draft PRs", kind: "plugin" },
-  { id: "linear", name: "Linear", description: "Read and update tickets", kind: "plugin" },
-  { id: "sentry", name: "Sentry", description: "Look up error events and stack traces", kind: "plugin" },
-  { id: "browser", name: "Browser", description: "Headless browser to check a page by hand", kind: "plugin" },
 ];
 const DEFAULT_LOADOUT = (): Loadout => ({ instructions: "", skills: [], plugins: ["gbrain"] });
 const catalogIds = (kind: CatalogItem["kind"]) => new Set(CATALOG.filter((c) => c.kind === kind).map((c) => c.id));

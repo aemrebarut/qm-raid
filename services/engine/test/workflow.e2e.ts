@@ -6,7 +6,7 @@
 // - needs_human: mock review "changes": 3 CHANGES (maxLoops 2) -> needs_human, target open, no active orders.
 // - cancel: cancelling the implementer's order cancels the run and reopens the target.
 // - duel: both implementers start at once, the judge waits for both, then (mock) changes once and approves a winner.
-// - autopilot (W3, opt-in until game.ts has it; needs the proposer on 4613): autopilot on for the trio team proposes one
+// - autopilot (W3, needs the proposer on 4613): autopilot on for the trio team proposes one
 //   team order for the entry unit only; go turns that order into the planner step; the run ends done; the veto log row
 //   (--veto-log, default /tmp/engplan/vetoes-test.jsonl, the 4618 VETO_LOG) has proposal.teamId and runId.
 // Fails fast when the engine reloads mid-test (SSE drops or a second snapshot) and after --timeout seconds overall.
@@ -14,7 +14,7 @@
 const E = (process.env.ENGINE_URL ?? "http://127.0.0.1:4618").replace(/\/$/, "");
 const MOCK = (process.env.MOCK_URL ?? "http://127.0.0.1:4615").replace(/\/$/, "");
 const arg = (name: string, dflt: string) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] ?? dflt : dflt; };
-const CASES = arg("--cases", "trio,needs_human,cancel,duel").split(",").map((c) => c.trim()).filter(Boolean);
+const CASES = arg("--cases", "trio,needs_human,cancel,duel,autopilot").split(",").map((c) => c.trim()).filter(Boolean);
 const SPEED = Number(arg("--speed", "8")) || 8;
 const TIMEOUT_MS = (Number(arg("--timeout", "120")) || 120) * 1000;
 const RESET = !process.argv.includes("--no-reset");

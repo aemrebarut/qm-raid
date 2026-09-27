@@ -429,6 +429,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
 
   const clock = new THREE.Clock();
   let raf = 0;
+  let viewVersion = -1; // last camera version sent to the minimap
   function frame() {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(clock.getDelta(), 0.1);
@@ -440,6 +441,10 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (r || u) iso.panScreen(r * sp, u * sp * 0.5);
     }
     applyHover();
+    if (iso.version !== viewVersion) {
+      viewVersion = iso.version;
+      bus.emit("view", { corners: iso.viewCorners() }); // minimap view frame, at most once per frame
+    }
     for (const v of units.values()) v.tick(t, dt);
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);

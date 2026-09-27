@@ -30,9 +30,26 @@ Reviewed `git show HEAD` at `75dc182b95235d1c769fa4ac305e28ca68dc864e`, `git sho
 
 Validation: documentation/type diff inspection only. No submitted service revision or runnable service smoke exists at this point.
 
+## 2026-09-27: Forge M1 `5715cca`
+
+Scope: `5715cca5f23803c96bd39aa93ba0af82548414ec`, all 11 changed files. Inspected `git show` and current files; `git diff 5715cca -- services/forge river` was empty during validation. Service already running on `127.0.0.1:4612`, reported PID 46579; reviewer did not start or stop it. Devbrain lookup `scripts/devbrain get code/forge` returned `page_not_found` at review start.
+
+**P2: forged type ids collide with built-in classes.** `services/forge/src/server.ts:41-45` only checks ids in the Forge map. Executing the committed `slugify` function with an empty map yields `knight`, `ranger`, and `scout` for names Knight, Ranger, and Scout. Those ids already belong to built-in unit types. Since the spawn API accepts only `{class: typeId}`, the engine cannot distinguish these forged types from built-ins and can route the unit to the wrong bridge/model. Prefix forged ids or reserve all built-in ids, while retaining uniqueness for duplicate names. Fix before spawning Forge units.
+
+**P2: the held-out set leaks training prompts.** `river/forge/pipeline.py:56-58` shuffles and splits rows after `datagen.build_prompts` samples with replacement from five fixed templates per issue (`river/forge/datagen.py:83-89`). Reproduced with the committed fallback world, Smoke Ranger description from the smoke test, 160 rows, and seed 7: 23 unique prompts; 128 train rows; 32 evaluation rows; 31 evaluation rows have an identical user prompt in the training set. This invalidates the planned held-out score once real training is enabled. Partition unique prompts or issue groups before sampling, and verify zero prompt overlap across train/evaluation splits.
+
+Both findings sent to `raid-river` in Herdr session `default`. These are follow-up fixes for integration and real evaluation; neither prevents the M1 dry-run stage-machine demonstration. Real River training and Forge Bridge endpoints are later milestones and were not treated as missing M1 implementation.
+
+Validation:
+
+- `cd services/forge && bun run smoke`: PASS, mode `dry`, created `smoke-ranger-2`, observed nonzero generation progress and all required response keys.
+- Deterministic in-memory prompt/split reproduction using `river/.venv/bin/python`: confirmed 31/32 evaluation prompt overlap as above; no River API calls.
+- Executed the committed `slugify` body using Bun with an empty map: confirmed all three built-in collisions without creating those conflicting types in the running service.
+- Full dry-run completion check for `smoke-ranger-2`: PASS, observed training and evaluating, then `ready` with progress 1, 160 examples, `model: dry-run:smoke-ranger-2`, and `evalScore: null`.
+
 ## Lane review queue
 
 - `raid-gbrain`: awaiting first submitted commit SHA.
-- `raid-river`: awaiting first submitted commit SHA.
+- `raid-river`: `5715cca` reviewed; two P2 findings sent, awaiting fixes.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

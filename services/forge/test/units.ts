@@ -84,7 +84,7 @@ await Bun.sleep(100);
 const u8 = (await (await units4.handle(new Request("http://x/units"), new URL("http://x/units")))!.json())[0];
 if (asked4.length || u8.typeId !== "forge-gone" || !ev4.some((e) => e.type === "error" && e.orderId === "Z")) fail(`dry substitute: asked ${asked4} bound ${u8.typeId}`);
 
-// Loadout: standing orders reach the model; with GBrain off an order makes no brain calls.
+// Loadout: standing orders reach the model; GBrain is locked on, so plugins: [] still recalls and remembers.
 const cat = await (await units2.handle(new Request("http://x/catalog"), new URL("http://x/catalog")))!.json();
 if (cat.items?.[0]?.id !== "gbrain") fail(`catalog: ${JSON.stringify(cat)}`);
 const reqs: any[] = [];
@@ -96,11 +96,11 @@ const units3 = createUnits({
 const u3 = (path: string, method: string, body: unknown) => units3.handle(new Request(`http://x${path}`, { method, body: JSON.stringify(body) }), new URL(`http://x${path}`));
 await u3("/units", "POST", { id: "u9", name: "Nine" });
 const patched = await (await u3("/units/u9", "PATCH", { loadout: { instructions: "Always cite the rule slug.", skills: [], plugins: [] } }))!.json();
-if (!patched.ok || patched.loadout.plugins.length !== 0) fail(`patch: ${JSON.stringify(patched)}`);
+if (!patched.ok || JSON.stringify(patched.loadout.plugins) !== '["gbrain"]') fail(`patch: ${JSON.stringify(patched)}`);
 const before = calls.length;
 await u3("/units/u9/send", "POST", { text: "order", orderId: "L1", targetId: "t1", componentId: "billing" });
 await Bun.sleep(100);
 if (reqs[0]?.instructions !== "Always cite the rule slug.") fail(`instructions not passed: ${JSON.stringify(reqs[0])}`);
-if (calls.length !== before) fail(`brain called with GBrain off: ${calls.slice(before)}`);
+if (!calls.slice(before).some((c) => c.endsWith("/recall"))) fail("GBrain is locked on: the order should still recall");
 console.log("PASS");
 process.exit(0);

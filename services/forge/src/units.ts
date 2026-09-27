@@ -116,11 +116,9 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     const text = String(b.text ?? "");
     try {
       if (!t || !t.model) throw new Error("its forge type is gone and no River-trained type is ready");
-      const brainOn = !u.loadout || u.loadout.plugins.includes("gbrain");
       act("thinking", `Reading the order: ${text.slice(0, 120)}`);
       let context = "";
-      if (isOrder && !brainOn) act("message", "GBrain is off in this unit's loadout: no recall, no remember.");
-      if (isOrder && brainOn && (b.componentId || b.targetId)) {
+      if (isOrder && (b.componentId || b.targetId)) {
         try {
           const rec = await brain("/recall", { componentId: b.componentId, targetId: b.targetId, unitId: u.id });
           context = typeof rec.context === "string" ? rec.context : JSON.stringify(rec.context ?? "");
@@ -167,7 +165,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         || answer.replace(/\s+/g, " ").slice(0, 280);
       act("message", plan.slice(0, 400));
       const learning = (sec.remember || sec.decision || (sec.finding && `${sec.rules ? `${sec.rules}: ` : ""}${sec.finding}`) || "").slice(0, 400);
-      if (isOrder && brainOn && b.targetId && learning) {
+      if (isOrder && b.targetId && learning) {
         try {
           const rem = await brain("/remember", { unitId: u.id, targetId: b.targetId, text: `${u.name} (${t.name}): ${learning}` });
           act("tool", `Remembered: ${learning.slice(0, 120)}`, "gbrain.remember", { slug: rem.slug, text: learning });
@@ -220,14 +218,15 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         if (b && b.team !== undefined) { u.team = b.team; persist(); }
         const notes: string[] = [];
         if (b?.loadout && typeof b.loadout === "object") {
-          // Loadout (docs/CONTRACT.md): instructions extend the agent loop's system prompt; the only plugin is gbrain.
+          // Loadout (docs/CONTRACT.md): instructions extend the agent loop's system prompt. GBrain (the Library) is
+          // locked on for every unit (Analyst decision): plugins always include gbrain; others are only preferences.
           const l = b.loadout, list = (x: unknown) => (Array.isArray(x) ? x.filter((v) => typeof v === "string") : []);
           u.loadout = { instructions: typeof l.instructions === "string" ? l.instructions.slice(0, 4000) : u.loadout?.instructions ?? "",
-            skills: list(l.skills), plugins: l.plugins === undefined ? u.loadout?.plugins ?? ["gbrain"] : list(l.plugins) };
+            skills: list(l.skills), plugins: [...new Set(["gbrain", ...(l.plugins === undefined ? u.loadout?.plugins ?? [] : list(l.plugins))])] };
           if (u.loadout.skills.length) notes.push("forge units have no QM skills; skills are stored but not used");
           const unknown = u.loadout.plugins.filter((p) => p !== "gbrain");
-          if (unknown.length) notes.push(`only the gbrain plugin exists for forge units (ignored: ${unknown.join(", ")})`);
-          emit({ type: "activity", unitId: u.id, kind: "message", text: `Loadout changed: ${u.loadout.instructions ? "new standing orders" : "no standing orders"}, GBrain ${u.loadout.plugins.includes("gbrain") ? "on" : "off"}.` });
+          if (unknown.length) notes.push(`forge units use only gbrain; ${unknown.join(", ")} kept as preferences`);
+          emit({ type: "activity", unitId: u.id, kind: "message", text: `Loadout changed: ${u.loadout.instructions ? "new standing orders" : "no standing orders"}; the Library (GBrain) is always on.` });
         }
         if (typeof b?.model === "string" && b.model) { // a forge unit's model is its trained type: accept a ready type id or model
           const t = opts.types().find((x) => x.status === "ready" && (x.id === b.model || x.model === b.model));

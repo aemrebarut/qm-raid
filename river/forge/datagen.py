@@ -134,10 +134,20 @@ def build_split(spec: TypeSpec, world: dict, n_train: int, n_eval: int, seed: in
 
 
 def system_prompt(spec: TypeSpec) -> str:
-    return (f"You are a {spec.name}, a unit on the Lumen agent board. Your job: {spec.description} "
-            "Before acting, recall what the team brain knows about the component and customer. "
-            "Answer under these headings, in order: Recall:, Plan:, Decision:, Customer reply:, Remember:. "
-            "Name the issue id, the component and the customer.")
+    """The short prompt a forge unit runs with (training rows, eval and serving all use this one)."""
+    return f"You are a {spec.name}, a unit on the Lumen agent board. Your job: {spec.description}"
+
+
+def teacher_prompt(spec: TypeSpec) -> str:
+    """The long house style guide, given only to the teacher; SFT distills it into the weights."""
+    return system_prompt(spec) + (
+        "\n\nHouse style (follow exactly). Answer under these headings, each starting its own line, in this order: "
+        "Recall:, Plan:, Decision:, Customer reply:, Remember:. "
+        "Recall: one or two sentences naming the issue id, the component, the customer, and the house rule from the team brain that matters most. "
+        "Plan: at most three short numbered steps. Decision: one sentence. "
+        "Customer reply: two or three warm sentences to the customer's named contact, ending with a clear next step. "
+        "Remember: one sentence, a reusable lesson for similar issues. "
+        "Plain text, no markdown, at most 150 words in total.")
 
 
 def template_response(spec: TypeSpec, p: dict, world: dict) -> str:
@@ -172,7 +182,7 @@ class RiverTeacher:
 
     def respond(self, spec: TypeSpec, user: str) -> str:
         res = self.client.chat_complete(
-            [{"role": "system", "content": system_prompt(spec)}, {"role": "user", "content": user}],
+            [{"role": "system", "content": teacher_prompt(spec)}, {"role": "user", "content": user}],
             base_model=self.model, max_tokens=450, temperature=0.7,
             chat_template_kwargs={"enable_thinking": False}, timeout=120,
         )

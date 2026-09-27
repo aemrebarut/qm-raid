@@ -64,7 +64,7 @@ def river_answer(req: dict) -> str:
         _session = _session_ctx.__enter__()
     prompt = r.build_sample_prompt(messages(req)).prompt
     try:
-        out = _session.sample(prompt, base_model=base, checkpoint=req["model"], max_tokens=500,
+        out = _session.sample(prompt, base_model=base, checkpoint=req["model"], max_tokens=450,
                               temperature=0.3, stop=r.get_stop_strings())
     except Exception:
         _session_ctx, _session = None, None  # reopen on the next request

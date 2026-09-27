@@ -167,6 +167,15 @@ Bun.serve({
         runPipeline(t);
         return json({ ok: true, typeId: t.id });
       }
+      if (req.method === "DELETE" && path.startsWith("/types/")) {
+        // Cleanup of test types; stops a running pipeline (our own child, by exact PID).
+        const t = types.get(decodeURIComponent(path.slice(7)));
+        if (!t) return json({ ok: false, error: "no such type" }, 404);
+        if (t.pid && alive(t.pid)) { try { process.kill(t.pid); } catch {} }
+        types.delete(t.id);
+        save();
+        return json({ ok: true });
+      }
       if (req.method === "GET" && path.startsWith("/types/")) {
         const t = types.get(decodeURIComponent(path.slice(7)));
         return t ? json(publicType(t)) : json({ ok: false, error: "no such type" }, 404);

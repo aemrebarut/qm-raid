@@ -9,6 +9,19 @@ interface SendBody { text?: string; orderId?: string; targetId?: string; compone
 
 const BRAIN_URL = process.env.BRAIN_URL ?? "http://127.0.0.1:4616";
 
+// Splits a unit answer into its house-style sections; tolerates "**Plan:**", "## Plan:" and content on the next lines.
+const HEAD = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer reply|Remember)\s*\**\s*:\s*\**\s*(.*)$/i;
+export function sections(text: string): Record<string, string> {
+  const out: Record<string, string[]> = {};
+  let cur: string | null = null;
+  for (const line of text.split("\n")) {
+    const m = line.match(HEAD);
+    if (m) { cur = m[1].toLowerCase(); out[cur] = m[2] ? [m[2]] : []; }
+    else if (cur) out[cur].push(line);
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.join(" ").replace(/\s+/g, " ").trim()]));
+}
+
 export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string> }) {
   const units = new Map<string, ForgeUnit>();
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
@@ -71,11 +84,12 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       const answer = await opts.ask({ typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
         order: text, context, targetId: b.targetId });
       if (!live()) return;
-      const plan = answer.split("\n").filter((l) => /^(Plan|Decision):/i.test(l.trim())).join(" ") || answer.slice(0, 280);
+      const sec = sections(answer);
+      const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")
+        || answer.replace(/\s+/g, " ").slice(0, 280);
       act("message", plan.slice(0, 400));
-      if (isOrder && b.targetId) {
-        const learning = answer.split("\n").find((l) => /^Remember:/i.test(l.trim()))?.replace(/^\s*Remember:\s*/i, "")
-          || answer.slice(0, 300);
+      const learning = (sec.remember || sec.decision || "").slice(0, 400);
+      if (isOrder && b.targetId && learning) {
         try {
           const rem = await brain("/remember", { unitId: u.id, targetId: b.targetId, text: `${u.name} (${t.name}): ${learning}` });
           act("tool", `Remembered: ${learning.slice(0, 120)}`, "gbrain.remember", { slug: rem.slug, text: learning });

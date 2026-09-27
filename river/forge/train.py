@@ -1,8 +1,9 @@
 """Real River path: LoRA SFT on the synthetic data, then an honest eval (trained vs base).
 
 The rubric is deterministic and the same for both models: the held-out orders use
-phrasings never seen in training, and both models get the same system prompt
-(which states the required headings), so the base model is not handicapped.
+phrasings never seen in training, and both models get the same short system prompt the
+forge unit runs with. The teacher wrote the training answers under a long house style guide
+(datagen.teacher_prompt); SFT distills that guide into the weights, which is what the eval measures.
 """
 from __future__ import annotations
 
@@ -27,13 +28,15 @@ def _renderer(base_model: str):
 
 
 def score(text: str, meta: dict, customers: list[str]) -> float:
-    """0..1: required headings (0.5), names the issue (0.15), the customer (0.15), the component (0.1), sane length (0.1)."""
-    s = 0.1 * sum(1 for h in HEADINGS if h.lower() in text.lower())
-    s += 0.15 if meta["issue"].lower() in text.lower() else 0.0
-    if not customers or any(c.lower() in text.lower() for c in customers):
-        s += 0.15
-    s += 0.1 if meta["component"].lower() in text.lower() else 0.0
-    s += 0.1 if 150 <= len(text) <= 1500 else 0.0
+    """0..1, same for trained and base: headings in order-free form (0.5), names the issue (0.1), the customer (0.1),
+    the component (0.05), concise (0.25: full at 1000 chars or less, falling to 0 at 2000)."""
+    low = text.lower()
+    s = 0.1 * sum(1 for h in HEADINGS if h.lower() in low)
+    s += 0.1 if meta["issue"].lower() in low else 0.0
+    if not customers or any(c.lower() in low for c in customers):
+        s += 0.1
+    s += 0.05 if meta["component"].lower() in low else 0.0
+    s += 0.25 * min(1.0, max(0.0, (2000 - len(text)) / 1000))
     return round(s, 4)
 
 
@@ -86,7 +89,7 @@ def evaluate(args, evalset: list[dict], checkpoint: str, out: Path, emit) -> tup
     stops = r.get_stop_strings()
     c = client()
     rows = []
-    kw = dict(base_model=args.base_model, max_tokens=400, temperature=0.0, stop=stops)
+    kw = dict(base_model=args.base_model, max_tokens=450, temperature=0.0, stop=stops)
     with c.session(project="qm-raid-forge-eval") as session:
         for b in range(0, len(evalset), 8):
             chunk = evalset[b:b + 8]

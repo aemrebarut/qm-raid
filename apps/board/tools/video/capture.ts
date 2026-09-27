@@ -606,7 +606,7 @@ const clips: Record<string, Script> = {
 // Hero (Emre 15:58): the first 2 s of the video, sharp gameplay for the thumbnail. No cursor; several units march at
 // once while the others still work; recording runs until the first recall beam plus 5 s (the editor picks 2 s).
 clips.hero = async (c) => {
-  await c.page.mouse.move(W + 50, H + 50); // cursor off screen
+  await js(c.page, "document.getElementById('cap-cursor')?.style.setProperty('display', 'none')"); // clean thumbnail
   await js(c.page, "raid.bus.clear()");
   await wait(1500);
   const s = await state(c.page);
@@ -715,18 +715,20 @@ const order = ["orders", "teams", "forge", "autopilot", "loadout", "hero"].filte
 const results: any[] = [];
 try {
   if (has("parallel") && order.includes("teams")) {
-    // The trio run is the slowest: record it alongside the others.
+    // The trio run is the slowest: record it alongside the others (same browser, second context).
     const teamsRun = (async () => { await wait(1500); return run("teams", clips.teams); })();
     for (const n of order.filter((x) => x !== "teams")) results.push(await run(n, clips[n]));
     results.push(await teamsRun);
   } else {
     for (const n of order) results.push(await run(n, clips[n]));
   }
-} finally {
-  await browser.close();
+} catch (err) {
+  say(`run failed: ${String((err as Error).message).split("\n")[0]}`);
 }
-await Promise.all(pending);
+await Promise.all(pending); // mp4s and markers first: browser.close() can hang under Bun
 const index = join(outDir, "markers.json");
 writeFileSync(index, JSON.stringify({ take, url, createdAt: new Date().toISOString(), clips: results.map((r) => ({ clip: r.clip, file: r.file, duration: r.duration, markers: join(outDir, `${r.clip}.markers.json`) })) }, null, 2));
 copyFileSync(index, join(archiveDir, "markers.json"));
 say(`done: ${results.length} clips, index ${index}`);
+await Promise.race([browser.close(), wait(5000)]);
+process.exit(0);

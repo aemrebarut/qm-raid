@@ -191,3 +191,13 @@ VERDICT: APPROVED
 Evidence `/tmp/raid-video-rev/take1c-qm-raid-demo-aeb09de8a3/`, `/tmp/raid-video-rev/take1c-audio-aeb09de8a3/`, snapshots `/tmp/raid-video-rev/insurance-c-*`.
 
 VERDICT: APPROVED
+
+## V17: current final as fallback (16:38-16:40 PDT)
+
+`final/qm-raid-demo.mp4`, SHA256 `1161fb8d8557961d36e093cff78828ff2e573d9f4b58bf761d632fab7e84b7ab`: stable 119.125 second container, 119.067 second 1080p/30 H.264 video, stereo 48 kHz AAC. All 60 samples every 2 seconds inspected. Sharp real hero and thumbnail, approved intro, new real Orders with QM intercut, real Teams, Take 1 real Forge, new real Autopilot and Loadout, approved end card. No mock capture presented as real. Dark striped section wipes at 40/64 seconds are intentional transitions, not unexplained black capture frames.
+
+Markers support exact Trio roles u3/u5/u7, Rule Warden CHANGES three times then needs_human at 90.413 source seconds, and visible-button veto of o36 at 15.663 source seconds with no failure note. Narration uses the matching CHANGES, human escalation and confirmed-cancel alternates. The source script's extra escalation line is supported by the captured run. All 22 voice clips correlate to the saved placement plan within 43 ms, no overlaps or cut voice tails; native 48 kHz stereo peak -0.297 dBFS.
+
+P1 at output 92 seconds: AUTOPILOT callout is anchored at the top HUD, and the heading extends above the frame. Lower/clamp the callout or omit it because the main caption already explains the veto. Sent immediately to raid-video and Analyst for v2. Evidence `/tmp/raid-video-rev/final-qm-raid-demo-1161fb8d85/frame-047.jpg`; full sampled review in that directory and audio in `/tmp/raid-video-rev/final-audio-1161fb8d85/`. Snapshots `/tmp/raid-video-rev/final-v1-*`. v2 camera review pending, due 16:51.
+
+VERDICT: CHANGES: keep the Autopilot callout title inside the frame.

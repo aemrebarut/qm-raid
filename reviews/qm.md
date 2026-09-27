@@ -47,3 +47,26 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - Repeated `bun test/smoke.ts` after the fix: exit 0 in 3.1 s, done/ok, nonempty sessionId, and a five-word model reply. M1 is accepted with no remaining client findings.
 - Read the updated Codex class map in docs/CONTRACT.md. The live portal advertises gpt-6-astra, gpt-6-sol, and gpt-6-luna under its sole approved harness, codex. This confirms model availability, not per-class execution or effort settings, which remain for M3.
 - Bridge service routes, agent-originated GBrain tools, and queued Bridge orders remain future acceptance work.
+
+## 2026-09-27 14:59 PDT: 9b6be9b MCP registration
+
+- Reviewed the registration script against QM's admin route and authorizeAdmin implementation. The route accepts the live agent capability and still requires the actor's admin grant. The script stores no capability or signing secret.
+- Executed `cd services/qm-bridge && bun scripts/register-gbrain-mcp.ts`: exit 0, run done/ok, HTTP 200, registered server gbrain with auth none and tools recall, remember, search, get_page, add_link.
+- All game-memory access uses services/brain's existing MCP facade on 127.0.0.1:4617/mcp. No independent GBrain DB process was started. No blocking finding for the supported local configuration.
+
+## 2026-09-27 14:59 PDT: 5ac1a89 Bridge API and lifecycle findings
+
+- Read the full commit. `GET /health` passed; `bun test test/qm.test.ts` passed 2 tests; `bun test/bridge-smoke.ts` exited 0 in 4.8 s with a nonempty sessionId, order-correlated activity/reply, and successful DELETE.
+- Built an isolated HTTP/fetch fixture from the exact committed server/client/tools files in /tmp. It captures Bun.serve in process, opens no listening port, and never touches the implementer's live server.
+- **P2, server.ts:269-276: failed spawn remains registered and returns HTTP 200.** After principal discovery, simulate QM becoming unavailable. POST /units returns sessionId:null/sessionUrl:null instead of an error, and the unit remains in the map. Retrying the same spawn after recovery returns the same null response without starting another QM turn. Await the initial start result, return a dependency error on failure, and remove the failed reservation so retry can work.
+- **P2, server.ts:323-328 and 154-178: deleted units continue emitting activity.** DELETE clears active but leaves follow's current reader alive; feed a TOOL_CALL_START after DELETE and the bridge emits a gbrain.remember event for that deleted unit. Abort the stream and guard emissions against a deleted/replaced unit. This prevents stale activity from entering a reset world.
+- **P2, server.ts:253: delete and respawn reuses the old session.** The thread namespace uses unitId and process BOOT only. In the fixture, DELETE followed by POST /units with the same id returned the identical session and threadRef. Add a unique spawn incarnation so reset units do not inherit old conversation context.
+- Forwarding QM's wrapped MCP args at server.ts:178 also hides slug/componentId/targetId from the engine; this is addressed by a25e220 below.
+- Sent all three lifecycle findings to the implementer and copied the lead. They remain open at this checkpoint.
+
+## 2026-09-27 14:59 PDT: a25e220 flat MCP arguments and unit header
+
+- Reviewed the full diff. `bun test test/qm.test.ts`: 3 passed, 0 failed. The MCP argument test covers actual QM wrapper shape and the normalized tool name. The fix resolves the flat-argument integration finding.
+- Ran an independent live HTTP smoke with a synthetic gpt-6-luna unit and two orders queued during its intro. First order made agent-originated gbrain.recall with flat componentId, targetId, and matching unitId; second order completed after the first. Each order emitted one reply with its own orderId, with no additional terminal during a one-second observation window. Total 11.1 s; DELETE succeeded.
+- The first reply applied the billing idempotency rule from the game brain. No memory write was requested by this verification. Intro produced activity without an order terminal.
+- Registration and the live recall/queue path are accepted. The three lifecycle findings above remain open; no live engine/board integration or remember persistence verdict is implied by this test.

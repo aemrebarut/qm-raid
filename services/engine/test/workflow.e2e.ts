@@ -223,7 +223,7 @@ async function autopilot(m: string[]): Promise<void> {
   const f = Bun.file(VETO_LOG);
   const added = (await f.slice(f.size >= vetoFrom ? vetoFrom : 0).text().catch(() => "")).split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
   const mine = added.filter((r) => r?.proposal?.teamId === 1 || r?.runId === run.id);
-  check(mine.length === 1 && mine[0].action === "go" && mine[0].runId === run.id && mine[0].proposal.unitId === p.unitId && mine[0].proposal.targetId === p.targetId,
+  check(mine.length === 1 && mine[0].action === "go" && mine[0].runId === run.id && mine[0].proposal?.teamId === 1 && mine[0].proposal.unitId === p.unitId && mine[0].proposal.targetId === p.targetId,
     `autopilot: exactly one new veto row: go, proposal.teamId 1, runId ${run.id} (${VETO_LOG})`, added);
 }
 

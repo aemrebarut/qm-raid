@@ -2,10 +2,11 @@
 import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, World } from "../../../contract/types.ts";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { AUTOPILOT_EVERY_MS, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
+import { AUTOPILOT_EVERY_MS, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
 import { fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
+import { forgeType, pollForge, startForge } from "./forge.ts";
 import { bridgeFor, deleteOnBridge, followBridgeEvents, patchOnBridge, sendToBridge, spawnOnBridge } from "./bridge.ts";
 
 type Result = { ok: true; [k: string]: unknown } | { ok: false; error: string; status?: number };
@@ -475,8 +476,11 @@ const validTeamId = (v: unknown): v is number => Number.isInteger(v) && (v as nu
 export function spawnUnit(body: any): Result {
   if (!body || typeof body !== "object") return fail("body must be a JSON object");
   const cls = String(body.class ?? "");
-  const c = CLASS_MODELS[cls];
-  if (!c) return fail(`unknown class ${cls}`);
+  const forged = CLASS_MODELS[cls] ? null : forgeType(cls);
+  if (!CLASS_MODELS[cls] && !forged) return fail(`unknown class ${cls}`);
+  if (forged && forged.status !== "ready") return fail(`type ${forged.name} is not ready (${forged.status})`);
+  // Built-in classes run on BRIDGE_URL; forged types run on the Forge (bridgeFor routes by class).
+  const c = CLASS_MODELS[cls] ?? { name: forged!.name, model: forged!.model ?? "forge", effort: "low" };
   if (body.team !== undefined && body.team !== null && !validTeamId(body.team)) return fail("team must be 1..9 or null");
   while (unitById(`u${nextUnit}`)) nextUnit++;
   const id = `u${nextUnit++}`;
@@ -568,18 +572,22 @@ export function patchTeam(id: number, body: any): Result {
   return { ok: true, team: t };
 }
 
+// E14: brain /reset, fresh world, bridge sessions deleted and registered again, orders/teams/memory/stats cleared.
 export async function resetWorld(): Promise<Result> {
-  const sessions = new Map(S().units.map((u) => [u.id, u.qm]));
-  for (const r of rt.values()) { if (r.animTimer) clearTimeout(r.animTimer); r.dest = null; r.sentOrderId = null; }
+  const oldUnits = [...S().units];
+  const forged = S().unitTypes.filter((t) => t.source === "forge");
+  for (const r of rt.values()) if (r.animTimer) clearTimeout(r.animTimer);
+  rt.clear();
   history.clear();
   proposals.clear();
+  const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
+  if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
+  await Promise.all(oldUnits.map((u) => deleteOnBridge(u)));
   await loadWorld();
-  // Keep bridge sessions for units that survive the reset.
-  for (const u of S().units) {
-    const qm = sessions.get(u.id);
-    if (qm && runtime(u.id).spawned) u.qm = qm;
-  }
+  S().unitTypes = [...S().unitTypes, ...forged];
   emit("state.snapshot", { state: S() });
+  for (const u of S().units) void ensureSpawned(u);
+  void pollForge();
   return { ok: true };
 }
 
@@ -706,7 +714,8 @@ export async function startGame(): Promise<void> {
   await loadWorld();
   setInterval(tick, Math.round(1000 / TILES_PER_SEC));
   setInterval(() => void autopilotTick(), AUTOPILOT_EVERY_MS);
-  const bridges = new Set<string>([BRIDGE_URL]);
+  startForge();
+  const bridges = new Set<string>([BRIDGE_URL, FORGE_URL]);
   for (const base of bridges) {
     followBridgeEvents(base, onBridgeEvent, () => {
       for (const u of S().units) if (bridgeFor(u) === base) void ensureSpawned(u);

@@ -1,6 +1,7 @@
 // Engine service: game state, orders, teams and the SSE event stream on 127.0.0.1:4610.
 import { BRAIN_URL, BRIDGE_URL, HOST, PORT } from "./config.ts";
 import { listenerCount, recentEvents, snapshotChunk, store, subscribe } from "./store.ts";
+import { forgeProxy } from "./forge.ts";
 import { adjustOrder, assignTeam, cancelOrder, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit, startGame } from "./game.ts";
 
 process.on("unhandledRejection", (err) => console.error("[engine] unhandled rejection:", err));
@@ -83,6 +84,7 @@ async function route(req: Request): Promise<Response> {
     if ((mm = p.match(/^\/api\/orders\/([^/]+)\/go$/))) return reply(goOrder(decodeURIComponent(mm[1]!)));
     if ((mm = p.match(/^\/api\/orders\/([^/]+)\/adjust$/))) return reply(adjustOrder(decodeURIComponent(mm[1]!), b));
     if (p === "/api/units") return reply(spawnUnit(b));
+    if (p === "/api/forge/types") { const r = await forgeProxy(b); return json(r, r.ok ? 200 : 400); }
     if ((mm = p.match(/^\/api\/units\/([^/]+)\/message$/))) return reply(await messageUnit(decodeURIComponent(mm[1]!), b));
     if (p === "/api/teams") return reply(assignTeam(b));
     if (p === "/api/reset") return reply(await resetWorld());

@@ -13,6 +13,7 @@ interface ForgeType {
   examples: number; evalScore: number | null; model: string | null; createdAt: number;
   baseModel: string | null; // internal: River base model of the checkpoint, used to serve forge units
   dryRun: boolean; // internal: forced dry run (smoke tests), never touches River
+  pid?: number | null; // internal: pipeline child while it runs
 }
 
 const PORT = Number(process.env.FORGE_PORT ?? 4612);
@@ -39,8 +40,11 @@ function load() {
   if (!existsSync(STORE)) return;
   try {
     for (const t of JSON.parse(readFileSync(STORE, "utf8")) as ForgeType[]) {
-      if (t.status !== "ready" && t.status !== "failed") { t.status = "failed"; t.stage = "interrupted by a forge restart"; }
       types.set(t.id, t);
+      if (t.status !== "ready" && t.status !== "failed") {
+        if (t.pid && alive(t.pid)) { console.log(`[forge] re-attaching to ${t.id} (pid ${t.pid})`); follow(t).catch((e) => console.error("[forge] follow", e)); }
+        else { t.status = "failed"; t.stage = "interrupted by a forge restart"; }
+      }
     }
   } catch (e) { console.error("[forge] load failed", e); }
 }
@@ -54,46 +58,67 @@ function slugify(name: string): string {
 }
 
 function publicType(t: ForgeType) {
-  const { createdAt, baseModel, dryRun, ...rest } = t;
+  const { createdAt, baseModel, dryRun, pid, ...rest } = t;
   return rest;
 }
 
-async function runPipeline(t: ForgeType) {
-  const args = [PYTHON, "-m", "forge.pipeline", "--type-id", t.id, "--name", t.name, "--description", t.description,
-    "--out", join(RUNS_DIR, t.id)];
+const alive = (pid?: number | null) => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } };
+
+// The pipeline child writes JSON progress lines to runs/<id>/progress.jsonl (a file, not a pipe), so it keeps
+// running across a forge restart; the forge tails the file and re-attaches by PID on start.
+async function follow(t: ForgeType) {
+  const file = join(RUNS_DIR, t.id, "progress.jsonl");
+  let offset = 0, buf = "";
+  const decoder = new TextDecoder();
+  while (true) {
+    const done = !alive(t.pid);
+    try {
+      const f = Bun.file(file);
+      if (f.size > offset) {
+        buf += decoder.decode(new Uint8Array(await f.slice(offset).arrayBuffer()), { stream: true });
+        offset = f.size;
+        let i;
+        while ((i = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if (!line) continue;
+          try {
+            const u = JSON.parse(line);
+            for (const k of ["status", "progress", "stage", "examples", "evalScore", "model", "baseModel"] as const) {
+              if (k in u) (t as any)[k] = u[k];
+            }
+          } catch { console.error("[forge] bad pipeline line", line.slice(0, 200)); }
+        }
+        save();
+      }
+    } catch {}
+    if (t.status === "ready" || t.status === "failed") break;
+    if (done) { Object.assign(t, { status: "failed", stage: "pipeline exited without finishing" }); break; }
+    await Bun.sleep(700);
+  }
+  t.pid = null;
+  save();
+  console.log(`[forge] type ${t.id} finished: ${t.status} (${t.stage})`);
+}
+
+function runPipeline(t: ForgeType) {
+  const out = join(RUNS_DIR, t.id);
+  mkdirSync(out, { recursive: true });
+  const progress = join(out, "progress.jsonl");
+  writeFileSync(progress, "");
+  const args = [PYTHON, "-m", "forge.pipeline", "--type-id", t.id, "--name", t.name, "--description", t.description, "--out", out];
   if (MODE === "dry" || t.dryRun) args.push("--dry-run", "--dry-seconds", String(DRY_SECONDS));
-  let proc;
   try {
-    proc = Bun.spawn(args, { cwd: RIVER_DIR, stdout: "pipe", stderr: "inherit", env: process.env });
+    const proc = Bun.spawn(args, { cwd: RIVER_DIR, stdout: Bun.file(progress), stderr: Bun.file(join(out, "pipeline.log")), stdin: "ignore", env: process.env });
+    proc.unref();
+    t.pid = proc.pid;
+    save();
   } catch (e) {
     Object.assign(t, { status: "failed", stage: `could not start pipeline: ${String(e).slice(0, 120)}` });
     save();
     return;
   }
-  const decoder = new TextDecoder();
-  let buf = "";
-  for await (const chunk of proc.stdout as ReadableStream<Uint8Array>) {
-    buf += decoder.decode(chunk, { stream: true });
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (!line) continue;
-      try {
-        const u = JSON.parse(line);
-        for (const k of ["status", "progress", "stage", "examples", "evalScore", "model", "baseModel"] as const) {
-          if (k in u) (t as any)[k] = u[k];
-        }
-      } catch { console.error("[forge] bad pipeline line", line.slice(0, 200)); }
-    }
-    save();
-  }
-  const code = await proc.exited;
-  if (t.status !== "ready" && t.status !== "failed") {
-    Object.assign(t, { status: "failed", stage: `pipeline exited with code ${code}` });
-  }
-  save();
-  console.log(`[forge] type ${t.id} finished: ${t.status} (${t.stage})`);
+  follow(t).catch((e) => console.error("[forge] follow", e));
 }
 
 const json = (body: unknown, status = 200) =>
@@ -139,7 +164,7 @@ Bun.serve({
           baseModel: null, dryRun: body.dryRun === true };
         types.set(t.id, t);
         save();
-        runPipeline(t).catch((e) => { Object.assign(t, { status: "failed", stage: String(e).slice(0, 160) }); save(); });
+        runPipeline(t);
         return json({ ok: true, typeId: t.id });
       }
       if (req.method === "GET" && path.startsWith("/types/")) {

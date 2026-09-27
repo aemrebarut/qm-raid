@@ -124,11 +124,9 @@ export function createStore(initial: State): Store {
       case "stats":
         state.stats = { spentUsd: ev.spentUsd, tokens: ev.tokens };
         return;
-      case "forge.updated": {
-        const t = (ev as any).unitType ?? (ev as any).typeInfo;
-        if (t && typeof t === "object") upsert(state.unitTypes, t);
+      case "forge.updated":
+        if (ev.unitType) upsert(state.unitTypes, ev.unitType);
         return;
-      }
       default:
         return; // unknown event types are ignored (forward compatible)
     }

@@ -5,9 +5,11 @@ export type * from "./types";
 
 // units (raid-art-units)
 export { makeUnit, typeColor, UNIT_CLASSES, UNIT_ANIMS, type UnitHandle, type BuiltinClass } from "./units";
+export { makeTarget } from "./monsters";
 
 // buildings (raid-art-world)
 export { makeBuilding } from "./world/buildings";
+export { makeTerrain, type TerrainArt } from "./world/terrain";
 
 // lighting and effects (raid-art-fx)
 export { lighting, removeLights, contactShadow, type LightingRig, type ArtLightingOpts } from "./lighting";

@@ -9,7 +9,6 @@ export interface OrderInfo {
   component: string | null;  // "billing"
   title: string | null;
   customers: string[];       // slugs, ["companies/acme-robotics"]
-  isOrder: boolean;
 }
 
 const COMPONENTS = ["billing", "auth", "onboarding", "search"];
@@ -25,21 +24,22 @@ export function parseOrder(text: string, componentId?: string): OrderInfo {
   const ids = text.match(/^\s*customers\s*:\s*(.+)$/im)?.[1]?.split(/[,\s]+/).filter((c) => /^[a-z0-9-]+$/.test(c)) ?? [];
   const slugs = (text.match(/(?:customers|companies)\/[a-z0-9-]+/g) ?? []).map((c) => c.replace(/^customers\//, "companies/"));
   const customers = [...new Set([...ids.map((c) => `companies/${c}`), ...slugs])];
-  const isOrder = !!issue || /\b(issue|order|fix|bug|feature|target)\b/i.test(text) || text.length > 120;
-  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers, isOrder };
+  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers };
 }
 
-const FLAVOR: Record<string, { file: string; rule: string; fix: string; test: string }> = {
-  billing: { file: "src/billing/charge.ts", rule: "every charge retry must reuse the original idempotency key", fix: "passed the idempotency key through the retry path", test: "billing/retry.test.ts" },
-  auth: { file: "src/auth/session.ts", rule: "session tokens are rotated on privilege change, never extended", fix: "rotated the token instead of extending its expiry", test: "auth/session.test.ts" },
-  onboarding: { file: "src/onboarding/wizard.ts", rule: "wizard steps must be resumable from the saved draft", fix: "persisted the draft before advancing a step", test: "onboarding/wizard.test.ts" },
-  search: { file: "src/search/index.ts", rule: "reindex jobs must be tenant scoped", fix: "scoped the reindex query to the tenant id", test: "search/index.test.ts" },
+// House rules mirror world/brain (rules/* pages exist for billing, auth, search) so recall beams hit real pages.
+type Flavor = { file: string; rule: string; ruleSlug: string | null; fix: string; test: string };
+const FLAVOR: Record<string, Flavor> = {
+  billing: { file: "src/billing/charge.ts", rule: "retries must reuse the idempotency key inv_<invoiceId>, never add the attempt number", ruleSlug: "rules/billing-idempotency", fix: "made the retry reuse inv_<invoiceId> as the idempotency key", test: "billing/retry.test.ts" },
+  auth: { file: "src/auth/token.ts", rule: "compare token expiry with a 120 second clock skew allowance", ruleSlug: "rules/auth-clock-skew", fix: "added the 120 second skew allowance to the expiry check", test: "auth/token.test.ts" },
+  onboarding: { file: "src/onboarding/invites.ts", rule: "all outbound email goes through the mailer queue, never inline", ruleSlug: null, fix: "moved the invite email onto the mailer queue", test: "onboarding/invites.test.ts" },
+  search: { file: "src/search/query.ts", rule: "scope every query by workspace_id in the index query, never post-filter", ruleSlug: "rules/search-tenant-scope", fix: "scoped the index query by workspace_id on the cached path too", test: "search/query.test.ts" },
 };
 
-function flavorFor(component: string | null) {
+function flavorFor(component: string | null): Flavor {
   if (component && FLAVOR[component]) return FLAVOR[component];
   const c = component ?? "core";
-  return { file: `src/${c}/index.ts`, rule: `${c} changes need a regression test first`, fix: `guarded the ${c} edge case`, test: `${c}/index.test.ts` };
+  return { file: `src/${c}/index.ts`, rule: `${c} changes need a regression test first`, ruleSlug: null, fix: `guarded the ${c} edge case`, test: `${c}/index.test.ts` };
 }
 
 function slugify(s: string): string {
@@ -48,15 +48,16 @@ function slugify(s: string): string {
 
 export interface ScriptOpts { rand?: () => number; errorRate?: number; now?: number }
 
-// An order (has orderId, or looks like one) plays the full 6 to 10 s work sequence; a direct message gets a short chat.
+// Only an explicit orderId makes a send an order (full 6 to 10 s work sequence); anything else is a direct
+// message and gets a short chat, even if its text mentions an issue. Text parsing only supplies context.
 export function isOrderSend(req: SendRequest): boolean {
-  return !!req.orderId || parseOrder(req.text, req.componentId).isOrder;
+  return typeof req.orderId === "string" && req.orderId.length > 0;
 }
 
 export function buildScript(unitId: string, unitName: string, req: SendRequest, opts: ScriptOpts = {}): Step[] {
   const rand = opts.rand ?? Math.random;
-  if (!isOrderSend(req)) return chatScript(unitId, unitName, req.text, rand);
   const o = parseOrder(req.text, req.componentId);
+  if (!isOrderSend(req)) return chatScript(unitId, unitName, req.text, o, rand);
   const failed = rand() < (opts.errorRate ?? 0);
   return orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
 }
@@ -67,7 +68,7 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
   const issue = o.issue ?? "the issue";
   const title = o.title ?? `work on ${comp}`;
   const issueSlug = o.issue ? `issues/${o.issue.toLowerCase()}` : null;
-  const recallSlugs = [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), ...o.customers];
+  const recallSlugs = [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : []), ...(issueSlug ? [issueSlug] : []), ...o.customers];
   // contract slug convention: learnings/<issue>-<unitId>-<epoch ms>
   const learnSlug = `learnings/${slugify(o.issue ?? comp)}-${slugify(unitId)}-${now}`;
   const oid = orderId ? { orderId } : {};
@@ -105,14 +106,16 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
   return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
 }
 
-function chatScript(unitId: string, unitName: string, text: string, rand: () => number): Step[] {
+function chatScript(unitId: string, unitName: string, text: string, o: OrderInfo, rand: () => number): Step[] {
   const total = 2000 + Math.floor(rand() * 1500);
   const tokens = 300 + Math.floor(rand() * 700);
+  const slugs = [...(o.component ? [`components/${o.component}`] : []), ...(o.issue ? [`issues/${o.issue.toLowerCase()}`] : [])];
+  const about = o.issue ? ` about ${o.issue}` : o.component ? ` about ${o.component}` : "";
   return [
     { at: 150, event: { type: "activity", unitId, kind: "thinking", text: `Considering: "${text.slice(0, 80)}"` } },
-    { at: Math.round(total * 0.5), event: { type: "activity", unitId, kind: "tool", text: "Searching GBrain for context", tool: "gbrain.search", args: { query: text.slice(0, 80), slugs: [] } } },
+    { at: Math.round(total * 0.5), event: { type: "activity", unitId, kind: "tool", text: `Searching GBrain${about}`, tool: "gbrain.search", args: { query: text.slice(0, 80), slugs } } },
     { at: total - 50, event: { type: "usage", unitId, tokens, usd: usd(tokens) } },
-    { at: total, event: { type: "reply", unitId, text: `${unitName}: understood, "${text.slice(0, 80)}". Ready for the next order.` } },
+    { at: total, event: { type: "reply", unitId, text: `${unitName}: got your message${about}. "${text.slice(0, 80)}" noted; I keep going with my current order, if any.` } },
   ];
 }
 

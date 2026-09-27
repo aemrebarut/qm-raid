@@ -36,8 +36,8 @@ check(es.ok && (es.headers.get("content-type") ?? "").includes("text/event-strea
 const h = await (await fetch(URL_ + "/health")).json();
 check(h.ok === true && h.service === "mock-bridge", "GET /health");
 
-const A = `smokeA-${run}`, B = `smokeB-${run}`, C = `smokeC-${run}`, D = `smokeD-${run}`;
-for (const id of [A, B, C, D]) {
+const A = `smokeA-${run}`, B = `smokeB-${run}`, C = `smokeC-${run}`, D = `smokeD-${run}`, E = `smokeE-${run}`;
+for (const id of [A, B, C, D, E]) {
   const r = await (await post("/units", { id, name: id, model: "mock", effort: "low", role: "worker", team: 1 })).json();
   if (id === A) check(r.sessionId === `mock-${A}` && r.sessionUrl === null, "POST /units -> {sessionId, sessionUrl}");
 }
@@ -58,12 +58,15 @@ await post(`/units/${B}/send`, { text: "How is it going?" });                   
 await post(`/units/${C}/send`, { text: prompt("oC"), orderId: "oC", componentId: "billing" });
 await post(`/units/${D}/send`, { text: prompt("oD1"), orderId: "oD1", componentId: "billing" });
 setTimeout(() => post(`/units/${D}/send`, { text: prompt("oD2"), orderId: "oD2", componentId: "billing" }), 500 / SPEED);
+await post(`/units/${E}/send`, { text: prompt("oE"), orderId: "oE", componentId: "billing" });
+setTimeout(() => post(`/units/${E}/send`, { text: "What is the status of LUM-12? Is the order done?" }), 300 / SPEED); // chat mentioning an issue
 let cDeletedAt = 0;
 setTimeout(async () => { await fetch(`${URL_}/units/${C}`, { method: "DELETE" }); cDeletedAt = Date.now(); }, 1500 / SPEED);
 
 const deadline = Date.now() + 12000 / SPEED + 1000;
 const done = (id: string) => events.some((e) => e.ev.unitId === id && (e.ev.type === "reply" || e.ev.type === "error"));
-while (Date.now() < deadline && !(done(A) && done(B) && done(D))) await Bun.sleep(100);
+const orderDone = (id: string, oid: string) => events.some((e) => e.ev.unitId === id && e.ev.type === "reply" && (e.ev as any).orderId === oid);
+while (Date.now() < deadline && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE"))) await Bun.sleep(100);
 await Bun.sleep(1000 / SPEED); // let stragglers arrive
 
 const of = (id: string) => events.filter((e) => e.ev.unitId === id).map((e) => e.ev);
@@ -73,7 +76,7 @@ const recall = a.find((e) => e.type === "activity" && e.tool === "gbrain.recall"
 const remember = a.find((e) => e.type === "activity" && e.tool === "gbrain.remember") as any;
 const replyAt = events.find((e) => e.ev.unitId === A && e.ev.type === "reply")?.at ?? 0;
 check(a[0]?.type === "activity" && (a[0] as any).kind === "thinking", "order starts with thinking");
-check(!!recall && ["components/billing", "issues/lum-12", "companies/acme-robotics"].every((s) => recall.args?.slugs?.includes(s)), "gbrain.recall {query, slugs} with contract slugs");
+check(!!recall && ["components/billing", "rules/billing-idempotency", "issues/lum-12", "companies/acme-robotics"].every((s) => recall.args?.slugs?.includes(s)), "gbrain.recall {query, slugs} with contract slugs and the world rule page");
 check(!!remember && new RegExp(`^learnings/lum-12-${A.toLowerCase()}-\\d+$`).test(remember.args?.slug) && typeof remember.args?.text === "string" && Array.isArray(remember.args?.links), "gbrain.remember {slug: learnings/<issue>-<unit>-<ms>, text, links}");
 check(idx((e) => e.type === "activity" && e.tool === "gbrain.recall") < idx((e) => e.type === "activity" && e.tool === "gbrain.remember"), "recall before remember");
 check(a.at(-1)?.type === "reply" && a.some((e) => e.type === "usage"), "usage, then reply last");
@@ -87,7 +90,10 @@ const d = of(D);
 check(!d.some((e) => (e.type === "reply" || e.type === "error") && (e as any).orderId === "oD1") && d.some((e) => e.type === "reply" && (e as any).orderId === "oD2"), "new order supersedes the running one");
 check([...b, ...d].every((e) => (e as any).orderId !== "oA") && a.every((e) => [undefined, "oA"].includes((e as any).orderId)), "isolation: no orderId leaks across units");
 
-for (const id of [A, B, D]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
+const e = of(E);
+check(orderDone(E, "oE") && e.some((x) => x.type === "reply" && (x as any).orderId === undefined), "chat mentioning an issue does not cancel the running order (both replies arrive)");
+
+for (const id of [A, B, D, E]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
 ac.abort();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

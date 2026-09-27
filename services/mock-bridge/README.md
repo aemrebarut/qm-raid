@@ -15,11 +15,11 @@ Env: `PORT` (4615), `MOCK_SPEED` (1), `MOCK_FAIL` (0).
 - `GET /health` -> `{ok, service: "mock-bridge", units, clients}`
 - `POST /units` {id, name, model, effort, role, team} -> `{sessionId: "mock-<id>", sessionUrl: null}` (idempotent)
 - `POST /units/:id/send` {text, orderId?, targetId?, componentId?} -> `{ok}`. Unknown unit is auto-registered.
-  - Order (has `orderId`, or the text names an issue): over 6 to 10 s emits thinking, `gbrain.recall` {query, slugs}, messages, `read_file`, `edit_file`, `run_tests`, `gbrain.remember` {slug, text, links}, sometimes `gbrain.add_link` {from, to, linkType}, `usage`, then `reply`. Every activity/reply/error carries the `orderId`. A new order replaces the running one (the old one gets no terminal event).
-  - Direct message (no `orderId`): short chat in 2 to 3.5 s ending in a `reply` without `orderId`; runs alongside an order.
+  - Order (the body has `orderId`; only that decides): over 6 to 10 s emits thinking, `gbrain.recall` {query, slugs}, messages, `read_file`, `edit_file`, `run_tests`, `gbrain.remember` {slug, text, links}, sometimes `gbrain.add_link` {from, to, linkType}, `usage`, then `reply`. Every activity/reply/error carries the `orderId`. A new order replaces the running one (the old one gets no terminal event).
+  - Direct message (no `orderId`, even if the text names an issue): short chat in 2 to 3.5 s ending in a `reply` without `orderId`; runs alongside a running order and never cancels it.
 - `PATCH /units/:id` {team} -> `{ok}` (404 if unknown)
 - `DELETE /units/:id` -> `{ok}`; stops that unit's scripts
 - `GET /events` SSE, `data: <BridgeEvent>` per message, `: ping` every 15 s
 - `GET /units`, `GET /units/:id` (debug: unit and its last 200 events)
 
-The order text is parsed loosely: `componentId` from the body (else a `Component:` line), the issue from an id like `LUM-12`, customers from a `Customers:` line or `companies/<id>` slugs. Slugs follow the contract: `components/<c>`, `issues/lum-12`, `companies/<id>`, `learnings/<issue>-<unitId>-<epoch ms>`.
+The order text is parsed loosely: `componentId` from the body (else a `Component:` line), the issue from an id like `LUM-12`, customers from a `Customers:` line or `companies/<id>` slugs. Recall slugs include the world rule page (`rules/billing-idempotency`, `rules/auth-clock-skew`, `rules/search-tenant-scope`). Slugs follow the contract: `components/<c>`, `issues/lum-12`, `companies/<id>`, `learnings/<issue>-<unitId>-<epoch ms>`.

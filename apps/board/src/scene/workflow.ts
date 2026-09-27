@@ -6,10 +6,11 @@ import type { UnitView } from "./units";
 import { glowTexture } from "./fx";
 import { SERIF } from "./util";
 
+// P, I, R shields matching the HUD formation panel; custom roles show their first letter.
 const ROLES: Record<string, { glyph: string; bg: string }> = {
-  planner: { glyph: "\u{1F4DC}", bg: "#c9a227" },     // scroll
-  implementer: { glyph: "\u{1F528}", bg: "#c8662c" }, // hammer
-  reviewer: { glyph: "\u{1F441}", bg: "#3f73b8" },    // eye
+  planner: { glyph: "P", bg: "#c9a227" },
+  implementer: { glyph: "I", bg: "#c8662c" },
+  reviewer: { glyph: "R", bg: "#3f73b8" },
 };
 const CUSTOM_BG = "#7b4fa3";
 const SCREEN_RIGHT = new THREE.Vector3(1, 0, -1).normalize();
@@ -38,7 +39,7 @@ function badgeTexture(role: string) {
   ctx.strokeStyle = "#2b1d0e";
   ctx.stroke();
   ctx.fillStyle = "#fff8e6";
-  ctx.font = `700 28px ${SERIF}`;
+  ctx.font = `700 32px ${SERIF}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(spec.glyph, 32, 32);

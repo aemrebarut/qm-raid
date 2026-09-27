@@ -1,7 +1,7 @@
 // Targets: bugs are monsters, features are crystal outcrops; both sized by severity, with a camp patch and an issue tag.
 import * as THREE from "three";
 import type { Target } from "../core";
-import { hash, makeLabel, mat, mesh, tileToWorld } from "./util";
+import { CONDENSED, hash, makeLabel, mat, mesh, tileToWorld } from "./util";
 
 const BUG_COLORS: Record<number, string> = { 1: "#7fb341", 2: "#e0892e", 3: "#b8322a" };
 const CRYSTAL_COLORS: Record<number, [string, string]> = { 1: ["#7ad7e0", "#1c7c8a"], 2: ["#8d7be6", "#3b2a9a"], 3: ["#e07ad0", "#8a1c7a"] };
@@ -21,9 +21,14 @@ const G = {
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 const GREY = "#8c8a85";
+const SEV_PIP: Record<number, string> = { 1: "#8fc14a", 2: "#e8922e", 3: "#d8362a", 4: "#9b2fae" };
+const plaque = (text: string, sev: number, height: number) =>
+  makeLabel(text, { height, bg: null, color: "#fbf3de", family: CONDENSED, spacing: 2, font: 40, pip: SEV_PIP[sev] ?? SEV_PIP[2] });
 const RISE = 1.6;
 
 export class TargetView {
+  /** Set by the scene each frame: camera zoomed in enough for issue plaques on every camp. */
+  static detail = false;
   readonly group = new THREE.Group();
   readonly id: string;
   target: Target;
@@ -126,7 +131,8 @@ export class TargetView {
       this.group.add(m);
     }
 
-    this.tag = makeLabel(t.issue, { height: 0.24, font: 36 });
+    this.tag = plaque(t.issue, t.severity, 0.26);
+    this.tag.visible = false; // shown when zoomed in (TargetView.detail), hovered or selected
     this.tag.position.y = 0.8 * this.size + 0.25;
     this.group.add(this.tag);
 
@@ -163,7 +169,7 @@ export class TargetView {
     if (show && !this.titleTag) {
       const t = this.target;
       const title = t.title.length > 44 ? t.title.slice(0, 43) + "\u2026" : t.title;
-      this.titleTag = makeLabel(`${t.issue}  ${title}`, { height: 0.26, font: 34 });
+      this.titleTag = plaque(`${t.issue}  ${title}`, t.severity, 0.28);
       this.titleTag.position.y = 0.8 * this.size + 0.55;
       this.titleTag.renderOrder = 12;
       this.group.add(this.titleTag);
@@ -173,7 +179,6 @@ export class TargetView {
       this.titleTag.material.dispose();
       this.titleTag = null;
     }
-    this.tag.visible = !this.titleTag && this.riseT === 0;
     this.ring.visible = this.selected || this.hovered;
     const m = this.ring.material as THREE.MeshBasicMaterial;
     m.color.set(this.selected ? "#f2e27a" : "#ffffff");
@@ -197,6 +202,7 @@ export class TargetView {
       this.group.scale.setScalar(s);
       if (this.riseT === 0) { this.group.position.y = 0; this.group.scale.setScalar(1); this.tag.visible = !this.titleTag; }
     }
+    this.tag.visible = TargetView.detail && !this.titleTag && this.riseT === 0;
     const st = this.target.status;
     const s = this.size;
     if (st === "resolved") {

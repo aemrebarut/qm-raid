@@ -55,6 +55,7 @@ export function gableRoof(w: number, d: number, h: number) {
 }
 
 export const SERIF = `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`;
+export const CONDENSED = `"Avenir Next Condensed", "Arial Narrow", "Roboto Condensed", sans-serif`;
 
 export interface LabelOpts {
   height?: number;      // world units
@@ -63,6 +64,9 @@ export interface LabelOpts {
   border?: string;
   font?: number;        // px on the canvas
   bold?: boolean;
+  family?: string;      // font family (serif by default)
+  spacing?: number;     // letter spacing in canvas px
+  pip?: string;         // coloured dot before the text (severity)
 }
 
 /** Text sprite anchored at its bottom centre, always drawn on top. */
@@ -71,13 +75,17 @@ export function makeLabel(text: string, o: LabelOpts = {}) {
   const pad = Math.round(font * 0.45);
   const c = document.createElement("canvas");
   const ctx = c.getContext("2d")!;
-  const fontStr = `${o.bold === false ? "" : "600 "}${font}px ${SERIF}`;
+  const fontStr = `${o.bold === false ? "" : "600 "}${font}px ${o.family ?? SERIF}`;
+  const spacing = `${o.spacing ?? 0}px`;
   ctx.font = fontStr;
-  const w = Math.ceil(ctx.measureText(text).width) + pad * 2;
+  (ctx as any).letterSpacing = spacing;
+  const pipW = o.pip ? Math.round(font * 0.8) : 0;
+  const w = Math.ceil(ctx.measureText(text).width) + pad * 2 + pipW;
   const h = Math.ceil(font * 1.35) + pad;
   c.width = w;
   c.height = h;
   ctx.font = fontStr;
+  (ctx as any).letterSpacing = spacing;
   if (o.bg !== null) {
     const g = ctx.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, o.bg ?? "#f1e3bf");
@@ -89,15 +97,27 @@ export function makeLabel(text: string, o: LabelOpts = {}) {
     ctx.strokeStyle = o.border ?? "#6b4e2a";
     ctx.stroke();
   }
+  if (o.pip) {
+    const r = font * 0.26;
+    ctx.beginPath();
+    ctx.arc(pad + r, h / 2 + 1, r, 0, Math.PI * 2);
+    ctx.fillStyle = o.pip;
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(0,0,0,0.8)";
+    ctx.stroke();
+  }
+  const cx = (w + pipW) / 2;
   ctx.fillStyle = o.color ?? "#2b1d0e";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   if (o.bg === null) {
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(0,0,0,0.75)";
-    ctx.strokeText(text, w / 2, h / 2 + 1);
+    ctx.lineWidth = Math.max(6, font * 0.2);
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(10,8,5,0.82)";
+    ctx.strokeText(text, cx, h / 2 + 1);
   }
-  ctx.fillText(text, w / 2, h / 2 + 1);
+  ctx.fillText(text, cx, h / 2 + 1);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -118,6 +138,11 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** Engraved world name (zones, buildings): condensed caps, parchment white with a dark halo, no tag. */
+export function makeEngraved(text: string, height = 0.44) {
+  return makeLabel(text.toUpperCase(), { height, bg: null, color: "#f6ecd2", family: CONDENSED, spacing: 5, font: 48 });
 }
 
 /** Round icon bubble (for unit status), drawn on top. */

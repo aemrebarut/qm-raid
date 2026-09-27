@@ -45,12 +45,13 @@ const STATUS_TEXT: Record<string, string> = {
   remembering: "remembering", waiting_approval: "awaiting approval", error: "error",
 };
 
+// Status pips over the head (look-plan): a small coloured dot, a glyph only where it must be read.
 const BUBBLES: Record<string, [string, string, string] | undefined> = {
-  working: ["⚒", "#2b1d0e", "#f1e3bf"],
-  recalling: ["✦", "#ffffff", "#3b82d6"],
-  remembering: ["✦", "#2b1d0e", "#f0c24a"],
+  working: ["", "#2b1d0e", "#e8922e"],
+  recalling: ["", "#ffffff", "#3b8fe6"],
+  remembering: ["", "#2b1d0e", "#f0c24a"],
   waiting_approval: ["?", "#2b1d0e", "#f0d34a"],
-  error: ["!", "#ffffff", "#c0392b"],
+  error: ["!", "#ffffff", "#d0342a"],
 };
 
 export class UnitView {
@@ -235,7 +236,7 @@ export class UnitView {
       this.bubble = null;
     }
     if (spec) {
-      this.bubble = makeBubble(spec[0], spec[1], spec[2], 0.34);
+      this.bubble = makeBubble(spec[0], spec[1], spec[2], spec[0] ? 0.26 : 0.18);
       this.bubble.position.y = 0.95;
       this.group.add(this.bubble);
     }

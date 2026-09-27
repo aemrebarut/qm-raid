@@ -213,6 +213,15 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     return lib ? lib.anchor.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(11.5, 3.4, 11.5);
   };
   const shortSlug = (s: string) => (s.length > 34 ? s.slice(0, 33) + "\u2026" : s);
+  /** Page title for a brain slug (look-plan: never show raw slugs): learnings/lum-101-u3-<ms> -> "Learning LUM-101". */
+  const slugTitle = (slug: string) => {
+    const leaf = slug.split("/").pop() ?? slug;
+    const learning = /^([a-z]+-\d+)-u\w*-\d{9,}$/i.exec(leaf);
+    if (learning) return `Learning ${learning[1].toUpperCase()}`;
+    if (/^[a-z]+-\d+$/i.test(leaf)) return leaf.toUpperCase();
+    const words = leaf.replace(/[-_]+/g, " ").trim();
+    return shortSlug(words.charAt(0).toUpperCase() + words.slice(1));
+  };
 
   /** Recall: blue beam from the Library to the unit's staff, pages fly down to it. */
   function recallFx(unitId: string, slugs: string[], summary: string) {
@@ -225,7 +234,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (let i = 0; i < n; i++) {
       fx.page(libOrb, tip, 0.15 + i * 0.3, i === 0 ? () => fx.burst(tip(), "#6fb6ff", 0.9, 0.6) : undefined);
     }
-    const label = slugs[0] ? shortSlug(slugs[0]) + (slugs.length > 1 ? ` +${slugs.length - 1}` : "") : shortSlug(summary || "recall");
+    const label = slugs[0] ? slugTitle(slugs[0]) + (slugs.length > 1 ? ` +${slugs.length - 1}` : "") : shortSlug(summary || "Recall");
     fx.after(0.9, () => fx.text(() => tip().add(new THREE.Vector3(0, 0.35, 0)), label, { color: "#dcefff", bg: null, height: 0.26, dur: 2.6 }));
   }
 
@@ -241,7 +250,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       lib?.pulse();
       fx.burst(libOrb(), "#ffd45a", 2.2, 1.0);
       fx.text(() => libOrb().add(new THREE.Vector3(0, 0.4, 0)), "+1 page", { color: "#ffe9a8", bg: null, height: 0.34, dur: 2 });
-      if (slug) fx.text(() => libOrb().add(new THREE.Vector3(0, 0.85, 0)), shortSlug(slug), { color: "#fff6d8", bg: null, height: 0.22, dur: 2.4 });
+      if (slug) fx.text(() => libOrb().add(new THREE.Vector3(0, 0.85, 0)), slugTitle(slug), { color: "#fff6d8", bg: null, height: 0.24, dur: 2.4 });
     });
   }
 
@@ -522,6 +531,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       forgeSparkT = 0.12;
       for (const b of buildings.values()) if (b.kind === "river") fx.sparksAt(b.top, 3, "#ff9a3c");
     }
+    TargetView.detail = iso.camera.zoom >= 1.3;
     fx.tick(dt);
     rig?.update();
     renderer.render(scene, iso.camera);

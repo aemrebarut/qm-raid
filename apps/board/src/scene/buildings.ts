@@ -4,7 +4,7 @@ import * as THREE from "three";
 import type { Building } from "../core";
 import { makeBuilding } from "../../../../packages/art/src";
 import { artOn } from "./art";
-import { gableRoof, makeLabel, mat, mergeStatic, mesh, tileToWorld } from "./util";
+import { gableRoof, makeEngraved, mat, mergeStatic, mesh, tileToWorld } from "./util";
 
 const ART_KIND = { gbrain: "library", barracks: "barracks", river: "forge" } as const;
 
@@ -95,7 +95,8 @@ function artBuilding(group: THREE.Group, kind: Building["kind"]) {
 }
 
 function title(group: THREE.Group, name: string, sub: string, y: number, x = 0, z = 0) {
-  const l = makeLabel(`${name} · ${sub}`, { height: 0.42 });
+  void sub; // the long "Library · GBrain" form moved to the HUD (look-plan)
+  const l = makeEngraved(name, 0.4);
   l.position.set(x, y, z);
   group.add(l);
 }

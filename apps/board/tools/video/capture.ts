@@ -551,7 +551,8 @@ const clips: Record<string, Script> = {
     // A team with two or more idle members and no formation.
     const s = await state(c.page);
     const idle = new Set(idleUnits(s).map((u: any) => u.id));
-    const team = s.teams.filter((t: any) => !t.workflow && t.members.filter((m: string) => idle.has(m)).length >= 1)
+    const forced = Number(flag("ap-team", "0")); // a team set up for this shot
+    const team = forced ? s.teams.find((t: any) => t.id === forced) : s.teams.filter((t: any) => !t.workflow && t.members.filter((m: string) => idle.has(m)).length >= 1)
       .sort((a: any, b: any) => b.members.filter((m: string) => idle.has(m)).length - a.members.filter((m: string) => idle.has(m)).length)[0];
     if (!team) return c.mark("no-team-for-autopilot");
     team.members.forEach((m: string) => { claimed.add(m); c.focus.add(m); });
@@ -568,7 +569,7 @@ const clips: Record<string, Script> = {
     await wait(4000); // veto rings count down
     // Veto the first proposal with its card's Cancel button, then confirm the engine cancelled it.
     const vetoed = c.waitFor((e) => e.type === "order.updated" && e.order?.source === "autopilot" && e.order?.status === "cancelled", 4000);
-    const clicked = await clickHud(c, "button.hud-btn-cancel", "Cancel");
+    const clicked = (await clickHud(c, "button.hud-btn-cancel[title='Veto']")) || (await clickHud(c, "button.hud-btn-cancel", "Cancel"));
     let ev = await vetoed;
     if (!ev) {
       c.note_(`veto click ${clicked ? "made no cancellation" : "found no Cancel button"}; cancelled ${p1.order.id} through the API`);

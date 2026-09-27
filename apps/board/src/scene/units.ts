@@ -30,6 +30,11 @@ const G = {
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 
+const STATUS_TEXT: Record<string, string> = {
+  idle: "idle", moving: "walking", recalling: "recalling", working: "working",
+  remembering: "remembering", waiting_approval: "awaiting approval", error: "error",
+};
+
 const BUBBLES: Record<string, [string, string, string] | undefined> = {
   working: ["⚒", "#2b1d0e", "#f1e3bf"],
   recalling: ["✦", "#ffffff", "#3b82d6"],
@@ -51,6 +56,7 @@ export class UnitView {
   private bubble: THREE.Sprite | null = null;
   private bubbleKey = "";
   private nameTag: THREE.Sprite | null = null;
+  private nameTagText = "";
   private readonly jitter: THREE.Vector3;
   readonly dest = new THREE.Vector3();
   private facing = 0;
@@ -70,7 +76,7 @@ export class UnitView {
   /** Called at the peak of each working strike with the impact point (sparks). */
   onStrike: ((p: THREE.Vector3) => void) | null = null;
 
-  constructor(unit: Unit, teamColor: string | null) {
+  constructor(unit: Unit, teamColor: string | null, spawnFrom?: THREE.Vector3) {
     this.id = unit.id;
     this.unit = unit;
     const h = hash(unit.id);
@@ -89,7 +95,7 @@ export class UnitView {
 
     this.build(unit.class, teamColor);
     this.dest.copy(this.worldOf(unit));
-    this.group.position.copy(this.dest);
+    this.group.position.copy(spawnFrom ?? this.dest); // spawned units walk out of their building
     this.facing = Math.PI / 4;
     this.update(unit, teamColor);
   }
@@ -211,15 +217,18 @@ export class UnitView {
     m.color.set(this.selected ? "#7dff6a" : "#ffffff");
     m.opacity = this.selected ? 0.95 : 0.45;
     const showName = this.selected || this.hovered;
-    if (showName && !this.nameTag) {
-      this.nameTag = makeLabel(this.unit.name, { height: 0.26, bg: null, color: "#ffffff", font: 40 });
-      this.nameTag.position.y = this.bubble ? 1.3 : 0.95;
-      this.group.add(this.nameTag);
-    } else if (!showName && this.nameTag) {
+    const text = `${this.unit.name} \u00b7 ${STATUS_TEXT[this.unit.status] ?? this.unit.status}`;
+    if (this.nameTag && (!showName || text !== this.nameTagText)) {
       this.group.remove(this.nameTag);
       this.nameTag.material.map?.dispose();
       this.nameTag.material.dispose();
       this.nameTag = null;
+    }
+    if (showName && !this.nameTag) {
+      const color = this.unit.status === "error" ? "#ffb0a8" : this.unit.status === "waiting_approval" ? "#ffe98a" : "#ffffff";
+      this.nameTag = makeLabel(text, { height: 0.19, bg: null, color, font: 40 });
+      this.nameTagText = text;
+      this.group.add(this.nameTag);
     }
     if (this.nameTag) this.nameTag.position.y = this.bubble ? 1.3 : 0.95;
   }

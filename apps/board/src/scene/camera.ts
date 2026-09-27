@@ -41,6 +41,16 @@ export class IsoCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Zoom so the whole map diamond fits the viewport (never zooms in past 1). */
+  fitMap() {
+    const aspect = this.width / this.height;
+    const mapW = MAP_SIZE * Math.SQRT2 + 1; // diamond width in world units
+    this.camera.zoom = THREE.MathUtils.clamp(Math.min((VIEW_H * aspect) / mapW, 1), 0.55, 1);
+    this.camera.updateProjectionMatrix();
+    this.target.set(MAP_SIZE / 2, 0, MAP_SIZE / 2 + 1);
+    this.update();
+  }
+
   update() {
     const t = this.target;
     t.x = THREE.MathUtils.clamp(t.x, -2, MAP_SIZE + 2);

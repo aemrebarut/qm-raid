@@ -14,7 +14,7 @@ import { disposeTree, tileToWorld } from "./util";
 
 export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // projector laptops
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.style.display = "block";
@@ -51,6 +51,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const targets = new Map<string, TargetView>();
   const buildings = new Map<string, BuildingView>();
   let layout = "";
+  const justSpawned = new Set<string>(); // ids from unit.spawned events, consumed by reconcile
 
   // ---- reconcile store -> meshes ----
   function teamColor(s: State, team: number | null) {
@@ -87,7 +88,18 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       const color = teamColor(s, u.team);
       let v = units.get(u.id);
       if (!v) {
-        v = new UnitView(u, color);
+        // Units that appear after the first load walk out of the Forge (forged types) or the Barracks.
+        let from: THREE.Vector3 | undefined;
+        if (justSpawned.has(u.id)) {
+          const forged = s.unitTypes.some((t) => t.id === u.class && t.source === "forge");
+          const home = [...buildings.values()].find((b) => b.kind === (forged ? "river" : "barracks"));
+          if (home) {
+            from = home.door.clone();
+            home.pulse();
+            fx.burst(home.door.clone().setY(0.1), forged ? "#ff9a3c" : "#f2e27a", 1.2, 0.8);
+          }
+        }
+        v = new UnitView(u, color, from);
         v.onStrike = (p) => fx.sparksAt(p);
         units.set(u.id, v);
         unitsG.add(v.group);
@@ -99,8 +111,23 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       v.faceTo = tgt ? tileToWorld(tgt.pos.x, tgt.pos.y) : null;
     }
     for (const [id, v] of units) if (!seenU.has(id)) { unitsG.remove(v.group); v.dispose(); units.delete(id); }
+
+    // Forge at work while a forged type is generating, training or evaluating
+    const busy = s.unitTypes.filter((t) => t.source === "forge" && (t.status === "generating" || t.status === "training" || t.status === "evaluating"));
+    for (const b of buildings.values()) {
+      if (b.kind !== "river") continue;
+      if (!busy.length) b.setWork(null);
+      else {
+        const t = busy[0];
+        b.setWork(t.progress ?? 0, `${t.name}: ${t.stage || t.status}${busy.length > 1 ? ` (+${busy.length - 1})` : ""}`);
+      }
+    }
+    forgeBusy = busy.length > 0;
+    justSpawned.clear();
     syncSelection();
   }
+  let forgeBusy = false;
+  let forgeSparkT = 0;
 
   function syncArrows() {
     const s = store.getState();
@@ -135,7 +162,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   offs.push(store.onEvent((ev) => {
     if (ev.type === "memory.recall") recallFx(ev.unitId, ev.slugs ?? [], ev.summary);
     else if (ev.type === "memory.remember") rememberFx(ev.unitId, ev.slug, ev.summary);
-    else if (ev.type === "unit.spawned") buildings.forEach((b) => b.kind !== "gbrain" && b.pulse());
+    else if (ev.type === "unit.spawned") justSpawned.add(ev.unit.id); // reconcile walks it out of its building
   }));
 
   // ---- GBrain memory animations ----
@@ -175,6 +202,19 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       fx.text(() => libOrb().add(new THREE.Vector3(0, 0.4, 0)), "+1 page", { color: "#ffe9a8", bg: null, height: 0.34, dur: 2 });
       if (slug) fx.text(() => libOrb().add(new THREE.Vector3(0, 0.85, 0)), shortSlug(slug), { color: "#fff6d8", bg: null, height: 0.22, dur: 2.4 });
     });
+  }
+
+  /** Immediate feedback for an order: target flashes, a ring pulses in the team colour of the ordering units. */
+  function orderPing(targetId: string) {
+    const tv = targets.get(targetId);
+    if (!tv) return;
+    tv.orderFlash();
+    const s = store.getState();
+    const first = s.units.find((u) => u.id === bus.selection.units[0]);
+    const color = teamColor(s, first?.team ?? null) ?? "#9dff7a";
+    const p = tv.group.position.clone().setY(0.12);
+    fx.burst(p, color, 1.6, 0.7);
+    fx.after(0.18, () => fx.burst(p, color, 1.1, 0.6));
   }
 
   // ---- picking ----
@@ -277,10 +317,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     if (!d || d.dragging) return;
     const hit = pick(e);
     if (d.button === 2) {
-      if (hit?.kind === "target") {
-        targets.get(hit.id)?.orderFlash();
-        void commandTarget(store, bus, hit.id);
-      }
+      if (hit?.kind === "target" && (bus.selection.units.length || bus.command)) orderPing(hit.id);
+      if (hit?.kind === "target") void commandTarget(store, bus, hit.id);
       return;
     }
     if (d.button !== 0) return;
@@ -289,7 +327,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (commandUnit(bus, hit.id)) return;
       bus.select([hit.id], { add: e.shiftKey });
     } else if (hit.kind === "target") {
-      if (bus.command) { targets.get(hit.id)?.orderFlash(); void commandTarget(store, bus, hit.id); }
+      if (bus.command) { orderPing(hit.id); void commandTarget(store, bus, hit.id); }
       else bus.selectTarget(hit.id);
     } else if (hit.kind === "building") {
       bus.selectBuilding(hit.id);
@@ -360,6 +398,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const ro = new ResizeObserver(resize);
   ro.observe(el);
   resize();
+  iso.fitMap();
 
   const clock = new THREE.Clock();
   let raf = 0;
@@ -378,6 +417,10 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);
     arrows.tick(t, units, targets);
+    if (forgeBusy && (forgeSparkT -= dt) <= 0) {
+      forgeSparkT = 0.12;
+      for (const b of buildings.values()) if (b.kind === "river") fx.sparksAt(b.top, 3, "#ff9a3c");
+    }
     fx.tick(dt);
     renderer.render(scene, iso.camera);
   }

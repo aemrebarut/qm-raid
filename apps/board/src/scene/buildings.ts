@@ -15,6 +15,12 @@ export interface BuildingView {
   setHovered(on: boolean): void;
   /** Short pulse (Library on remember, Forge on spawn). */
   pulse(): void;
+  /** World point in front of the door, where spawned units appear. */
+  door: THREE.Vector3;
+  /** World point at the chimney or spire top (effects). */
+  top: THREE.Vector3;
+  /** Forge only: show work in progress (0..1) with a stage label, or null when idle. */
+  setWork(progress: number | null, label?: string): void;
 }
 
 export function buildBuilding(b: Building): BuildingView {
@@ -34,7 +40,7 @@ export function buildBuilding(b: Building): BuildingView {
   ring.visible = false;
   group.add(ring);
 
-  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind">;
+  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork"> & { setWork?: BuildingView["setWork"]; top?: THREE.Vector3 };
   if (b.kind === "gbrain") view = library(group);
   else if (b.kind === "river") view = forge(group);
   else view = barracks(group);
@@ -49,6 +55,9 @@ export function buildBuilding(b: Building): BuildingView {
     id: b.id,
     kind: b.kind,
     group,
+    door: group.position.clone().add(new THREE.Vector3(0.1, 0, 1.7)),
+    top: group.position.clone().add(view.top ?? new THREE.Vector3(0, 2, 0)),
+    setWork: () => {},
     ...view,
     setSelected(on) { selected = on; syncRing(); },
     setHovered(on) { hovered = on; syncRing(); },
@@ -104,6 +113,7 @@ function library(group: THREE.Group) {
   const orbMat = orb.material as THREE.MeshLambertMaterial;
   return {
     anchor: orb,
+    top: new THREE.Vector3(0.85, 3.4, -0.55),
     tick(t: number, dt: number) {
       orb.position.y = 3.4 + Math.sin(t * 1.6) * 0.06;
       orb.rotation.y += dt * 0.8;
@@ -150,6 +160,7 @@ function barracks(group: THREE.Group) {
   let pulseT = 0;
   return {
     anchor: group,
+    top: new THREE.Vector3(-1.0, 1.6, 1.0),
     tick(t: number, dt: number) {
       flag.rotation.y = Math.sin(t * 2.3) * 0.25;
       pulseT = Math.max(0, pulseT - dt);
@@ -197,20 +208,58 @@ function forge(group: THREE.Group) {
     puffs.push(m);
     group.add(m);
   }
+  // Work banner above the Forge while a type is being forged
+  const bannerCanvas = document.createElement("canvas");
+  bannerCanvas.width = 320; bannerCanvas.height = 72;
+  const bannerTex = new THREE.CanvasTexture(bannerCanvas);
+  bannerTex.colorSpace = THREE.SRGBColorSpace;
+  const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: bannerTex, depthTest: false, transparent: true }));
+  banner.scale.set(1.9, 1.9 * 72 / 320, 1);
+  banner.center.set(0.5, 0);
+  banner.position.set(0, 3.0, 0);
+  banner.renderOrder = 10;
+  banner.visible = false;
+  group.add(banner);
+  let bannerKey = "";
+  let working = false;
+
   let pulseT = 0;
   return {
     anchor: fire,
+    top: new THREE.Vector3(0.8, 2.25, -0.6),
+    setWork(progress: number | null, label = "") {
+      working = progress != null;
+      banner.visible = working;
+      if (progress == null) return;
+      const key = `${Math.round(progress * 50)}|${label}`;
+      if (key === bannerKey) return;
+      bannerKey = key;
+      const ctx = bannerCanvas.getContext("2d")!;
+      ctx.clearRect(0, 0, 320, 72);
+      ctx.fillStyle = "#f1e3bf"; ctx.strokeStyle = "#6b4e2a"; ctx.lineWidth = 3;
+      ctx.fillRect(2, 2, 316, 68); ctx.strokeRect(2, 2, 316, 68);
+      ctx.fillStyle = "#3a2a18"; ctx.fillRect(14, 44, 292, 16);
+      const grad = ctx.createLinearGradient(14, 0, 306, 0);
+      grad.addColorStop(0, "#ff8a1a"); grad.addColorStop(1, "#ffd05a");
+      ctx.fillStyle = grad; ctx.fillRect(14, 44, 292 * Math.max(0, Math.min(1, progress)), 16);
+      ctx.fillStyle = "#2b1d0e"; ctx.font = `600 22px "Iowan Old Style", Palatino, Georgia, serif`;
+      ctx.textBaseline = "middle";
+      ctx.fillText(label.length > 30 ? label.slice(0, 29) + "\u2026" : label, 14, 24);
+      bannerTex.needsUpdate = true;
+    },
     tick(t: number, dt: number) {
       pulseT = Math.max(0, pulseT - dt);
       const p = pulseT > 0 ? Math.sin((pulseT / 1.2) * Math.PI) : 0;
-      fire.intensity = 5 + Math.sin(t * 13) * 0.8 + Math.sin(t * 7.3) * 0.7 + p * 12;
+      const w = working ? 1 : 0;
+      fire.intensity = 5 + w * 5 + Math.sin(t * (13 + w * 10)) * (0.8 + w) + Math.sin(t * 7.3) * 0.7 + p * 12;
       fireMat.emissive.setRGB(1, 0.35 + Math.sin(t * 11) * 0.05 + p * 0.3, p * 0.3);
       for (const m of puffs) {
         const ph = (t * 0.35 + m.userData.phase) % 1;
         m.position.set(0.8 + Math.sin(ph * 5 + m.userData.phase * 9) * 0.12 + ph * 0.3, 2.25 + ph * 1.4, -0.6 - ph * 0.2);
         m.scale.setScalar(0.6 + ph * 1.6);
-        (m.material as THREE.MeshLambertMaterial).opacity = 0.55 * (1 - ph);
+        (m.material as THREE.MeshLambertMaterial).opacity = (working ? 0.75 : 0.55) * (1 - ph);
       }
+      if (working) banner.position.y = 3.0 + Math.sin(t * 2) * 0.04;
     },
     pulse() { pulseT = 1.2; },
   };

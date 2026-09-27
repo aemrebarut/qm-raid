@@ -40,3 +40,18 @@ No additional blocker beyond R1. First-open Library now visible in persistent ev
 ## R3 theme foundation bdb8bb9, 2026-09-27 15:31 PDT
 
 Reviewed the token and SVG icon commit. **P2, raid-look-hud:** `icon(name, size)` writes SVG width/height attributes, but `.lk-icon { width: 1em; height: 1em }` overrides them. An actual Chrome probe with committed tokens and a 13 px parent measured default, 20 px and 32 px requests all at 13x13. Use explicit inline dimensions or a CSS custom property when size is supplied. Acceptance: command icons and crests honor requested dimensions while the default remains 1em. Also noted the unused `--lk-drop` 24 px blur exceeds the director's 12 px outer-shadow cap; align before use. No other actionable finding in this foundation-only commit.
+
+## R4 panels 70393a2 and cde51a1, 2026-09-27 15:39 PDT
+
+**Verdict: core panel behavior passes; two P2 followups sent to raid-look-panels.** Visually inspected both Library sizes and Forge at 1280 using the new slate treatment. It meets the hierarchy change: restrained header, graph as the main content, compact memory rows, readable trained/base bars and a clear delta. No visible model URI in the Forge body; Dry types remain identifiable. Source review of 70393a2 and the cde51a1 graph followup completed.
+
+Validation on 4619, with HMR disabled only in the isolated review browser to avoid mid-test reloads:
+- Controlled five-node graph fixture: offline message, recovery on reopen, hover redraw, click-to-page, and 1512x790 to 1280x720 resize pass. Backing canvas and CSS dimensions both 916x411 after resize. Zero page errors. Screenshots `/tmp/raid-look-rev/r4-library-fixture*.png` and `r4-forge-1280.png`.
+- Real mock-board graph recovered: 91 pages, 252 links in the inspected live narrow shot; product, four components, rules and issue labels visible. The earlier 100-page graph lost anchors and subsequent API calls returned 502; brain owner was informed and reported pagination work in flight. This was data availability, separate from panel rendering.
+- Existing core, panel-race and SSE tests: 12 pass / 66 assertions. A transient HUD working-tree TS2367 was reported to its owner; latest full board TypeScript check passes.
+
+Findings:
+1. **P2, search clear race.** Submit `billing`, clear the field before a 500 ms search response, then the old result reappears under an empty Search input. Browser repro returned `query: ""`, `results: "Billing rules / Invoice retry"`. Invalidate `searchGen` when clearing, not just when submitting a new search. Acceptance: clearing before response keeps results empty.
+2. **P2, fallback human titles.** `slugTitle('learnings/dev-u1-1790547966120')` returns `Dev u1 1790547966120`; a non-uN actor likewise exposes the epoch. The mandatory busy-feed fixture uses dev learning slugs. Handle all learning slugs without exposing the timestamp or actor identifier. Acceptance: no 13-digit epoch in any Library graph, search or memory label, including local dev events and forged agents.
+
+Additional narrow i1 evidence (overview, unit, workflow, Library, Forge) and the icon contact sheet were inspected. The formation history falls below the fold at 1280, already covered by the director's roster/formation redesign; no new blocker beyond the recorded findings.

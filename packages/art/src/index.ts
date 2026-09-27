@@ -10,7 +10,11 @@ export { makeTarget } from "./monsters";
 // buildings (raid-art-world)
 export { makeBuilding } from "./world/buildings";
 export { makeTerrain, type TerrainArt } from "./world/terrain";
+export { makeZones, type ZonesArt, type ZonesOpts } from "./world/zones";
 
 // lighting and effects (raid-art-fx)
 export { lighting, removeLights, contactShadow, type LightingRig, type ArtLightingOpts } from "./lighting";
 export { ArtFx, SelectionRing, FX_COLORS, type Pt } from "./fx/fx";
+
+// HUD portraits from the real unit model (raid-art-plan)
+export { unitPortrait, disposePortraits, type PortraitOpts } from "./portrait";

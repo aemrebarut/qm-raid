@@ -45,29 +45,52 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const js = (page: Page, code: string) => page.evaluate(code);
 
 // Each state starts from a clean selection. Steps run in the page through window.raid (see src/main.ts).
+// Without --live the page is read-only against the engine (non-GET /api calls are aborted) and every team
+// state is built locally with store.apply, so shots never change the shared mock and never depend on its drift.
 const RESET = `(() => { raid.bus.clear(); raid.bus.selectBuilding(null); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); })()`;
 const firstIds = (n: number) => `raid.store.getState().units.slice(0, ${n}).map(u => u.id)`;
-const states: { name: string; setup: string; settle?: number; keys?: string[]; click?: string; live?: boolean }[] = [
+// In-page helper: a local team (id, members, optional trio workflow from the fixture), applied as a synthetic event.
+const HELPERS = `window.__look = {
+  n: 0,
+  async team(id, members, trio) {
+    let wf = null;
+    if (trio) {
+      const { fixtureState } = await import('/src/core/fixture.ts');
+      wf = structuredClone(fixtureState().teams.find(t => t.workflow && t.workflow.preset === 'trio')?.workflow ?? null);
+      if (wf) wf.nodes.forEach((nd, i) => { nd.unitId = members[i] ?? nd.unitId; });
+    }
+    const colors = { 1: '#d64545', 2: '#3f7fd6', 7: '#4caf6a' };
+    const prev = raid.store.team(id);
+    const team = { id, name: prev?.name ?? (id === 1 ? 'Red' : 'Squad'), color: prev?.color ?? colors[id] ?? '#c9a24a', autopilot: false, members, workflow: wf };
+    for (const t of raid.store.getState().teams) if (t.id !== id && t.members.some(m => members.includes(m)))
+      raid.store.apply({ seq: -(900000 + ++this.n), ts: Date.now(), type: 'team.updated', team: { ...t, members: t.members.filter(m => !members.includes(m)) } });
+    raid.store.apply({ seq: -(900000 + ++this.n), ts: Date.now(), type: 'team.updated', team });
+    return team;
+  },
+};`;
+type State = { name: string; setup: string; check?: string; settle?: number; keys?: string[]; click?: string; live?: boolean };
+const sel = (n: number) => `raid.bus.selection.units.length === ${n}`;
+const states: State[] = [
   { name: "overview", setup: `1` },
-  { name: "unit", setup: `raid.bus.select(${firstIds(1)})` },
-  { name: "units", setup: `raid.bus.select(${firstIds(4)})` },
-  { name: "target", setup: `raid.bus.selectTarget((raid.store.getState().targets.find(t => t.status === 'open') ?? raid.store.getState().targets[0]).id)` },
-  { name: "library", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'gbrain').id)`, settle: 2500 },
-  { name: "forge", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'river').id)`, settle: 1500 },
-  { name: "barracks", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'barracks').id)` },
-  { name: "proposals", setup: `(() => { const us = raid.store.getState().units; const ts = raid.store.getState().targets.filter(t => t.status === 'open'); for (let i = 0; i < 3; i++) raid.dev.propose(us[i]?.id, ts[i]?.id); })()` },
-  { name: "workflow", setup: `(() => { raid.dev.workflow(1, undefined, 1200); raid.bus.select(raid.store.team(1)?.members ?? []); })()`, settle: 3200 },
+  { name: "unit", setup: `raid.bus.select(${firstIds(1)})`, check: sel(1) },
+  { name: "units", setup: `raid.bus.select(${firstIds(4)})`, check: sel(4) },
+  { name: "target", setup: `raid.bus.selectTarget((raid.store.getState().targets.find(t => t.status === 'open') ?? raid.store.getState().targets[0]).id)`, check: `!!raid.bus.selection.target` },
+  { name: "library", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'gbrain').id)`, settle: 2500, check: `!!raid.bus.selection.building` },
+  { name: "forge", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'river').id)`, settle: 1500, check: `!!raid.bus.selection.building` },
+  { name: "barracks", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'barracks').id)`, check: `!!raid.bus.selection.building` },
+  { name: "proposals", setup: `(() => { const us = raid.store.getState().units; const ts = raid.store.getState().targets.filter(t => t.status === 'open'); for (let i = 0; i < 3; i++) raid.dev.propose(us[i]?.id, ts[i]?.id); })()`, check: `raid.store.getState().orders.filter(o => o.status === 'proposed').length >= 3` },
+  { name: "workflow", setup: `(async () => { const t = await __look.team(1, ${firstIds(3)}, true); raid.dev.workflow(1, undefined, 1200); raid.bus.select(t.members); })()`, settle: 3200, check: `raid.store.getState().workflowRuns.some(r => r.teamId === 1 && r.status === 'running')` },
   { name: "spawn", setup: `raid.bus.newIssue()`, settle: 700 },
-  // Emre's formation flow (routes from raid-ui-hud). All local: team changes go through store.apply, never the engine.
-  { name: "formation", setup: `raid.bus.select(['u1', 'u4'])`, keys: ["f"], settle: 1200 },
-  { name: "presets", setup: `(() => { const t = raid.store.team(1); raid.store.apply({ seq: 1e9, ts: Date.now(), type: 'team.updated', team: { ...t, workflow: null } }); raid.bus.select(t.members); })()`, settle: 1200 },
-  { name: "rolepick", setup: `(() => { const t = raid.store.team(1); raid.bus.select(t.members); if (t.workflow) setTimeout(() => raid.bus.setCommand({ kind: 'role', teamId: t.id, nodeId: t.workflow.entry }), 300); })()`, settle: 1200 },
+  // Emre's formation flow. 'formation' = what F shows right after it forms a new team (two units, no workflow yet).
+  { name: "formation", setup: `(async () => { const ids = raid.store.getState().units.slice(3, 5).map(u => u.id); await __look.team(7, ids, false); raid.bus.select(ids); })()`, settle: 1200, check: sel(2) },
+  { name: "presets", setup: `(async () => { const t = await __look.team(1, ${firstIds(3)}, false); raid.bus.select(t.members); })()`, settle: 1200, check: `raid.store.team(1)?.workflow === null && ${sel(3)}` },
+  { name: "rolepick", setup: `(async () => { const t = await __look.team(1, ${firstIds(3)}, true); raid.bus.select(t.members); await new Promise(r => setTimeout(r, 300)); raid.bus.setCommand({ kind: 'role', teamId: 1, nodeId: t.workflow.entry }); })()`, settle: 1200, check: `raid.bus.command?.kind === 'role'` },
   // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
-  { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500 },
+  { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500, check: `!![...document.querySelectorAll('#hud [role=tab][aria-selected=true]')].find(e => /loadout/i.test(e.textContent))` },
   // --live only: real orders and a forged unit on the mock test engine 4618 (art gate: units selectable and movable).
-  { name: "order", live: true, setup: `(async () => { const s = raid.store.getState(); const u = s.units.find(x => x.status === 'idle') ?? s.units[0]; const t = s.targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000 },
-  { name: "forged", live: true, setup: `(async () => { const s = raid.store.getState(); const base = ['knight','ranger','scout','oracle']; let u = s.units.find(x => !base.includes(x.class)); if (!u) { const ty = s.unitTypes.find(x => !base.includes(x.id) && x.status === 'ready'); if (ty) { const r = await raid.api.spawn({ class: ty.id }); u = r.unit; } } await new Promise(r => setTimeout(r, 1500)); u = u && raid.store.unit(u.id); if (!u) return; const t = raid.store.getState().targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000 },
-  { name: "feed", setup: `(() => { const d = raid.dev; d.recall('u1'); d.remember('u2'); d.handoff('u1', 'u2'); d.recall('u3'); d.remember('u1'); raid.bus.select(['u1']); })()`, settle: 1200 },
+  { name: "order", live: true, setup: `(async () => { const s = raid.store.getState(); const u = s.units.find(x => x.status === 'idle') ?? s.units[0]; const t = s.targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000, check: sel(1) },
+  { name: "forged", live: true, setup: `(async () => { const s = raid.store.getState(); const base = ['knight','ranger','scout','oracle']; let u = s.units.find(x => !base.includes(x.class)); if (!u) { const ty = s.unitTypes.find(x => !base.includes(x.id) && x.status === 'ready'); if (ty) { const r = await raid.api.spawn({ class: ty.id }); u = r.unit; } } await new Promise(r => setTimeout(r, 1500)); u = u && raid.store.unit(u.id); if (!u) return; const t = raid.store.getState().targets.find(x => x.status === 'open'); if (t) await raid.api.order({ unitIds: [u.id], targetId: t.id }); raid.bus.select([u.id]); })()`, settle: 4000, check: sel(1) },
+  { name: "feed", setup: `(() => { const d = raid.dev; const [a, b, c] = ${firstIds(3)}; d.recall(a); d.remember(b); d.handoff(a, b); d.recall(c); d.remember(a); raid.bus.select([a]); })()`, settle: 1200, check: sel(1) },
 ];
 
 const browser = await chromium.launch({
@@ -85,12 +108,14 @@ try {
       if (st.live && !live) continue;
       // Fresh page per state so injected dev events do not leak between shots.
       const page = await ctx.newPage();
+      if (!live) await page.route("**/api/**", (r: any) => (r.request().method() === "GET" ? r.continue() : r.abort()));
       page.on("pageerror", (e: Error) => console.warn(`  [${st.name}] pageerror: ${e.message}`));
       await page.goto(url, { waitUntil: "load" });
       await page.waitForFunction("window.raid && raid.store.getState().units.length > 0", null, { timeout: 15000 }).catch(() => {});
       await wait(2500); // SSE snapshot, scene build, first frames
       // A teammate mid-edit can break the module graph (no window.raid): shoot the broken page anyway as evidence.
       try {
+        await js(page, HELPERS);
         await js(page, RESET);
         await js(page, st.setup);
       } catch (err) {
@@ -104,6 +129,8 @@ try {
         if (!hit) console.warn(`  [${st.name}] no visible control labelled "${st.click}" yet`);
       }
       await wait(st.settle ?? 900);
+      if (st.check && !(await js(page, `(() => { try { return !!(${st.check}); } catch { return false; } })()`).catch(() => false)))
+        console.warn(`  [${st.name}] STATE NOT REACHED (check failed): ${st.check}`);
       const file = join(outDir, `${iteration}-${st.name}${w === 1512 ? "" : `-${w}`}.png`);
       await page.screenshot({ path: file });
       saved.push(file);

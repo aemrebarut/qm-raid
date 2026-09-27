@@ -127,6 +127,8 @@ class Clip {
   /** Units and camps this clip drives: only their engine events become named editor events (others stay raw). */
   focus = new Set<string>();
   clickAt = 0;
+  qmMode = false; // a QM web UI tab: engine events map to qm_order, qm_tool, qm_reply
+  side: Promise<void>[] = []; // QM tabs recorded alongside this clip
   /** A failure note for the reviewer and editor (timeouts, API fallbacks, errors). */
   note_(text: string) { this.failures.push({ t: (Date.now() - this.t0) / 1000, text }); say(`[${this.name}] NOTE ${text}`); }
   lastXY: { x: number; y: number } | null = null;
@@ -160,6 +162,13 @@ class Clip {
     const uid = e.unitId ?? e.order?.unitId;
     const ids = [uid, e.order?.targetId, e.run?.targetId, e.target?.id, e.fromUnitId, e.toUnitId].filter(Boolean);
     if (!ids.some((id) => this.focus.has(id))) return;
+    if (this.qmMode) {
+      if (!this.focus.has(uid)) return;
+      if (e.type === "order.updated" && e.order?.status === "active") return this.note(t, "qm_order", { orderId: e.order.id, unitId: uid });
+      if (e.type === "unit.activity" && e.kind === "tool" && /gbrain/i.test(String(e.tool ?? ""))) return this.note(t, "qm_tool", { unitId: uid, tool: e.tool });
+      if (e.type === "order.updated" && e.order?.status === "done") return this.note(t, "qm_reply", { orderId: e.order.id, unitId: uid, text: String(e.order.reply ?? "").slice(0, 300) });
+      return;
+    }
     switch (e.type) {
       case "memory.recall": return this.note(t, "recall_beam", { unitId: uid, slugs: e.slugs }, ["unit", uid]);
       case "memory.remember": return this.note(t, "remember_orb", { unitId: uid, slug: e.slug }, ["unit", uid]);
@@ -365,13 +374,16 @@ const clips: Record<string, Script> = {
     const pages0 = s.memory?.pages;
     await selectUnit(c, u);
     c.mark("select", { unitId: u.id, unitName: u.name, class: u.class, model: u.model });
-    await wait(1400);
+    let orderEnd: (v?: unknown) => void = () => {};
+    c.side.push(qmTab(c, u.id, new Promise((r) => { orderEnd = r; })));
+    await wait(2500); // QM tab loads and starts recording
     const tid = await orderCamp(c, [u.id], u.pos);
-    if (!tid) return;
+    if (!tid) { orderEnd(); return; }
     const mine = (e: Ev) => (e.unitId ?? e.order?.unitId) === u.id;
     c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.log("recall", { slugs: e.slugs }));
     const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === u.id && ["done", "failed", "cancelled"].includes(e.order?.status), Number(flag("order-wait", "110000")), "order end");
     if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
+    orderEnd();
     const rem = await c.waitFor((e) => e.type === "memory.remember" && mine(e), 15000, "remember");
     if (rem) c.log("remember", { slug: rem.slug });
     await wait(3500);
@@ -427,13 +439,18 @@ const clips: Record<string, Script> = {
     c.mark("trio", { teamId, selected: sel, roles: bound }, c.lastXY);
     await wait(1200);
     const cx = Math.round(three.reduce((a: number, u: any) => a + u.pos.x, 0) / 3), cy = Math.round(three.reduce((a: number, u: any) => a + u.pos.y, 0) / 3);
+    // QM intercut: the implementer's own QM conversation (the Rule Warden is a River unit, not a QM session).
+    let runEnd: (v?: unknown) => void = () => {};
+    c.side.push(qmTab(c, three[1].id, new Promise((r) => { runEnd = r; })));
+    await wait(2500);
     const tid = await orderCamp(c, three.map((u: any) => u.id), { x: cx, y: cy }, teamId);
-    if (!tid) return;
+    if (!tid) { runEnd(); return; }
     let n = 0;
     const handoffs = (e: Ev): boolean => { if (e.type === "workflow.handoff") { n++; c.mark(`handoff-${n}`, { from: e.fromUnitId, to: e.toUnitId, nodeId: e.nodeId }); } return false; };
     c.waitFor(handoffs, 600000);
     const end = await c.waitFor((e) => e.type === "workflow.updated" && e.run?.targetId === tid && ["done", "failed", "cancelled", "needs_human"].includes(e.run?.status), Number(flag("run-wait", "300000")), "run end");
     if (end) c.log(`run-${end.run.status}`);
+    runEnd();
     await wait(4000);
   },
 
@@ -637,23 +654,13 @@ clips.hero = async (c) => {
 };
 
 const pending: Promise<void>[] = [];
-async function run(name: string, script: Script) {
-  const c = new Clip(name);
-  const frameDir = join(tmpdir(), `raid-cap-${take}-${name}-${process.pid}`);
+type Rec = { frames: { file: string; ts: number }[]; frameDir: string; stop: () => Promise<void> };
+
+/** Starts the CDP screencast of c.page and the clip clock (t0) and SSE listener. */
+async function startRec(c: Clip): Promise<Rec> {
+  const frameDir = join(tmpdir(), `raid-cap-${take}-${c.name}-${process.pid}`);
   rmSync(frameDir, { recursive: true, force: true });
   mkdirSync(frameDir, { recursive: true });
-  c.ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
-  await c.ctx.addInitScript(CURSOR);
-  await c.ctx.addInitScript(HELPERS); // survives a dev-server reload mid-clip
-  c.page = await c.ctx.newPage();
-  c.page.on("pageerror", (e: Error) => { if (c.t0) c.note_("pageerror: " + e.message.slice(0, 200)); });
-  await c.page.goto(url, { waitUntil: "load" });
-  await c.page.waitForFunction("window.raid && window.raidScene && raid.store.getState().units.length > 0", null, { timeout: 20000 }).catch(() => {});
-  await js(c.page, HELPERS);
-  await js(c.page, CURSOR);
-  await c.page.mouse.move(W - 260, H / 2 - 120);
-  await wait(2500); // SSE snapshot, scene build, first frames
-  const backend = await js(c.page, "raid.store.getState().backend").catch(() => "unknown");
   const frames: { file: string; ts: number }[] = [];
   const cdp = await c.ctx.newCDPSession(c.page);
   cdp.on("Page.screencastFrame", (f: any) => {
@@ -665,21 +672,14 @@ async function run(name: string, script: Script) {
   c.t0 = Date.now();
   void c.listen();
   await cdp.send("Page.startScreencast", { format: "jpeg", quality: 86, maxWidth: W, maxHeight: H, everyNthFrame: Number(flag("nth", "2")) }); // about 30 fps at a 60 Hz swap
-  await wait(1200);
-  c.mark("ready", { backend });
-  try {
-    await script(c);
-  } catch (err) {
-    c.note_("script error: " + String((err as Error).message).split("\n")[0]);
-    c.mark("script-error", { text: String((err as Error).message).split("\n")[0] });
-  }
-  await wait(1500);
-  c.mark("end");
-  c.stop();
-  await cdp.send("Page.stopScreencast").catch(() => {});
-  await wait(500);
-  await c.ctx.close();
-  // Re-time: each frame lasts until the next one; the concat demuxer plus cfr gives a steady 30 fps.
+  return { frames, frameDir, stop: async () => { await cdp.send("Page.stopScreencast").catch(() => {}); } };
+}
+
+/** Re-times the frames (each lasts until the next; concat demuxer plus cfr gives a steady 30 fps), encodes in the
+ *  background (niced) and writes the markers when the mp4 is done. */
+function finishRec(c: Clip, rec: Rec, backend: string, pageUrl = url) {
+  const { frames, frameDir } = rec;
+  const name = c.name;
   const first = frames[0]?.ts ?? c.t0;
   const shift = first - c.t0;
   const list = join(frameDir, "list.txt");
@@ -688,7 +688,6 @@ async function run(name: string, script: Script) {
   if (frames.length) lines.push(`file '${frames.at(-1)!.file}'`);
   writeFileSync(list, lines.join("\n"));
   const mp4 = join(outDir, `${name}.mp4`);
-  // Encode in the background (niced) so the next clip starts at once; markers are written when the mp4 is done.
   const encoded = new Promise<void>((res) => {
     const ff = spawn("nice", ["-n", "10", "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-fps_mode", "cfr", "-r", "30",
       "-vf", `scale=${W}:${H}:flags=lanczos,format=yuv420p`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-movflags", "+faststart", mp4]);
@@ -700,7 +699,7 @@ async function run(name: string, script: Script) {
   for (const m of c.marks) m.t -= shift;
   for (const e of c.named) e.t = Math.round((e.t - shift / 1000) * 1000) / 1000;
   const duration = frames.length ? (frames.at(-1)!.ts - first) / 1000 : 0;
-  const doc = { clip: name, take, file: mp4, url, backend, width: W, height: H, fps: 30, frames: frames.length, duration,
+  const doc = { clip: name, take, file: mp4, url: pageUrl, backend, width: W, height: H, fps: 30, frames: frames.length, duration,
     startedAt: new Date(first).toISOString(), startedAtMs: Math.round(first),
     note: "t is seconds from the first video frame (source time in this file); x, y are screen px (x2, y2 = receiver of a handoff); raw has every scripted mark and engine SSE event (t in ms); failures lists timeouts, API fallbacks and errors",
     failures: c.failures, events: c.named.sort((a, b) => a.t - b.t), raw: c.marks };
@@ -719,6 +718,84 @@ async function run(name: string, script: Script) {
     }
   }));
   return doc;
+}
+
+/** QM intercut (Emre 16:11): the unit's own conversation in QM's web UI (8129), recorded in a second tab of the same
+ *  browser into <parent>-qm.mp4 while the map clip runs. Ends when `until` settles, plus 4 s. Never types anything. */
+async function qmTab(parent: Clip, unitId: string, until: Promise<unknown>): Promise<void> {
+  if (has("no-qm")) return;
+  const u = await js(parent.page, `raid.store.unit(${JSON.stringify(unitId)})`).catch(() => null);
+  const sessionUrl = u?.qm?.sessionUrl;
+  if (!sessionUrl || !/^http:\/\/(localhost|127\.0\.0\.1):8129\//.test(sessionUrl)) { parent.note_(`no QM session URL for ${unitId}`); return; }
+  const q = new Clip(`${parent.name}-qm`);
+  q.qmMode = true;
+  q.focus.add(unitId);
+  q.ctx = parent.ctx;
+  try {
+    q.page = await parent.ctx.newPage();
+    await q.page.goto(sessionUrl, { waitUntil: "load", timeout: 30000 });
+    await wait(1500);
+    // Keep the newest turn in view (QM's chat pane or the page itself).
+    await js(q.page, `window.capScroll = setInterval(() => { for (const el of [document.scrollingElement, ...document.querySelectorAll('*')]) { if (el && el.scrollHeight > el.clientHeight + 40 && /(auto|scroll)/.test(getComputedStyle(el).overflowY)) el.scrollTop = el.scrollHeight; } window.scrollTo(0, document.body.scrollHeight); }, 700)`).catch(() => {});
+    const rec = await startRec(q);
+    await wait(800);
+    q.mark("ready", { backend: "qm", unitId, sessionUrl }, null);
+    q.mark("qm-open", { unitId }, null);
+    await Promise.race([until, wait(Number(flag("qm-max", "300000")))]);
+    await wait(2500);
+    // Unfold the last turn's tool calls ("Worked for Ns"), so the GBrain calls are on screen.
+    await js(q.page, "clearInterval(window.capScroll)").catch(() => {});
+    const worked = q.page.getByText(/^Worked for /).last();
+    if (await worked.count().catch(() => 0)) {
+      await worked.scrollIntoViewIfNeeded().catch(() => {});
+      await wait(500);
+      await worked.click({ timeout: 3000 }).then(() => q.mark("qm-tools-open", {}, null)).catch(() => q.note_("could not unfold Worked for"));
+      await wait(1200);
+      await js(q.page, "window.scrollBy(0, 300)").catch(() => {});
+    }
+    await wait(4500);
+    q.mark("end", {}, null);
+    q.stop();
+    await rec.stop();
+    await wait(300);
+    await q.page.close().catch(() => {});
+    finishRec(q, rec, "qm", sessionUrl);
+  } catch (err) {
+    parent.note_(`QM tab failed: ${String((err as Error).message).split("\n")[0]}`);
+  }
+}
+
+async function run(name: string, script: Script) {
+  const c = new Clip(name);
+  c.ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+  await c.ctx.addInitScript(CURSOR);
+  await c.ctx.addInitScript(HELPERS); // survives a dev-server reload mid-clip
+  c.page = await c.ctx.newPage();
+  c.page.on("pageerror", (e: Error) => { if (c.t0) c.note_("pageerror: " + e.message.slice(0, 200)); });
+  await c.page.goto(url, { waitUntil: "load" });
+  await c.page.waitForFunction("window.raid && window.raidScene && raid.store.getState().units.length > 0", null, { timeout: 20000 }).catch(() => {});
+  await js(c.page, HELPERS);
+  await js(c.page, CURSOR);
+  await c.page.mouse.move(W - 260, H / 2 - 120);
+  await wait(2500); // SSE snapshot, scene build, first frames
+  const backend = await js(c.page, "raid.store.getState().backend").catch(() => "unknown");
+  const rec = await startRec(c);
+  await wait(1200);
+  c.mark("ready", { backend });
+  try {
+    await script(c);
+  } catch (err) {
+    c.note_("script error: " + String((err as Error).message).split("\n")[0]);
+    c.mark("script-error", { text: String((err as Error).message).split("\n")[0] });
+  }
+  await Promise.race([Promise.all(c.side), wait(20000)]); // QM tabs finish before the context closes
+  await wait(1500);
+  c.mark("end");
+  c.stop();
+  await rec.stop();
+  await wait(500);
+  await c.ctx.close();
+  return finishRec(c, rec, backend);
 }
 
 const order = ["orders", "teams", "forge", "autopilot", "loadout", "hero"].filter((n) => !only.length || only.includes(n));

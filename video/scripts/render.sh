@@ -15,7 +15,9 @@ missing = sorted({f for f in files if not os.path.exists(os.path.join("audio", f
 if missing: sys.exit("missing audio: " + ", ".join(missing))
 print("audio ok:", len(set(files)), "files")
 PY
-bun scripts/plan.ts "$@"
+bun scripts/plan.ts "$@" | tee "$OUT/plan.txt"
+cp src/edl.json "$OUT/edl.json"
+bun scripts/vo-plan.ts "$OUT/vo-placement.json"
 npx remotion render src/index.ts Main "$OUT/qm-raid-demo.mp4" --codec h264 --audio-codec aac --concurrency 8
 npx remotion still src/index.ts Main "$OUT/thumbnail.png" --frame=0
 ffprobe -v error -show_entries format=duration:stream=codec_name,width,height -of compact "$OUT/qm-raid-demo.mp4"

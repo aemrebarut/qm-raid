@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 type Ev = { t: number; name: string; x?: number; y?: number; [k: string]: unknown };
 type Seg = { from: number; to: number; rate: number };
-type FxRule = { kind: string; text?: string; lead?: number; noXY?: boolean };
+type FxRule = { kind: string; text?: string; lead?: number; noXY?: boolean; pos?: { x: number; y: number } };
 type Rule = {
   target: number;
   // event name (or prefix ending in *) -> seconds kept at 1x before and after it
@@ -57,7 +57,9 @@ const RULES: Record<string, Rule> = {
     hold: { forge_open: [0.8, 1.2], described: [1.2, 1], forge_submit: [0.3, 1], card: [0.3, 3.2], train: [0.3, 1], spawned: [0.3, 2], unit_spawned: [0.3, 2], order_active: [0.3, 1.5], recall_beam: [0.3, 1.5] },
     fx: {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
-      card: [{ kind: "scoreRace", noXY: true, lead: 0.3, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" }, { kind: "mascotCheer", text: "Trained beats base!", lead: 1.5 }],
+      // bottom left over the map (about 820 x 430), clear of the real Forge card on the right and of the frame edge;
+      // no mascot here, it covered the final values (rev)
+      card: { kind: "scoreRace", pos: { x: 60, y: 600 }, lead: 0.3, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" },
       spawned: { kind: "forgedBurst", text: "$name", noXY: true }, // event xy is the Train button at the edge
     },
     caps: { forge_open: "The Forge: describe a new unit type", card: "River-trained vs base model, held-out test orders", spawned: "River-trained unit, straight to work" },
@@ -181,7 +183,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
       seenFx.add(fk);
       for (const f of ([] as FxRule[]).concat(rule.fx[fk])) {
         const text = f.text === "$name" ? String(e.unitName ?? e.typeName ?? "") : f.text;
-        const xy = f.noXY ? {} : { x: e.x, y: e.y };
+        const xy = f.pos ?? (f.noXY ? {} : { x: e.x, y: e.y });
         fx.push({ at: round(Math.max(title, at + (f.lead ?? 0)), 2), kind: f.kind, ...(text ? { text } : {}), ...xy });
       }
     }
@@ -305,7 +307,13 @@ const Z = { s: 1.6, x: 1910, y: 60 };
 type P = NonNullable<ReturnType<typeof plan>>;
 const lo = edl.loadout as P | undefined;
 if (lo) {
-  lo.segments = lo.segments.map((g) => ({ ...g, zoom: Z }));
+  // wide view from just before the save, so the save button is in frame (rev)
+  const ldoc = JSON.parse(readFileSync(join(dirFor("loadout"), "loadout.markers.json"), "utf8"));
+  const saveT = (ldoc.events as Ev[]).find((e) => e.name === "save")?.t ?? Infinity;
+  const cut = saveT - 0.5;
+  lo.segments = lo.segments.flatMap((g) =>
+    g.to <= cut ? [{ ...g, zoom: Z }] : g.from >= cut ? [g] : [{ ...g, to: round(cut), zoom: Z }, { ...g, from: round(cut) }],
+  );
   lo.fx = lo.fx.map((f) => (f.x === undefined || f.y === undefined ? f : { ...f, x: round(Z.x + (f.x - Z.x) * Z.s, 0), y: round(Z.y + (f.y - Z.y) * Z.s, 0) }));
 }
 

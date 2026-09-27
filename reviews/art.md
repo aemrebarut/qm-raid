@@ -82,3 +82,35 @@ recall effect. Preserve these during the factory swap.
   A4 16:35: foreground FPS, cleanup under repeated effects, pitch screenshots.
   Freeze 16:40. Every received commit gets git-show review, relevant smoke,
   an appended outcome here, and concrete findings sent to its owner.
+
+## 2026-09-27 15:18 PDT: scaffold 88331b8
+
+Reviewed `git show 88331b8` (13 files, 549 insertions): types, showroom,
+single-Three link script, import smoke, package configuration and art plan.
+Ran the requested checks in the shared working tree, which already included
+untracked in-progress units, lighting and world files:
+
+- `bun run typecheck`: pass.
+- `bun test test/`: 1 passed, 0 failed, 20 assertions.
+- Existing server `GET /health`: `{"ok":true,"service":"art"}`.
+- realpath of packages/art/node_modules/three and apps/board/node_modules/three
+  is identical. No second server was started and no implementation was edited.
+- Chrome at `http://127.0.0.1:4620/?board=1`: sidebar and Scale reference row
+  appear, but canvas stays blank and FPS text never appears. DevTools shows
+  repeated `TypeError: rig?.update is not a function` at showroom/main.ts:192.
+
+**P1, live A1 blocker: lighting handle mismatch aborts every render.**
+types.ts defines Lighting.update(), but the in-progress src/lighting.ts exports
+a separately declared LightingRig with follow/setWarmth/dispose and no update.
+The showroom glob is type-asserted as returning Lighting, so typechecking
+does not detect the mismatch. main.ts:192 calls update before renderer.render.
+This is a live integration failure exposed during scaffold review, not a
+claim that the missing lighting implementation was part of 88331b8.
+
+Sent to raid-art-plan and raid-art-fx: implement/typecheck the agreed handle
+and validate or isolate optional lighting so a malformed rig cannot suppress
+all exhibits. Retest the actual browser: reference mesh visible, FPS/draw text
+updates, and no repeated update error. Health and import smoke alone are not
+render acceptance. A1 visual signoff is pending this fix and the hero assets.
+
+code/art was not yet published when queried at 15:16; lead owns that page.

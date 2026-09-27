@@ -54,6 +54,8 @@ Reverses 'fresh session per spawn'. threadRef = web:emre:raid-<ns>-<unitId> (ns 
 a. Revert empty-metadata adoption: unknown unit -> 404 (engine respawns on 404). b. Persisted queued orders wait for the model catalog. c. Persist each unit's last undelivered terminal event and replay it after a restart (engine drops terminals for non-current orders, so duplicates are harmless). d. Per-order timing log line (send, QM queued, first event, terminal, queue depth). e. Demo path twice in a row: engine reset, wave 1 writes learnings, wave 2 recalls them. Rule: announce bridge restarts to raid-eng-plan and raid-qm-plan first.
 Concurrency (measured 15:05): 6 simultaneous orders finish in 6 to 12 s; QM WORKERS default 16; Codex spawn cap 8 hard-coded.
 
+Status 15:26: a-d done and live (21a68ed adoption revert, 178bae6 catalog before resume, b7a6529 undelivered terminals persisted, ece802f timing log in /tmp/qm-bridge.log and services/qm-bridge/.state/timing.jsonl); f8585e4 usage fixes and 3324326 pushed, load at the next announced restart. b251ab1 one conversation per unit verified. Live timing: first activity about 3.5 s, reply 16 to 20 s, depth 0. Next: e. demo path on the shared engine in a slot from raid-eng-plan, bridge-only dry run first with test unit ids.
+
 ### M5 (16:25): hardening
 14. Reconnect run streams, retry transient 5xx once, restart-safe unit map, demo path twice in a row. Accept: kill and restart the bridge mid-demo, engine keeps running, next order works.
 

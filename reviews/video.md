@@ -209,3 +209,11 @@ VERDICT: CHANGES: keep the Autopilot callout title inside the frame.
 Evidence `/tmp/raid-video-rev/final-qm-raid-demo-aac1154494/`, `/tmp/raid-video-rev/final-audio-aac1154494/`, snapshots `/tmp/raid-video-rev/final-fixed-*`.
 
 VERDICT: APPROVED
+
+## V19: camera v2 rejected; approved fallback selected (16:44-16:46 PDT)
+
+`final/qm-raid-demo-v2.mp4`, SHA256 `3e6f268655cdb6b7b8ecfa78420b926ef2f9a73ffa27d467e8cb286eb9021aa0`: stable 119.125 second 1080p/30 H.264 and stereo 48 kHz AAC. Inspected all 60 samples every 2 seconds, with full-size checks of UI crops. P1: Forge punch-ins at 74-76 seconds push real card scores and Train controls beyond the right edge. Autopilot at 92 seconds clips proposal countdowns and the second row at left/bottom; at 100 seconds Go is cut below the frame. Captions and score overlay remain safe. All 21 voices align within 43 ms, no overlaps, and decoded review audio matches approved fallback exactly. Sent CHANGES directly to raid-video and Analyst, recommending full-panel framing or disabling camera on these UI beats. Evidence `/tmp/raid-video-rev/final-qm-raid-demo-v2-3e6f268655/` and `/tmp/raid-video-rev/final-audio-3e6f268655/`.
+
+VERDICT: CHANGES: keep Forge cards and Autopilot proposal/Go controls inside the camera frame.
+
+At 16:46 the Analyst dropped v2 and selected the approved fallback SHA256 `aac1154494959f7fb27b859b9c93461eaf515c4d04dfa91e6c0f694028c43c45` at `final/qm-raid-demo.mp4` for shipping. No further review requested. V18 approval is the shipping verdict. No author files edited and no process killed during these reviews.

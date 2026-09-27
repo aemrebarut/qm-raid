@@ -263,7 +263,7 @@ function goblin(b: Build, x: number, z: number, rot: number, skinColor: string, 
 }
 
 function ogre(b: Build, x: number, z: number, rot: number, war: string) {
-  const skin = skinMat("#c2603e");
+  const skin = skinMat("#86a04e"); // olive, reads against the red tents
   const leather = mat("#4a2e1a"), wood = mat("#5e4027"), bone = mat("#efe4c8");
   const eyeM = glowMat(b, "#ffe14a", "#ffb000");
   const g = new THREE.Bone();
@@ -288,14 +288,17 @@ function ogre(b: Build, x: number, z: number, rot: number, war: string) {
   hips.add(loin);
   for (const s of [-1, 1]) hips.add(part(G.fur, mat("#6a5540"), s * 0.19, 0.4, -0.01));
   const head = new THREE.Bone();
-  head.position.set(0, 0.46, 0.05);
+  head.position.set(0, 0.5, 0.06);
   hips.add(head);
   const hd = part(G.oHead, skin);
-  hd.scale.set(1.15, 1, 1.05);
+  hd.scale.set(1.5, 1.35, 1.4);
   head.add(hd);
   for (const s of [-1, 1]) {
-    head.add(part(G.gEye, eyeM, s * 0.035, 0.02, 0.085, false));
-    const t = part(G.tusk, bone, s * 0.04, -0.045, 0.075, false);
+    const eye = part(G.gEye, eyeM, s * 0.045, 0.03, 0.118, false);
+    eye.scale.set(1.4, 1.6, 1);
+    head.add(eye);
+    const t = part(G.tusk, bone, s * 0.055, -0.06, 0.1, false);
+    t.scale.setScalar(1.5);
     t.rotation.set(-0.3, 0, -s * 0.3);
     head.add(t);
   }

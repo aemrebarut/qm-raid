@@ -94,7 +94,7 @@ The user names a new agent type and describes its job; the Forge generates synth
 Engine side: `state.unitTypes` = [{id, name, source: "builtin"|"forge", status, progress, stage, model}]; `POST /api/forge/types` {name, description} proxies to the Forge; `POST /api/units` {class: "<typeId>"} spawns a unit of a forged type (only when ready); the engine routes each unit to its bridge (built-in classes to BRIDGE_URL, forge types to FORGE_URL, default http://127.0.0.1:4612) and polls GET /types every 2 s, emitting `forge.updated` {type} events.
 
 ## Proposer API (autopilot implements it; the Forge may later offer a trained commander on the same API)
-- `POST /propose` {units: [{id, class, team, status, pos, history}], targets: [{id, component, severity, kind, status, pos, customers}], memory: "<short text>"} -> {proposals: [{unitId, targetId, reason}]}
+- `POST /propose` {units: [{id, class, team, status, pos, history}], targets: [{id, component, severity, kind, status, pos, customers}], memory: "<short text>"} -> {proposals: [{unitId, targetId, reason}]}. `history` = [{targetId, component}], most recent last, at most 10; `memory` = the last 5 memory summaries joined with newlines. Tool names containing `gbrain` (for example `mcp__gbrain__put_page`) count as GBrain calls. `vetoDeadline` is epoch ms; `adjust` applies the change and activates at once.
 - `GET /health`
 
 ## Veto log (data/vetoes.jsonl, written by the engine, read by raid-river)

@@ -203,12 +203,17 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
 }
 
 // Per-order timing: send = POST /send received, queued = QM accepted the turn, first = first activity, terminal = reply/error.
+const clock = (ms: number): string => {
+  const d = new Date(ms);
+  return `${d.toTimeString().slice(0, 8)}.${String(d.getMilliseconds()).padStart(3, "0")}`; // local time, like the milestones
+};
+
 function logTiming(u: Unit, s: Send): void {
   const t = s.t!;
   const terminal = Date.now();
   const rel = (x?: number) => (x ? `+${((x - t.send) / 1000).toFixed(1)}s` : "-");
   console.log(
-    `[qm-bridge] timing unit=${u.id} order=${s.orderId ?? "-"} depth=${t.depth} send=${new Date(t.send).toISOString().slice(11, 23)} ` +
+    `[qm-bridge] timing unit=${u.id} order=${s.orderId ?? "-"} depth=${t.depth} send=${clock(t.send)} ` +
       `queued=${rel(t.queued)} first=${rel(t.first)} terminal=${rel(terminal)}`,
   );
   try {

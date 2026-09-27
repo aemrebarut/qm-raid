@@ -693,14 +693,14 @@ async function autopilotTick(): Promise<void> {
       logOnce("proposer", `proposer unavailable at ${PROPOSER_URL} (status ${res.status})`);
       return;
     }
-    const used = new Set<string>();
+    // Re-check against the live world: orders may have been given while the proposer was thinking.
+    const busy = new Set(S().orders.filter((o) => o.status === "active" || o.status === "proposed").map((o) => o.targetId));
     for (const p of res.data!.proposals!) {
       const u = p && typeof p.unitId === "string" ? unitById(p.unitId) : undefined;
       const t = p && typeof p.targetId === "string" ? targetById(p.targetId) : undefined;
-      // Re-check: the world may have changed while the proposer was thinking.
-      if (!u || !t || u.status !== "idle" || u.orderId || !units.includes(u) || used.has(t.id) || taken.has(t.id) || t.status === "resolved") continue;
+      if (!u || !t || u.status !== "idle" || u.orderId || !units.includes(u) || busy.has(t.id) || t.status !== "open") continue;
       if (!S().teams.some((tm) => tm.autopilot && tm.members.includes(u.id))) continue;
-      used.add(t.id);
+      busy.add(t.id);
       const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "proposed", source: "autopilot", vetoDeadline: Date.now() + VETO_WINDOW_MS, reply: null };
       S().orders.push(o);
       proposals.set(o.id, { proposal: { unitId: u.id, targetId: t.id, reason: String(p.reason ?? "") }, context });

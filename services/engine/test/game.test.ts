@@ -4,8 +4,11 @@ import type { Order } from "../../../contract/types.ts";
 
 // Bridge and brain calls succeed without a network; /propose answers with `proposeAnswer`.
 let proposeAnswer: unknown = { proposals: [] };
-globalThis.fetch = (async (url: string) =>
-  new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 })) as unknown as typeof fetch;
+let proposeGate: Promise<void> | null = null; // when set, /propose waits for it (a slow proposer)
+globalThis.fetch = (async (url: string) => {
+  if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
+  return new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 });
+}) as unknown as typeof fetch;
 const VETO = `/tmp/engine-test-vetoes-${process.pid}.jsonl`;
 process.env.VETO_LOG = VETO;
 
@@ -126,4 +129,22 @@ test("autopilot proposes, and go / adjust / cancel / expiry each resolve and log
 test("a plain gbrain search naming a component recalls its page", () => {
   onBridgeEvent({ type: "activity", unitId: "u6", kind: "tool", text: "s", tool: "gbrain.search", args: { query: "billing retries" } });
   expect(store.state.memory.recent.at(-1)!.slugs).toEqual(["components/billing"]);
+});
+
+test("a proposal for a target that got a manual order while the proposer was thinking is dropped", async () => {
+  patchTeam(1, { autopilot: true });
+  let release!: () => void;
+  proposeGate = new Promise<void>((r) => { release = r; });
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t101", reason: "sev 3" }, { unitId: "u2", targetId: "t104", reason: "sev 3" }] };
+  const pending = autopilotTick();
+  await Bun.sleep(10);
+  const manual = orderFor(["u4"], "t101");
+  release();
+  await pending;
+  proposeGate = null;
+  proposeAnswer = { proposals: [] };
+  const onT101 = store.state.orders.filter((o) => o.targetId === "t101" && (o.status === "active" || o.status === "proposed"));
+  expect(onT101.map((o) => o.id)).toEqual([manual.id]);
+  expect(unit("u1").status).toBe("idle");
+  expect(store.state.orders.find((o) => o.unitId === "u2")?.status).toBe("proposed");
 });

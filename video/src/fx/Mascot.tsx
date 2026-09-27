@@ -60,7 +60,7 @@ const Face: React.FC<{ mood: Mood; f: number }> = ({ mood, f }) => {
   );
 };
 
-export const Mascot: React.FC<MascotProps> = ({ from, duration = 60, mood = "cheer", corner = "bl", say, size = 260 }) => {
+export const Mascot: React.FC<MascotProps> = ({ from, duration = 60, mood = "cheer", corner = "bl", say, size = 300 }) => {
   const f = useLocal(from, duration);
   const pop = usePop(f ?? 0, 0, 10, 200);
   const bubble = usePop(f ?? 0, 8, 11, 220);
@@ -68,7 +68,8 @@ export const Mascot: React.FC<MascotProps> = ({ from, duration = 60, mood = "che
   const left = corner.endsWith("l");
   const top = corner.startsWith("t");
   const hop = mood === "cheer" ? -Math.abs(Math.sin(f / 4)) * 22 : mood === "shock" ? (f < 10 ? -Math.sin(f / 1.5) * 10 : 0) : Math.sin(f / 8) * 5;
-  const armUp = mood === "cheer" ? -130 + Math.sin(f / 3) * 15 : mood === "shock" ? -150 : mood === "think" ? -70 : -20;
+  // Staff angle: 0 is straight up (raised), positive tilts it outward and down.
+  const armUp = mood === "cheer" ? -8 + Math.sin(f / 3) * 18 : mood === "shock" ? 55 : mood === "think" ? 18 : 30;
   const slide = interpolate(pop, [0, 1], [left ? -size : size, 0]);
   const scale = size / 260;
   return (
@@ -110,9 +111,19 @@ export const Mascot: React.FC<MascotProps> = ({ from, duration = 60, mood = "che
             </g>
           </g>
           {mood === "think" ? <text x={70} y={-120} fontFamily={HEAD} fontWeight={900} fontSize={44} fill={FX.ink} stroke={O} strokeWidth={3}>{".".repeat(1 + (Math.floor(f / 8) % 3))}</text> : null}
-          {mood === "shock" ? <text x={62} y={-110} fontFamily={HEAD} fontWeight={900} fontSize={70} fill={FX.danger} stroke={O} strokeWidth={4} transform="scale(-1 1) translate(-190 0)">!?</text> : null}
         </svg>
       </div>
+      {mood === "shock" ? (
+        <div
+          style={{
+            position: "absolute", [left ? "left" : "right"]: 40 + 150 * scale, [top ? "top" : "bottom"]: 30 + 205 * scale,
+            transform: `rotate(${left ? 12 : -12}deg) scale(${bubble})`, fontFamily: HEAD, fontWeight: 900, fontSize: 84 * scale,
+            color: FX.danger, WebkitTextStroke: `5px ${O}`, paintOrder: "stroke fill", textShadow: `0 5px 0 ${O}`,
+          }}
+        >
+          !?
+        </div>
+      ) : null}
       {say ? (
         <div
           style={{

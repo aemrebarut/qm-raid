@@ -9,7 +9,7 @@ Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, 
 
 ## Instances (Analyst, 15:07)
 - 4610 = shared engine on real QM (`BRIDGE_URL=http://127.0.0.1:4614`), run by raid-eng-impl, for the board, one-order milestone checks and the demo. Autopilot OFF by default for every team, also after reset.
-- 4618 = test engine on the mock (`PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 VETO_LOG=/tmp/engplan/vetoes-test.jsonl BRAIN_RESET=0 bun --watch src/index.ts`), run by raid-eng-plan. Every automated check and review uses 4618, never 4610. `BRAIN_RESET=0` makes its /api/reset skip brain /reset so tests never wipe the shared game brain.
+- 4618 = test engine on the mock (`PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 VETO_LOG=/tmp/engplan/vetoes-test.jsonl BRAIN_RESET=0 bun --watch src/index.ts`), run by raid-eng-plan. Every automated check and review uses 4618, never 4610. `BRAIN_RESET=0` makes its /api/reset skip brain /reset so tests never wipe the shared game brain. Live test runs on 4618 hold the lock: `/tmp/engplan/with4618 <agent-name> <command...>` (one runner at a time).
 
 ## Team decisions (binding inside the team; contract questions go to the Analyst via the lead)
 - Events: emit exactly the `EngineEvent` union from contract/types.ts (commit ca1a93d); type `emit` against it so tsc catches drift. Envelope `{seq, ts: epoch ms, type, ...payload}`; `seq` increments per engine process. `forge.updated` carries `{unitType}`. SSE: send `state.snapshot` first, then a `: ping` comment every 15 s.

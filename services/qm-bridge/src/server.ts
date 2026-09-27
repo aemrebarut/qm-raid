@@ -34,16 +34,20 @@ const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
 // can be tried on test units while the demo units stay on plan A.
 const SOUL_FLAG = process.env.LOADOUT_SOUL ?? "";
 const soulFor = (id: string): boolean => SOUL_FLAG === "1" || (SOUL_FLAG !== "" && SOUL_FLAG !== "0" && id.startsWith(SOUL_FLAG));
-const ROUND_MARKER = "New round: the board was reset. Recall from GBrain before each order. Reply with one short line.";
+// After a reset (DELETE then POST of the same id) the unit's next order opens with this line; no separate turn, so a
+// reset never starts a burst of marker turns against QM's concurrent-run cap.
+const roundLine = (at: number): string => `New round (engine reset at ${new Date(at).toTimeString().slice(0, 5)}).`;
 
 interface Send extends SendRequest {
   intro?: boolean;
   soul?: boolean; // plan B SOUL write: applied only when the run shows HTTP 200
+  round?: string; // "New round" first line, moved here from the unit at dispatch (survives a crash re-send)
   key?: string; // idempotency key, persisted, so retries and post-crash re-sends never start a second run
   t?: { send: number; depth: number; queued?: number; first?: number }; // per-order timing (epoch ms)
 }
 interface Unit extends SpawnRequest {
   loadout?: Loadout;
+  roundMarker?: string; // pending "New round" line for the next order
   scopeId?: string; // plan B: group:web-project-<id>
   threadRef: string;
   sessionId: string | null;
@@ -163,7 +167,7 @@ function header(u: Unit, s: Send): string {
     u.team != null && `team ${u.team}`,
   ].filter(Boolean);
   // Standing orders and loadout are restated on every order, so they hold whatever QM keeps as its session prompt.
-  return [`[${tags.join(" | ")}]`, ...loadoutLines(u.loadout), s.text].join("\n");
+  return [...(s.round ? [s.round] : []), `[${tags.join(" | ")}]`, ...loadoutLines(u.loadout), s.text].join("\n");
 }
 
 const warned = new Set<string>();
@@ -196,6 +200,10 @@ function enqueue(u: Unit, s: Send): void {
 /** Start a send as the unit's active run; rejects if QM does not accept the turn. */
 async function begin(u: Unit, s: Send): Promise<void> {
   s.key ??= `raid-${crypto.randomUUID()}`;
+  if (!s.intro && u.roundMarker) {
+    s.round = u.roundMarker;
+    delete u.roundMarker;
+  }
   u.active = { runId: "", send: s };
   if (alive(u)) saveUnits(); // persist key + active marker before QM sees the turn (crash-safe, no double execution)
   const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u, s));
@@ -503,7 +511,7 @@ async function spawn(req: Request): Promise<Response> {
     if (!u.sessionId) {
       await begin(u, { text: introText(u), intro: true }); // new conversation: intro turn creates it
     } else if (retired.has(u.id)) {
-      await begin(u, { text: ROUND_MARKER, intro: true }); // back after a reset: mark the new round
+      u.roundMarker = roundLine(Date.now()); // back after a reset: the next order opens with the round line
     }
     retired.delete(u.id);
     saveUnits();

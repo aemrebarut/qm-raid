@@ -218,6 +218,59 @@ export class Fx {
     this.add({ t: 0, dur, update: (k) => { s.material.rotation = Math.sin(k * Math.PI * 3) * 0.35; }, done: () => {} });
   }
 
+  /** Ground portal for a newly spawned issue: cracks run out, a dark rift opens with a violet glow, dust and sparks. */
+  portal(p: THREE.Vector3, color: THREE.ColorRepresentation = "#9a5cff", dur = 1.8) {
+    const g = new THREE.Group();
+    g.position.copy(p).setY(0.09);
+    const rift = new THREE.Mesh(new THREE.CircleGeometry(1, 28), new THREE.MeshBasicMaterial({ color: "#120a1c", transparent: true, depthWrite: false }));
+    const rim = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    for (const m of [rift, rim]) m.rotation.x = -Math.PI / 2;
+    rim.position.y = 0.01;
+    g.add(rift, rim);
+    const crackMat = new THREE.MeshBasicMaterial({ color: "#1b1208", transparent: true, depthWrite: false });
+    const crackGeo = new THREE.BoxGeometry(0.06, 0.01, 1);
+    const cracks: THREE.Mesh[] = [];
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + Math.sin(i * 12.9) * 0.3;
+      const c = new THREE.Mesh(crackGeo, crackMat);
+      c.rotation.y = a;
+      c.userData.a = a;
+      c.userData.len = 0.9 + ((i * 37) % 10) / 20;
+      cracks.push(c);
+      g.add(c);
+    }
+    const glow = glowSprite(color, 2);
+    glow.position.y = 0.3;
+    g.add(glow);
+    this.group.add(g);
+    this.sparks.emit(p.clone().setY(0.2), 26, { color, speed: 1.4, life: 0.9, gravity: -0.6, up: 2.2 });
+    this.sparks.emit(p.clone().setY(0.15), 18, { color: "#a08660", speed: 1.8, life: 0.7, gravity: 3, up: 1 });
+    this.add({
+      t: 0, dur,
+      update: (k) => {
+        const open = Math.min(1, k / 0.35);
+        const fade = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
+        for (const c of cracks) {
+          const len = c.userData.len * open;
+          c.scale.set(1, 1, len);
+          c.position.set(Math.sin(c.userData.a) * len / 2, 0.005, Math.cos(c.userData.a) * len / 2);
+        }
+        crackMat.opacity = 0.85 * fade;
+        rift.scale.setScalar(0.1 + 0.65 * open);
+        (rift.material as THREE.MeshBasicMaterial).opacity = 0.8 * fade;
+        rim.scale.setScalar(0.15 + 0.75 * open + k * 0.2);
+        (rim.material as THREE.MeshBasicMaterial).opacity = fade;
+        glow.material.opacity = fade * (0.7 + Math.sin(k * 30) * 0.15);
+      },
+      done: () => {
+        this.group.remove(g);
+        rift.geometry.dispose(); (rift.material as THREE.Material).dispose();
+        rim.geometry.dispose(); (rim.material as THREE.Material).dispose();
+        crackGeo.dispose(); crackMat.dispose(); glow.material.dispose();
+      },
+    });
+  }
+
   /** Expanding flat ring and glow at a point. */
   burst(p: THREE.Vector3, color: THREE.ColorRepresentation, size = 1.2, dur = 0.8) {
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 40), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));

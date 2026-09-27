@@ -55,6 +55,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   let layout = "";
   let userCamera = false; // once the user pans or zooms, stop auto framing
   const justSpawned = new Set<string>(); // ids from unit.spawned events, consumed by reconcile
+  const spawnedTargets = new Set<string>(); // ids from target.spawned events: the camp rises out of a portal
 
   // ---- reconcile store -> meshes ----
   function teamColor(s: State, team: number | null) {
@@ -83,7 +84,17 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const t of s.targets) {
       seenT.add(t.id);
       let v = targets.get(t.id);
-      if (!v) { v = new TargetView(t); targets.set(t.id, v); targetsG.add(v.group); }
+      if (!v) {
+        v = new TargetView(t);
+        targets.set(t.id, v);
+        targetsG.add(v.group);
+        if (spawnedTargets.delete(t.id)) {
+          const p = v.group.position.clone();
+          v.rise();
+          fx.portal(p);
+          fx.after(0.9, () => fx.text(p.clone().setY(1.5), `New issue ${t.issue}`, { color: "#f0dcff", bg: null, height: 0.34, dur: 2.4 }));
+        }
+      }
       else {
         const was = v.target.status;
         v.update(t);
@@ -185,6 +196,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     if (ev.type === "memory.recall") recallFx(ev.unitId, ev.slugs ?? [], ev.summary);
     else if (ev.type === "memory.remember") rememberFx(ev.unitId, ev.slug, ev.summary);
     else if (ev.type === "unit.spawned") justSpawned.add(ev.unit.id); // reconcile walks it out of its building
+    else if (ev.type === "target.spawned") spawnedTargets.add(ev.target.id);
     else if (ev.type === "workflow.handoff") handoffFx(ev.fromUnitId, ev.toUnitId, ev.summary);
   }));
 

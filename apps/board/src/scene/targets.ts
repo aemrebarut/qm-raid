@@ -21,6 +21,7 @@ const G = {
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 const GREY = "#8c8a85";
+const RISE = 1.6;
 
 export class TargetView {
   readonly group = new THREE.Group();
@@ -39,6 +40,7 @@ export class TargetView {
   private flash = 0;
   private readonly puffs: THREE.Mesh[] = [];
   private titleTag: THREE.Sprite | null = null;
+  private riseT = 0; // seconds left of the spawn rise
 
   constructor(t: Target) {
     this.id = t.id;
@@ -171,17 +173,30 @@ export class TargetView {
       this.titleTag.material.dispose();
       this.titleTag = null;
     }
-    this.tag.visible = !this.titleTag;
+    this.tag.visible = !this.titleTag && this.riseT === 0;
     this.ring.visible = this.selected || this.hovered;
     const m = this.ring.material as THREE.MeshBasicMaterial;
     m.color.set(this.selected ? "#f2e27a" : "#ffffff");
     m.opacity = this.selected ? 0.95 : 0.45;
   }
 
+  /** Newly spawned issue: the camp rises out of the ground (with the scene's portal effect). */
+  rise() { this.riseT = RISE; this.tag.visible = false; this.group.position.y = -0.9; this.group.scale.setScalar(0.3); }
+
   /** Order acknowledged: flash the target green (AoE style). */
   orderFlash() { this.flash = 1.2; }
 
   tick(t: number, dt: number) {
+    if (this.riseT > 0) {
+      this.riseT = Math.max(0, this.riseT - dt);
+      const k = 1 - this.riseT / RISE;
+      const up = Math.min(1, k / 0.6);
+      this.group.position.y = -0.9 * Math.pow(1 - up, 2);
+      // Ease out with a little overshoot once it is above ground
+      const s = k < 0.6 ? 0.3 + 0.7 * up : 1 + Math.sin(((k - 0.6) / 0.4) * Math.PI) * 0.12;
+      this.group.scale.setScalar(s);
+      if (this.riseT === 0) { this.group.position.y = 0; this.group.scale.setScalar(1); this.tag.visible = !this.titleTag; }
+    }
     const st = this.target.status;
     const s = this.size;
     if (st === "resolved") {

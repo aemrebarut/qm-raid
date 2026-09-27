@@ -44,7 +44,7 @@ export function fixtureState(): State {
     orders: [
       { id: "o1", unitId: "u1", targetId: "t12", status: "active", source: "user", vetoDeadline: null, reply: null },
       { id: "o2", unitId: "u4", targetId: "t51", status: "active", source: "autopilot", vetoDeadline: null, reply: null },
-      { id: "o3", unitId: "u5", targetId: "t31", status: "proposed", source: "autopilot", vetoDeadline: t0 + 15000, reply: null },
+      { id: "o3", unitId: "u5", targetId: "t31", status: "proposed", source: "autopilot", vetoDeadline: Date.now() + 15000, reply: null },
     ],
     unitTypes: [
       { id: "knight", name: "Knight", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-astra" },

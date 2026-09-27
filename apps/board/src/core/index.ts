@@ -7,3 +7,4 @@ export { connectEngine } from "./sse";
 export { fixtureState } from "./fixture";
 export { commandTarget, commandUnit, linkSelection } from "./actions";
 export { installKeys } from "./keys";
+export { devTools } from "./dev";

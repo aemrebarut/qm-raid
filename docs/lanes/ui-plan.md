@@ -66,3 +66,14 @@ scene: lighting, shadows, performance (instancing if needed, 60 fps with 30 unit
 
 ## Review (raid-ui-rev)
 Per commit: typecheck, `bun test test/`, dev server boots, no console errors with the fixture and with the engine, contract field names match `contract/types.ts`, no writes outside the author's folder, no secrets.
+
+## W1 (16:00, 4619 on the mock) and W2 (16:20, real QM on 4611): team workflows
+Spec: docs/CONTRACT.md "Team workflows", docs/lanes/flow.md. Core (done, 157675c): `api.setWorkflow(teamId, {preset} | {workflow})`, `api.clearWorkflow(teamId)`, `state.workflowRuns`, `store.run(teamId)`, feed kind "handoff", fixture trio on team 1 with a running run, `raid.dev.workflow(teamId)` and `raid.dev.handoff(from, to)`.
+raid-ui-hud
+14. Team view in the side panel when the selection is exactly one team (chip name or digit key): Formation with a preset picker (solo, pair, trio, fanout), role slots with member dropdowns (custom graph), a small node-link diagram with live node state from `store.run(teamId)` (active, done, changes, approved), loops count, Clear. Check: picking trio on 4619 calls PUT and the diagram shows planner, implementer, reviewer.
+15. Orders bar shows running runs (team, target, active role, loops) with Cancel (cancels the run's active orders). Check: right-click a camp with the team selected starts a run and the card follows it to done.
+raid-ui-scene
+14. Role badges above workflow units; a faint team-coloured link line along the graph edges during a run, active node highlighted.
+15. Handoff animation on `workflow.handoff`: a scroll flies in an arc from unit to unit, summary float over the receiver (effect from raid-art-fx).
+raid-ui-plan
+7. W1 check on 4619: trio on a team, order the team, see planner to implementer to reviewer, one changes loop, approved, target resolved; TEST.md "W1 ui". 8. W2: one trio run on real QM through 4611 with the Analyst's go; TEST.md "W2 ui".

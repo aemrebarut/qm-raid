@@ -26,7 +26,7 @@ const G = {
   staff: new THREE.CylinderGeometry(0.016, 0.02, 0.78, 5),
   gem: new THREE.OctahedronGeometry(0.045, 0),
   ring: new THREE.RingGeometry(0.26, 0.32, 28),
-  hit: new THREE.CylinderGeometry(0.3, 0.3, 0.95, 8),
+  hit: new THREE.CylinderGeometry(0.42, 0.42, 1.1, 8), // generous pick volume, units are small
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 
@@ -62,6 +62,13 @@ export class UnitView {
   faceTo: THREE.Vector3 | null = null;
   /** Staff raised (recall / remember), 0..1, eased. */
   private raise = 0;
+  /** Seconds left of a raise forced by a memory event, and which kind. */
+  private raiseHold = 0;
+  private raiseKind: "recall" | "remember" = "recall";
+  private lastChop = 0;
+  private teamMat: THREE.MeshLambertMaterial | null = null;
+  /** Called at the peak of each working strike with the impact point (sparks). */
+  onStrike: ((p: THREE.Vector3) => void) | null = null;
 
   constructor(unit: Unit, teamColor: string | null) {
     this.id = unit.id;
@@ -78,7 +85,7 @@ export class UnitView {
     this.selRing.position.y = 0.025;
     this.selRing.visible = false;
     this.group.add(this.selRing);
-    this.group.add(mesh(G.hit, hitMat, 0, 0.47, 0, false));
+    this.group.add(mesh(G.hit, hitMat, 0, 0.55, 0, false));
 
     this.build(unit.class, teamColor);
     this.dest.copy(this.worldOf(unit));
@@ -93,6 +100,7 @@ export class UnitView {
 
   private build(cls: string, teamColor: string | null) {
     const team = new THREE.MeshLambertMaterial({ color: teamColor ?? NEUTRAL, flatShading: true });
+    this.teamMat = team;
     const dark = mat("#3b2f25"), skin = mat(SKIN), leather = mat("#6b4a2b"), metal = mat("#b3b8bf");
     const scale = cls === "scout" ? 0.88 : cls === "knight" ? 1.06 : 1;
     this.root.scale.setScalar(scale);
@@ -188,6 +196,12 @@ export class UnitView {
     }
   }
 
+  /** Raise the staff for a memory event even if the engine status lags behind. */
+  flashRaise(kind: "recall" | "remember", secs = 2.2) {
+    this.raiseKind = kind;
+    this.raiseHold = secs;
+  }
+
   setSelected(on: boolean) { this.selected = on; this.syncDecor(); }
   setHovered(on: boolean) { this.hovered = on; this.syncDecor(); }
 
@@ -244,7 +258,8 @@ export class UnitView {
     this.root.position.y = walking ? Math.abs(Math.sin(this.walkPhase)) * 0.04 : 0;
 
     // Staff pose by status
-    const raised = status === "recalling" || status === "remembering" ? 1 : 0;
+    this.raiseHold = Math.max(0, this.raiseHold - dt);
+    const raised = status === "recalling" || status === "remembering" || this.raiseHold > 0 ? 1 : 0;
     this.raise += (raised - this.raise) * Math.min(1, dt * 8);
     let staffX = -0.15 + (walking ? Math.sin(this.walkPhase) * 0.12 : 0);
     let staffZ = 0;
@@ -252,6 +267,12 @@ export class UnitView {
       // Chop: quick strike, slow recovery
       const c = (t * 1.8 + (hash(this.id) % 100) / 100) % 1;
       const strike = c < 0.25 ? c / 0.25 : 1 - (c - 0.25) / 0.75;
+      if (this.lastChop < 0.25 && c >= 0.25 && this.onStrike) {
+        // Impact point: in front of the unit, toward its target
+        const dir = new THREE.Vector3(Math.sin(this.facing), 0, Math.cos(this.facing));
+        this.onStrike(pos.clone().addScaledVector(dir, 0.45 * UNIT_SCALE).setY(0.25));
+      }
+      this.lastChop = c;
       staffX = 0.3 + strike * 1.1;
       this.root.rotation.x = strike * 0.12;
     } else {
@@ -268,8 +289,9 @@ export class UnitView {
 
     // Gem colour: blue when recalling, gold when remembering, soft blue otherwise
     const e = this.gemMat.emissive;
-    if (status === "remembering") e.setRGB(0.9, 0.62, 0.1);
-    else if (status === "recalling") e.setRGB(0.25 + 0.2 * Math.sin(t * 8), 0.6, 1);
+    const kind = this.raiseHold > 0 ? this.raiseKind : status === "remembering" ? "remember" : status === "recalling" ? "recall" : null;
+    if (kind === "remember") e.setRGB(0.9, 0.62, 0.1);
+    else if (kind === "recall") e.setRGB(0.25 + 0.2 * Math.sin(t * 8), 0.6, 1);
     else if (status === "error") e.setRGB(0.8, 0.1, 0.1);
     else e.copy(STAFF_GEM_IDLE);
 
@@ -277,6 +299,11 @@ export class UnitView {
     if (!walking && status === "idle") this.root.scale.y = this.root.scale.x * (1 + Math.sin(t * 2 + this.jitter.x * 20) * 0.02);
     else this.root.scale.y = this.root.scale.x;
     this.root.rotation.z = status === "error" ? Math.sin(t * 6) * 0.08 : 0;
+    // Error: the tunic flashes red
+    if (this.teamMat) {
+      if (status === "error") this.teamMat.emissive.setRGB(0.5 + 0.5 * Math.sin(t * 10), 0, 0);
+      else if (this.teamMat.emissive.r !== 0) this.teamMat.emissive.setRGB(0, 0, 0);
+    }
 
     if (this.bubble) this.bubble.position.y = 0.95 + Math.sin(t * 3) * 0.03;
   }

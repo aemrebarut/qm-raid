@@ -17,6 +17,7 @@ const G = {
   flagPole: new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4),
   flag: new THREE.BoxGeometry(0.3, 0.2, 0.02),
   hit: new THREE.CylinderGeometry(0.45, 0.45, 1, 8),
+  puff: new THREE.IcosahedronGeometry(0.13, 0),
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 const GREY = "#8c8a85";
@@ -36,6 +37,7 @@ export class TargetView {
   private selected = false;
   private hovered = false;
   private flash = 0;
+  private readonly puffs: THREE.Mesh[] = [];
 
   constructor(t: Target) {
     this.id = t.id;
@@ -110,6 +112,15 @@ export class TargetView {
     this.flag.visible = false;
     this.group.add(this.flag);
 
+    // Battle smoke while engaged
+    for (let i = 0; i < 5; i++) {
+      const m = new THREE.Mesh(G.puff, new THREE.MeshLambertMaterial({ color: "#5a5550", transparent: true, opacity: 0, depthWrite: false }));
+      m.userData.phase = i / 5;
+      m.visible = false;
+      this.puffs.push(m);
+      this.group.add(m);
+    }
+
     this.tag = makeLabel(t.issue, { height: 0.24, font: 36 });
     this.tag.position.y = 0.8 * this.size + 0.25;
     this.group.add(this.tag);
@@ -123,6 +134,12 @@ export class TargetView {
     const resolved = t.status === "resolved";
     this.flag.visible = resolved;
     this.engagedRing.visible = t.status === "engaged";
+    for (const p of this.puffs) p.visible = t.status === "engaged";
+    if (this.skin.transparent !== resolved) {
+      this.skin.transparent = resolved;
+      this.skin.opacity = resolved ? 0.55 : 1;
+      this.skin.needsUpdate = true;
+    }
     if (t.kind === "feature") {
       const [c, e] = CRYSTAL_COLORS[t.severity] ?? CRYSTAL_COLORS[1];
       this.skin.color.set(resolved ? GREY : c);
@@ -166,6 +183,15 @@ export class TargetView {
       this.engagedRing.scale.setScalar(s * (0.8 + p * 0.6));
       (this.engagedRing.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - p);
     }
+    if (st === "engaged") {
+      for (const m of this.puffs) {
+        const ph = (t * 0.45 + m.userData.phase) % 1;
+        const a = m.userData.phase * Math.PI * 2;
+        m.position.set(Math.cos(a) * 0.25 * s + ph * 0.2, 0.3 + ph * 1.3 * s, Math.sin(a) * 0.25 * s - ph * 0.1);
+        m.scale.setScalar((0.6 + ph * 1.8) * s);
+        (m.material as THREE.MeshLambertMaterial).opacity = 0.55 * (1 - ph) * Math.min(1, ph * 5);
+      }
+    }
     if (this.flash > 0) {
       this.flash = Math.max(0, this.flash - dt);
       const on = Math.floor(this.flash * 8) % 2 === 0;
@@ -177,6 +203,7 @@ export class TargetView {
 
   dispose() {
     this.skin.dispose();
+    for (const p of this.puffs) (p.material as THREE.Material).dispose();
     this.tag.material.map?.dispose();
     this.tag.material.dispose();
     (this.ring.material as THREE.Material).dispose();

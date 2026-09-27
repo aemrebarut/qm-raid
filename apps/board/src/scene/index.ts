@@ -8,6 +8,7 @@ import { buildZones } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView } from "./units";
 import { TargetView } from "./targets";
+import { Fx } from "./fx";
 import { disposeTree, tileToWorld } from "./util";
 
 export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
@@ -41,8 +42,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const unitsG = new THREE.Group();
   const targetsG = new THREE.Group();
   const buildingsG = new THREE.Group();
-  const fx = new THREE.Group();
-  scene.add(world, buildingsG, targetsG, unitsG, fx);
+  const fx = new Fx();
+  scene.add(world, buildingsG, targetsG, unitsG, fx.group);
 
   const units = new Map<string, UnitView>();
   const targets = new Map<string, TargetView>();
@@ -83,7 +84,12 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       seenU.add(u.id);
       const color = teamColor(s, u.team);
       let v = units.get(u.id);
-      if (!v) { v = new UnitView(u, color); units.set(u.id, v); unitsG.add(v.group); }
+      if (!v) {
+        v = new UnitView(u, color);
+        v.onStrike = (p) => fx.sparksAt(p);
+        units.set(u.id, v);
+        unitsG.add(v.group);
+      }
       else v.update(u, color);
       // Face the target of the current order while working
       const order = u.orderId ? s.orders.find((o) => o.id === u.orderId) : undefined;
@@ -119,9 +125,49 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   offs.push(bus.on("hover", () => syncSelection()));
   offs.push(bus.on("focusTile", ({ x, y }) => iso.focus(x + 0.5, y + 0.5)));
   offs.push(store.onEvent((ev) => {
-    if (ev.type === "memory.remember") buildings.forEach((b) => b.kind === "gbrain" && b.pulse());
-    if (ev.type === "unit.spawned") buildings.forEach((b) => b.kind !== "gbrain" && b.pulse());
+    if (ev.type === "memory.recall") recallFx(ev.unitId, ev.slugs ?? [], ev.summary);
+    else if (ev.type === "memory.remember") rememberFx(ev.unitId, ev.slug, ev.summary);
+    else if (ev.type === "unit.spawned") buildings.forEach((b) => b.kind !== "gbrain" && b.pulse());
   }));
+
+  // ---- GBrain memory animations ----
+  const library = () => [...buildings.values()].find((b) => b.kind === "gbrain");
+  const libOrb = () => {
+    const lib = library();
+    return lib ? lib.anchor.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(11.5, 3.4, 11.5);
+  };
+  const shortSlug = (s: string) => (s.length > 34 ? s.slice(0, 33) + "\u2026" : s);
+
+  /** Recall: blue beam from the Library to the unit's staff, pages fly down to it. */
+  function recallFx(unitId: string, slugs: string[], summary: string) {
+    const v = units.get(unitId);
+    if (!v) return;
+    const tip = () => v.staffTip();
+    v.flashRaise("recall");
+    fx.beam(libOrb, tip, "#4aa3ff", 2.4, 0.13);
+    const n = Math.max(1, Math.min(3, slugs.length));
+    for (let i = 0; i < n; i++) {
+      fx.page(libOrb, tip, 0.15 + i * 0.3, i === 0 ? () => fx.burst(tip(), "#6fb6ff", 0.9, 0.6) : undefined);
+    }
+    const label = slugs[0] ? shortSlug(slugs[0]) + (slugs.length > 1 ? ` +${slugs.length - 1}` : "") : shortSlug(summary || "recall");
+    fx.after(0.9, () => fx.text(() => tip().add(new THREE.Vector3(0, 0.35, 0)), label, { color: "#dcefff", bg: null, height: 0.26, dur: 2.6 }));
+  }
+
+  /** Remember: a gold orb flies from the unit into the Library, which pulses; the page count ticks. */
+  function rememberFx(unitId: string, slug: string, _summary: string) {
+    const v = units.get(unitId);
+    const lib = library();
+    if (!v) { lib?.pulse(); return; }
+    v.flashRaise("remember");
+    const from = v.staffTip();
+    fx.burst(from, "#ffc94a", 0.6, 0.5);
+    fx.orb(from, libOrb, () => {
+      lib?.pulse();
+      fx.burst(libOrb(), "#ffd45a", 2.2, 1.0);
+      fx.text(() => libOrb().add(new THREE.Vector3(0, 0.4, 0)), "+1 page", { color: "#ffe9a8", bg: null, height: 0.34, dur: 2 });
+      if (slug) fx.text(() => libOrb().add(new THREE.Vector3(0, 0.85, 0)), shortSlug(slug), { color: "#fff6d8", bg: null, height: 0.22, dur: 2.4 });
+    });
+  }
 
   // ---- picking ----
   const ray = new THREE.Raycaster();
@@ -244,9 +290,11 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   };
   const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
   const onBlur = () => keys.clear();
+  const onFocusIn = (e: FocusEvent) => { if (typing(e.target)) keys.clear(); };
   window.addEventListener("keydown", onKeyDown);
-  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("keyup", onKeyUp, true); // capture: HUD inputs may stop propagation
   window.addEventListener("blur", onBlur);
+  window.addEventListener("focusin", onFocusIn, true);
 
   // ---- resize and loop ----
   function resize() {
@@ -276,20 +324,22 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const v of units.values()) v.tick(t, dt);
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);
+    fx.tick(dt);
     renderer.render(scene, iso.camera);
   }
   frame();
 
   // Debug handle for review: raid.scene.units, raid.scene.camera
-  (window as any).raidScene = { scene, iso, units, targets, buildings, renderer };
+  (window as any).raidScene = { scene, iso, units, targets, buildings, renderer, fx, recallFx, rememberFx };
 
   return () => {
     cancelAnimationFrame(raf);
     offs.forEach((f) => f());
     ro.disconnect();
     window.removeEventListener("keydown", onKeyDown);
-    window.removeEventListener("keyup", onKeyUp);
+    window.removeEventListener("keyup", onKeyUp, true);
     window.removeEventListener("blur", onBlur);
+    window.removeEventListener("focusin", onFocusIn, true);
     for (const v of units.values()) v.dispose();
     for (const v of targets.values()) v.dispose();
     renderer.dispose();

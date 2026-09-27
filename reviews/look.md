@@ -25,3 +25,14 @@ The 350 ms baseline Library capture was empty with no loading state. After the r
 ### Owner delivery
 
 Findings sent through Herdr default session to raid-look-dir, raid-look-hud, raid-look-panels, and raid-ui-hud. Director owns the shared punch list and screenshots; this log preserves independent evidence and acceptance checks.
+
+## R2 director iteration i1, 2026-09-27 15:29 PDT
+
+Evidence: all ten `docs/shots/look/i1-*.png` at fe9a0a0 visually inspected against the art-direction block in `docs/lanes/look-plan.md`. The director's owner list covers the main style failures in R1. Additional acceptance gaps sent to the director:
+
+1. `i1-workflow.png`: Dismiss paints on a Running card, in addition to Cancel on Done. Treat both as R1 item 2's hidden-state defect; the fix should be scoped to every HUD hidden element.
+2. `i1-target.png`: issue title, kind and status repeat in bottom and side. Apply the unit identity rule to targets too: bottom owns identity; side owns customers, engaged units and report.
+3. `i1-feed.png` and `i1-workflow.png`: every handoff takes two global rows, one sent and one received. Collapse globally to one line (`Ada handed off to Bram`), preserving the separate unit histories.
+4. Only 1512x790 files were in the supplied i1 set. Capture both requested viewport sizes in i2, especially the selected formation and simultaneous proposals states. This is an evidence gap, not a claim that the smaller layout is broken.
+
+No additional blocker beyond R1. First-open Library now visible in persistent evidence; graph hover/resize lifecycle findings remain independently reproduced.

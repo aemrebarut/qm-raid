@@ -621,3 +621,26 @@
 .hud-btn-icon { width: 22px; height: 22px; padding: 0; justify-content: center; }
 .hud-btn-icon .lk-icon { font-size: 13px; }
 .hud-run-card .hud-btn-icon { width: 20px; height: 20px; }
+
+/* Loadout items: name and description left, a switch on the right (native checkbox restyled) */
+.hud-side .ldo-item { grid-template-columns: minmax(0, 1fr) 28px; gap: 2px 12px; align-items: center; padding: 6px 8px; }
+.hud-side .ldo-item input[type="checkbox"] {
+  grid-column: 2; grid-row: 1; justify-self: end; appearance: none; -webkit-appearance: none; margin: 0; cursor: pointer;
+  position: relative; width: 26px; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, .1); border: 1px solid rgba(200, 164, 98, .3);
+  transition: background var(--lk-t) var(--ease), border-color var(--lk-t) var(--ease);
+}
+.hud-side .ldo-item input[type="checkbox"]::after {
+  content: ""; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-2);
+  transition: transform var(--lk-t) var(--ease), background var(--lk-t) var(--ease);
+}
+.hud-side .ldo-item input[type="checkbox"]:checked { background: rgba(217, 164, 65, .35); border-color: var(--gold); }
+.hud-side .ldo-item input[type="checkbox"]:checked::after { transform: translateX(12px); background: var(--gold); box-shadow: 0 0 6px rgba(217, 164, 65, .6); }
+.hud-side .ldo-item input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+.hud-side .ldo-item input[type="checkbox"]:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
+.hud-side .ldo-item .ldo-name { grid-column: 1; grid-row: 1; }
+.hud-side .ldo-item .ldo-desc { grid-column: 1; }
+
+/* Activity tab: the tab is the header; no blank box when the feed is empty */
+.hud-side .hud-tabs:not([hidden]) ~ .hud-section:has(> .hud-feed) > h3 { display: none; }
+.hud-feed { min-height: 0; }
+.hud-feed:empty { display: none; }

@@ -995,19 +995,34 @@
         "from": 3.152,
         "to": 4.652,
         "rate": 1.06,
-        "src": "mock-loadout/loadout.mp4"
+        "src": "mock-loadout/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
       },
       {
         "from": 4.652,
         "to": 8.959,
         "rate": 12,
-        "src": "mock-loadout/loadout.mp4"
+        "src": "mock-loadout/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
       },
       {
         "from": 8.959,
         "to": 10.259,
         "rate": 1.06,
-        "src": "mock-loadout/loadout.mp4"
+        "src": "mock-loadout/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
       }
     ],
     "captions": [
@@ -1262,6 +1277,6 @@
   },
   "hero": {
     "src": "clips/hero.mp4",
-    "from": 0.5
+    "from": 4.447
   }
 }

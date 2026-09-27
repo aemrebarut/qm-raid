@@ -230,7 +230,10 @@ for (const [id, rule] of Object.entries(RULES)) {
 // Command montage: autopilot, then the short loadout edit.
 type P = NonNullable<ReturnType<typeof plan>>;
 const ap = edl.autopilot as P | undefined;
-const lo = edl.loadout as P | undefined;
+const lo0 = edl.loadout as P | undefined;
+// The loadout edit is the side panel: hold a close-up on its orders and skills so the text reads
+// (rev: the full board is too small). Origin at the panel's top right keeps it on screen.
+const lo = lo0 && { ...lo0, segments: lo0.segments.map((g) => ({ ...g, zoom: { s: 1.6, x: 1910, y: 60 } })) };
 if (!ap) delete edl.command;
 if (ap) {
   const off = ap.seconds;

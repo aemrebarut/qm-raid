@@ -337,7 +337,7 @@ function barracks(): Model {
     root.add(f);
   }
 
-  let pulseT = 0;
+  let pulseT = 0, lit = false;
   return {
     object3d: root, anchor: root,
     door: new THREE.Vector3(HX + 0.1, 0, 1.7),
@@ -346,11 +346,11 @@ function barracks(): Model {
       pulseT = Math.max(0, pulseT - dt);
       flags.forEach((f, i) => { f.rotation.x = Math.sin(t * 2.1 + i) * 0.12; f.rotation.y = Math.PI / 2 + Math.sin(t * 1.3 + i * 2) * 0.25; });
       const p = pulseT > 0 ? Math.sin((pulseT / 0.5) * Math.PI) : 0;
-      warm.emissiveIntensity = 0.9 + p * 2;
+      warm.emissiveIntensity = (lit ? 1.6 : 0.9) + p * 2;
       root.scale.y = 1 + p * 0.04;
     },
     pulse() { pulseT = 0.5; },
-    glow(on) { warm.emissiveIntensity = on ? 1.6 : 0.9; },
+    glow(on) { lit = on; },
     setWork() {},
   };
 }

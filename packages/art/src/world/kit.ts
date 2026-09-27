@@ -222,7 +222,7 @@ export function slabRoof(w: number, d: number, h: number, t = 0.07) {
   const ang = Math.atan2(h, half);
   const a = new THREE.BoxGeometry(len, t, d);
   a.translate(-len / 2 + 0.04, 0, 0);
-  a.rotateZ(-ang);
+  a.rotateZ(ang); // outer (left) end goes down to the eave
   a.translate(0, h, 0);
   const b = a.clone();
   b.scale(-1, 1, 1);

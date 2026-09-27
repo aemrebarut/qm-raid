@@ -36,3 +36,10 @@ export async function followProgress(t: Tracked, file: string, deps: { alive: (p
   save();
   console.log(`[forge] type ${t.id} finished: ${t.status} (${t.stage})`);
 }
+
+// Restart: every record goes into the map first, then unfinished ones are re-attached. Attaching can save
+// synchronously (a dead child with an empty log), and a save must never see a partly loaded map.
+export function restoreTypes<T extends Tracked>(records: T[], types: Map<string, T>, attach: (t: T) => void) {
+  for (const t of records) types.set(t.id, t);
+  for (const t of records) if (t.status !== "ready" && t.status !== "failed") attach(t);
+}

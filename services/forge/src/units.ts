@@ -9,16 +9,14 @@ export interface UnitTypeView { id: string; name: string; description: string; s
 interface ForgeUnit { id: string; name: string; typeId: string | null; team: number | null; orderId: string | null; gen: number; chatGen: number }
 interface SendBody { text?: string; orderId?: string; targetId?: string; componentId?: string }
 
-const BRAIN_URL = process.env.BRAIN_URL ?? "http://127.0.0.1:4616";
-
 // Splits a unit answer into its house-style sections; tolerates "**Plan:**", "## Plan:" and content on the next lines.
-const HEAD = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer reply|Remember)\s*\**\s*:\s*\**\s*(.*)$/i;
+const HEAD = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer (?:reply|update)|Remember)\s*\**\s*:\s*\**\s*(.*)$/i;
 export function sections(text: string): Record<string, string> {
   const out: Record<string, string[]> = {};
   let cur: string | null = null;
   for (const line of text.split("\n")) {
     const m = line.match(HEAD);
-    if (m) { cur = m[1].toLowerCase(); out[cur] = m[2] ? [m[2]] : []; }
+    if (m) { cur = m[1].toLowerCase().replace("customer update", "customer reply"); out[cur] = m[2] ? [m[2]] : []; }
     else if (cur) out[cur].push(line);
   }
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.join(" ").replace(/\s+/g, " ").trim()]));
@@ -32,12 +30,22 @@ export function orderFacts(text: string): string {
 }
 
 // A valid reviewer verdict (docs/CONTRACT.md team workflows): APPROVED, or CHANGES with what to change.
-const VERDICT_LINE = /^\W*VERDICT:\s*(APPROVED|CHANGES:\s*\S.*?)\W*$/i;
+const VERDICT_LINE = /^\W*VERDICT:\s*(APPROVED(?:\s*\([^)]*\))?|CHANGES:\s*\S.*?)[\s*_`.]*$/i;
 const verdictOf = (line: string) => { const m = line.trim().match(VERDICT_LINE); return m ? `VERDICT: ${m[1].replace(/^approved$/i, "APPROVED").replace(/^changes:/i, "CHANGES:")}` : null; };
 export const finalVerdict = (text: string) => verdictOf(text.trimEnd().split("\n").pop() ?? "");
 export const lastVerdict = (text: string) => text.split("\n").map(verdictOf).filter(Boolean).pop() ?? null;
 
-export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string>; store: string }) {
+// Workflow orders carry this node's "Role: <role>. <instructions>" line, then "Previous work:" with earlier replies
+// (engine briefText). Only this node's own instructions decide what it must do: a reviewer's VERDICT quoted in
+// previous work does not make an implementer or a herald a reviewer.
+export function roleOf(text: string): { role: string; instructions: string } | null {
+  const own = text.split(/\nPrevious work:/)[0];
+  const m = own.match(/^Role:\s*([^.\n]+)\.\s*(.*)$/m);
+  return m ? { role: m[1].trim().toLowerCase(), instructions: m[2].trim() } : null;
+}
+
+export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string>; store: string; brainUrl?: string }) {
+  const brainUrl = opts.brainUrl ?? process.env.BRAIN_URL ?? "http://127.0.0.1:4616";
   const units = new Map<string, ForgeUnit>();
   // Persisted so a forge restart keeps each unit bound to its type (the engine spawns a unit only once).
   const persist = () => {
@@ -59,7 +67,9 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
 
   function pickType(model?: string, typeId?: string): UnitTypeView | null {
     const ready = opts.types().filter((t) => t.status === "ready");
-    return ready.find((t) => t.id === typeId) ?? ready.find((t) => t.model === model) ?? ready[ready.length - 1] ?? null;
+    // Fallback: the newest River-trained type; a dry-run (smoke) type only if nothing real is ready.
+    const real = ready.filter((t) => t.model && !t.model.startsWith("dry-run:"));
+    return ready.find((t) => t.id === typeId) ?? ready.find((t) => t.model === model) ?? real[real.length - 1] ?? ready[ready.length - 1] ?? null;
   }
 
   function ensure(id: string, b: { name?: string; model?: string; team?: number | null; class?: string; typeId?: string } = {}): ForgeUnit {
@@ -73,7 +83,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
   }
 
   async function brain(path: string, body: unknown): Promise<any> {
-    const r = await fetch(`${BRAIN_URL}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+    const r = await fetch(`${brainUrl}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(8000) });
     if (!r.ok) throw new Error(`brain ${path} ${r.status}`);
     return r.json();
   }
@@ -87,7 +97,12 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     const act = (kind: string, text: string, tool?: string, args?: unknown) => {
       if (live()) emit(tool ? { type: "activity", unitId: u.id, ...oid, kind, text, tool, args } : { type: "activity", unitId: u.id, ...oid, kind, text });
     };
-    const t = opts.types().find((x) => x.id === u.typeId) ?? pickType();
+    let t = opts.types().find((x) => x.id === u.typeId && x.status === "ready") ?? null;
+    if (!t && (t = pickType())) { // its type was deleted from the Forge: rebind to the best ready type and keep it
+      console.log(`[forge] unit ${u.id}: type ${u.typeId ?? "none"} is gone, rebinding to ${t.id}`);
+      u.typeId = t.id;
+      persist();
+    }
     const text = String(b.text ?? "");
     try {
       if (!t || !t.model) throw new Error("no trained forge type is ready for this unit");
@@ -120,12 +135,13 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       if (!live()) return;
       // Team workflows: a reviewer's reply must end with a valid VERDICT line. The house-style model may put it
       // elsewhere, write an invalid one, or none: reuse its last valid verdict, else ask once more, else approve visibly.
-      if (/VERDICT:/.test(text) && !finalVerdict(answer)) {
+      const role = roleOf(text);
+      if (role && /VERDICT/.test(role.instructions) && !finalVerdict(answer)) {
         let verdict = lastVerdict(answer);
         if (!verdict) {
           act("thinking", "Deciding the review verdict");
           const v = await opts.ask({ ...ask, previous: answer,
-            followup: "End your review now with exactly one line: VERDICT: APPROVED, or VERDICT: CHANGES: <what to change>." }).catch(() => "");
+            followup: `Your instructions: ${role.instructions}\nEnd now with exactly one final line: VERDICT: APPROVED (a short note in parentheses is allowed), or VERDICT: CHANGES: <what to change>.` }).catch(() => "");
           if (!live()) return;
           verdict = lastVerdict(v);
         }
@@ -133,6 +149,8 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         answer = `${answer.trimEnd()}\n${verdict ?? "(No valid verdict from the model; approved by default.)\nVERDICT: APPROVED"}`;
       }
       const sec = sections(answer);
+      // Herald: the customer update is the point, and the engine shows the start of a reply as the handoff summary.
+      if (role?.role === "herald" && sec["customer reply"]) answer = `${sec["customer reply"]}\n\n${answer}`;
       const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")
         || answer.replace(/\s+/g, " ").slice(0, 280);
       act("message", plan.slice(0, 400));

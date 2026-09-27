@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { commanderModel, propose } from "./commander";
 import { createModelServer } from "./model";
-import { followProgress } from "./progress";
+import { followProgress, restoreTypes } from "./progress";
 import { createUnits } from "./units";
 
 type Status = "generating" | "training" | "evaluating" | "ready" | "failed";
@@ -40,15 +40,10 @@ function save() {
 function load() {
   if (!existsSync(STORE)) return;
   try {
-    for (const t of JSON.parse(readFileSync(STORE, "utf8")) as ForgeType[]) {
-      types.set(t.id, t);
-      if (t.status !== "ready" && t.status !== "failed") {
-        // Replay progress first: a pipeline that finished while the forge was down is ready (or failed), not interrupted.
-        // follow() reads the whole file, then keeps tailing only while the child is alive.
-        console.log(`[forge] re-attaching to ${t.id} (pid ${t.pid ?? "none"}${alive(t.pid) ? "" : ", exited"})`);
-        follow(t).catch((e) => console.error("[forge] follow", e));
-      }
-    }
+    restoreTypes(JSON.parse(readFileSync(STORE, "utf8")) as ForgeType[], types, (t) => {
+      console.log(`[forge] re-attaching to ${t.id} (pid ${t.pid ?? "none"}${alive(t.pid) ? "" : ", exited"})`);
+      follow(t).catch((e) => console.error("[forge] follow", e));
+    });
   } catch (e) { console.error("[forge] load failed", e); }
 }
 
@@ -95,6 +90,20 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 load();
+
+// Smoke types stay out of the demo list: a finished dry-run type is removed FORGE_DRY_TTL_MS after creation.
+const DRY_TTL = Number(process.env.FORGE_DRY_TTL_MS ?? 15 * 60_000);
+setInterval(() => {
+  let changed = false;
+  for (const t of types.values()) {
+    if (t.dryRun && (t.status === "ready" || t.status === "failed") && Date.now() - (t.createdAt ?? 0) > DRY_TTL) {
+      console.log(`[forge] removing finished dry-run type ${t.id} (older than ${Math.round(DRY_TTL / 60_000)} min)`);
+      types.delete(t.id);
+      changed = true;
+    }
+  }
+  if (changed) save();
+}, 60_000);
 
 const modelServer = createModelServer(RIVER_DIR, Number(process.env.FORGE_MODEL_TIMEOUT_MS ?? 60_000));
 // Pre-warm: open the River session at start so the first forge unit order after a restart is not a cold start.

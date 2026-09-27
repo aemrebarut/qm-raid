@@ -2,7 +2,7 @@
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { followProgress, type Tracked } from "../src/progress";
+import { followProgress, restoreTypes, type Tracked } from "../src/progress";
 
 const dir = mkdtempSync(join(tmpdir(), "forge-progress-"));
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
@@ -35,4 +35,11 @@ appendFileSync(f3, line({ status: "ready", progress: 1, stage: "ready", model: "
 live = false;
 await p;
 if (c.status !== "ready" || c.pid !== null) fail(`tail end: ${JSON.stringify(c)}`);
+// 4. Restart with a dead child and an empty log listed before a ready type: every save sees the whole store.
+const store = new Map<string, Tracked>();
+const saved: number[] = [];
+const records: Tracked[] = [{ id: "old", status: "training", stage: "", pid: 999999 }, { id: "demo", status: "ready", stage: "ready" }];
+restoreTypes(records, store, (t) => { followProgress(t, join(dir, "missing.jsonl"), { alive: dead, save: () => saved.push(store.size) }); });
+await Bun.sleep(50);
+if (store.size !== 2 || !saved.length || saved.some((n) => n !== 2)) fail(`restore saved a partial store: ${JSON.stringify(saved)}`);
 console.log("PASS");

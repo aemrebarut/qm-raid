@@ -2,9 +2,11 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createUnits, finalVerdict, lastVerdict } from "../src/units";
+import { createUnits, finalVerdict, lastVerdict, roleOf, sections } from "../src/units";
 
-process.env.BRAIN_URL = "http://127.0.0.1:9"; // brain unreachable: the loop degrades and still replies
+// No network at all: the shared game brain must never see this test (recall and remember degrade, the loop still replies).
+const calls: string[] = [];
+globalThis.fetch = (async (u: any) => { calls.push(String(u)); throw new Error("network disabled in test"); }) as any;
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
 // Reviewer verdicts (P2): only APPROVED or CHANGES with a detail count, and only on the final line.
 for (const [t, f, l] of [
@@ -13,13 +15,22 @@ for (const [t, f, l] of [
   ["VERDICT: CHANGES: fix duplicate capture\nRemember: y", null, "VERDICT: CHANGES: fix duplicate capture"],
   ["**VERDICT: CHANGES: add a test**", "VERDICT: CHANGES: add a test", "VERDICT: CHANGES: add a test"],
   ["VERDICT: CHANGES:", null, null],
+  ["Pick: B\nVERDICT: APPROVED (winner: Rhea)", "VERDICT: APPROVED (winner: Rhea)", "VERDICT: APPROVED (winner: Rhea)"],
 ] as const) if (finalVerdict(t) !== f || lastVerdict(t) !== l) fail(`verdict ${JSON.stringify(t)}: ${finalVerdict(t)} / ${lastVerdict(t)}`);
+
+// Roles: only this node's own Role line counts, never a verdict quoted in previous work.
+const herald = "Order o3: work on issue LUM-7\n\nRole: herald. Write the customer update for the affected customers.\nPrevious work:\n- reviewer (u2): ok\nVERDICT: APPROVED";
+if (roleOf(herald)?.role !== "herald" || /VERDICT/.test(roleOf(herald)!.instructions)) fail(`herald role: ${JSON.stringify(roleOf(herald))}`);
+if (!/VERDICT/.test(roleOf("Order\n\nRole: reviewer. Review it. End with VERDICT: APPROVED or VERDICT: CHANGES: <what>.")?.instructions ?? "")) fail("reviewer role");
+if (roleOf("Order o1: plain order") !== null) fail("plain order has no role");
+if (sections("Plan: p\nCustomer update: Hello team\nRemember: r")["customer reply"] !== "Hello team") fail("customer update heading");
 
 const waiters: Array<(t: string) => void> = [];
 const units = createUnits({
   types: () => [{ id: "forge-t", name: "Tester", description: "d", status: "ready", model: "dry-run:forge-t", baseModel: null }],
   ask: () => new Promise<string>((res) => waiters.push(res)),
   store: join(mkdtempSync(join(tmpdir(), "forge-units-")), "units.json"),
+  brainUrl: "http://127.0.0.1:9",
 });
 const events: any[] = [];
 const res = (await units.handle(new Request("http://x/events"), new URL("http://x/events")))!;
@@ -38,5 +49,20 @@ if (!replies().some((e) => e.orderId === "A")) fail(`order A got no terminal rep
 if (!replies().some((e) => !e.orderId)) fail("direct message got no reply");
 const list = await (await units.handle(new Request("http://x/units"), new URL("http://x/units")))!.json();
 if (list[0].orderId !== null) fail(`orderId not cleared: ${list[0].orderId}`);
+if (calls.some((c) => !c.startsWith("http://127.0.0.1:9/"))) fail(`unexpected network calls: ${calls.join(", ")}`);
+// A unit whose type was deleted rebinds to the newest River-trained type, never to a newer dry-run smoke type.
+const store2 = join(mkdtempSync(join(tmpdir(), "forge-units-")), "units.json");
+await Bun.write(store2, JSON.stringify([{ id: "u7", name: "Rhea", typeId: "forge-gone", team: null }]));
+const asked: string[] = [];
+const units2 = createUnits({
+  types: () => [{ id: "forge-real", name: "Real", description: "d", status: "ready", model: "river://ckpt", baseModel: "b" },
+                { id: "forge-smoke", name: "Smoke", description: "d", status: "ready", model: "dry-run:forge-smoke", baseModel: null }],
+  ask: async (r) => { asked.push(r.model); return "Plan: p\nDecision: d"; },
+  store: store2, brainUrl: "http://127.0.0.1:9",
+});
+await units2.handle(new Request("http://x/units/u7/send", { method: "POST", body: JSON.stringify({ text: "hi" }) }), new URL("http://x/units/u7/send"));
+await Bun.sleep(100);
+const bound = (await (await units2.handle(new Request("http://x/units"), new URL("http://x/units")))!.json())[0];
+if (bound.typeId !== "forge-real" || asked[0] !== "river://ckpt") fail(`rebind: ${JSON.stringify(bound)} asked ${asked}`);
 console.log("PASS");
 process.exit(0);

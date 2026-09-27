@@ -133,3 +133,23 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - The lead relayed Emre's new priority: one persistent QM conversation per unit, using threadRef web:emre:raid-<ns>-<unitId> with QM_THREAD_NS. Session continuity across respawn/reset/restart is intended. This supersedes the earlier fresh-session reset requirement and its associated review finding.
 - Acceptance for the upcoming change: DELETE then POST of the same id retains sessionId, reset inserts a visible New round marker, later orders land in that same session, and http://localhost:8129/s/<sessionId> renders the chat.
 - Verify isolated behavior first; coordinate any necessary real milestone check with raid-eng-plan before touching the shared QM bridge.
+
+## 2026-09-27 15:26 PDT: b251ab1 session continuity and dispatch persistence
+
+- Four client tests pass. Exact-commit isolated fixtures verify stable threadRef, no turn on live metadata refresh, persisted retired id, New round marker on DELETE/POST, same session for the following order, and /s/<sessionId> URL shape.
+- **Resolved P1 from 2d6f45d.** The queued dispatch fixture holds the QM response open and reads .state: active.runId is empty, active.send.key equals the request idempotencyKey, and the queue transition is already persisted before QM responds.
+- Coordinated the real milestone check with raid-eng-plan and raid-qm-impl. Used only qmrev-continuity-1790547873772, never engine u1..u10. Initial spawn, metadata refresh, and DELETE/POST all returned session cba4f6c7-bd61-42f3-b86c-63cffefa2eea. Refresh added no transcript entries. The transcript has the intro, New round marker, and following order. Exactly one correlated reply, "continuity verified.", arrived in 4.3 s. The review unit was deleted afterward, and the implementer was notified that the restart window was free.
+- Browser rendering of the returned /s/ URL is still being checked; transcript/API acceptance is complete. Fixtures: /tmp/raid-qm-review-b251ab1/{continuity,idempotency}/src/check.ts. Live evidence: /tmp/raid-qm-review-continuity-live.json.
+
+## 2026-09-27 15:26 PDT: 178bae6, b7a6529 and ece802f hardening
+
+- **Resolved P1 from ab8ce96 at b7a6529.** Repeated the exact original completion-with-no-clients reproduction in two isolated processes. The saved state now contains the order-correlated undelivered reply; after restart, /events replays it and clears the persisted backlog. No real bridge restart was performed by the reviewer.
+- 178bae6 correctly holds queued work until a delayed catalog response arrives and then forwards gpt-6-luna plus low effort. **P2 remains on the 15-second fallback:** with runtime-config still pending, resolving the boot timeout pumps the saved order with thinkingLevel:low but no model. This reproduces the same unintended default-model behavior during a slow/recovering QM startup. Keep selected-model orders queued until catalog readiness, or return an explicit dependency failure instead of silently using the default model.
+- ece802f timing accepted: the isolated completed order writes one JSONL row with matching unit/order id, depth, and nondecreasing send/queued/first-event/terminal timestamps. 3324326 only changes stdout clock formatting to local time; epoch fields are unchanged.
+- Fixtures: /tmp/raid-qm-review-178bae6/catalog/src/check.ts (default and timeout); /tmp/raid-qm-review-b7a6529/offline/src/check.ts (complete then restart); /tmp/raid-qm-review-ece802f/timing/src/check.ts.
+
+## 2026-09-27 15:26 PDT: f8585e4 usage corrections
+
+- Exact-commit synthetic spend checks pass integer conservation (one token across three units), deletion before a poll (30 tokens split only between two live units), single-flight polling, and ignoring a lower token counter before the next increase. The original overlapping-poll and per-share rounding findings are resolved.
+- **P2 remains, server.ts usage interval around await orgSpend:** eligible ids are captured before the awaited HTTP request. Delete one of two units while that request is pending, then resolve a 10-token delta: it emits five tokens for the deleted id and five for the survivor. The engine discards the deleted share, losing half the total. Refilter live units after orgSpend resolves, before dividing and emitting; absorb the delta if no eligible units remain.
+- Fixture: /tmp/raid-qm-review-f8585e4/src/check.ts. This check made no real QM requests.

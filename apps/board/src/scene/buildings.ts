@@ -2,7 +2,11 @@
 // Each is built around its tile centre and covers a 3 x 3 footprint.
 import * as THREE from "three";
 import type { Building } from "../core";
+import { makeBuilding } from "../../../../packages/art/src";
+import { artOn } from "./art";
 import { gableRoof, makeLabel, mat, mergeStatic, mesh, tileToWorld } from "./util";
+
+const ART_KIND = { gbrain: "library", barracks: "barracks", river: "forge" } as const;
 
 export interface BuildingView {
   id: string;
@@ -29,8 +33,7 @@ export function buildBuilding(b: Building): BuildingView {
   group.userData = { kind: "building", id: b.id };
   group.name = `building:${b.id}`;
 
-  // Stone platform and selection ring shared by all buildings.
-  group.add(mesh(new THREE.BoxGeometry(2.9, 0.1, 2.9), mat("#8f887b"), 0, 0.05, 0, false));
+  // Selection ring shared by all buildings (placeholders also get a stone platform).
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(2.05, 2.2, 48),
     new THREE.MeshBasicMaterial({ color: "#f2e27a", transparent: true, opacity: 0.9, depthWrite: false }),
@@ -40,16 +43,21 @@ export function buildBuilding(b: Building): BuildingView {
   ring.visible = false;
   group.add(ring);
 
-  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork"> & { setWork?: BuildingView["setWork"]; top?: THREE.Vector3 };
-  if (b.kind === "gbrain") view = library(group);
-  else if (b.kind === "river") view = forge(group);
-  else view = barracks(group);
-  mergeStatic(group);
+  let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork"> & { setWork?: BuildingView["setWork"]; top?: THREE.Vector3; door?: THREE.Vector3; glow?: (on: boolean) => void };
+  if (artOn("buildings")) view = artBuilding(group, b.kind);
+  else {
+    group.add(mesh(new THREE.BoxGeometry(2.9, 0.1, 2.9), mat("#8f887b"), 0, 0.05, 0, false));
+    if (b.kind === "gbrain") view = library(group);
+    else if (b.kind === "river") view = forge(group);
+    else view = barracks(group);
+    mergeStatic(group);
+  }
 
   let selected = false, hovered = false;
   const syncRing = () => {
     ring.visible = selected || hovered;
     (ring.material as THREE.MeshBasicMaterial).opacity = selected ? 0.9 : 0.4;
+    view.glow?.(selected || hovered);
   };
   return {
     setWork: () => {},
@@ -58,10 +66,31 @@ export function buildBuilding(b: Building): BuildingView {
     id: b.id,
     kind: b.kind,
     group,
-    door: group.position.clone().add(new THREE.Vector3(0.1, 0, 1.7)),
+    door: group.position.clone().add(view.door ?? new THREE.Vector3(0.1, 0, 1.7)),
     top: group.position.clone().add(view.top ?? new THREE.Vector3(0, 2, 0)),
     setSelected(on) { selected = on; syncRing(); },
     setHovered(on) { hovered = on; syncRing(); },
+  };
+}
+
+/** packages/art model in place of the placeholder (flag 'buildings'); the board keeps ring, label, banner and picking. */
+function artBuilding(group: THREE.Group, kind: Building["kind"]) {
+  const a = makeBuilding(ART_KIND[kind]);
+  a.object3d.userData.keep = true; // already merged per material; never mergeStatic it
+  group.add(a.object3d);
+  const labelY = a.top.y + 0.55;
+  if (kind === "gbrain") title(group, "Library", "GBrain", 2.7, -0.4, 0.4); // over the hall, below the orb and beams
+  else if (kind === "river") title(group, "Forge", "River", labelY);
+  else title(group, "Barracks", "spawn agents", labelY);
+  const banner = kind === "river" ? workBanner(group, labelY + 0.55) : null;
+  return {
+    anchor: a.anchor,
+    top: a.top.clone(),
+    door: a.door.clone(),
+    tick: (t: number, dt: number) => a.tick(t, dt),
+    pulse: () => a.pulse(),
+    glow: (on: boolean) => a.glow(on),
+    setWork(progress: number | null, label = "") { a.setWork(progress); banner?.set(progress, label); },
   };
 }
 
@@ -209,19 +238,7 @@ function forge(group: THREE.Group) {
     puffs.push(m);
     group.add(m);
   }
-  // Work banner above the Forge while a type is being forged
-  const bannerCanvas = document.createElement("canvas");
-  bannerCanvas.width = 320; bannerCanvas.height = 72;
-  const bannerTex = new THREE.CanvasTexture(bannerCanvas);
-  bannerTex.colorSpace = THREE.SRGBColorSpace;
-  const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: bannerTex, depthTest: false, transparent: true }));
-  banner.scale.set(2.6, 2.6 * 72 / 320, 1);
-  banner.center.set(0.5, 0);
-  banner.position.set(0, 3.05, 0);
-  banner.renderOrder = 10;
-  banner.visible = false;
-  group.add(banner);
-  let bannerKey = "";
+  const banner = workBanner(group, 3.05);
   let working = false;
 
   let pulseT = 0;
@@ -230,7 +247,44 @@ function forge(group: THREE.Group) {
     top: new THREE.Vector3(0.8, 2.25, -0.6),
     setWork(progress: number | null, label = "") {
       working = progress != null;
-      banner.visible = working;
+      banner.set(progress, label);
+    },
+    tick(t: number, dt: number) {
+      pulseT = Math.max(0, pulseT - dt);
+      const p = pulseT > 0 ? Math.sin((pulseT / 1.2) * Math.PI) : 0;
+      const w = working ? 1 : 0;
+      fire.intensity = 5 + w * 5 + Math.sin(t * (13 + w * 10)) * (0.8 + w) + Math.sin(t * 7.3) * 0.7 + p * 12;
+      fireMat.emissive.setRGB(1, 0.35 + Math.sin(t * 11) * 0.05 + p * 0.3, p * 0.3);
+      for (const m of puffs) {
+        const ph = (t * 0.35 + m.userData.phase) % 1;
+        m.position.set(0.8 + Math.sin(ph * 5 + m.userData.phase * 9) * 0.12 + ph * 0.3, 2.25 + ph * 1.4, -0.6 - ph * 0.2);
+        m.scale.setScalar(0.6 + ph * 1.6);
+        (m.material as THREE.MeshLambertMaterial).opacity = (working ? 0.75 : 0.55) * (1 - ph);
+      }
+      if (working) banner.sprite.position.y = 3.05 + Math.sin(t * 2) * 0.04;
+    },
+    pulse() { pulseT = 1.2; },
+  };
+}
+
+/** Parchment progress banner above the Forge while a type is being forged. */
+function workBanner(group: THREE.Group, y: number) {
+  const bannerCanvas = document.createElement("canvas");
+  bannerCanvas.width = 320; bannerCanvas.height = 72;
+  const bannerTex = new THREE.CanvasTexture(bannerCanvas);
+  bannerTex.colorSpace = THREE.SRGBColorSpace;
+  const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: bannerTex, depthTest: false, transparent: true }));
+  banner.scale.set(2.6, 2.6 * 72 / 320, 1);
+  banner.center.set(0.5, 0);
+  banner.position.set(0, y, 0);
+  banner.renderOrder = 10;
+  banner.visible = false;
+  group.add(banner);
+  let bannerKey = "";
+  return {
+    sprite: banner,
+    set(progress: number | null, label = "") {
+      banner.visible = progress != null;
       if (progress == null) return;
       const key = `${Math.round(progress * 50)}|${label}`;
       if (key === bannerKey) return;
@@ -248,20 +302,5 @@ function forge(group: THREE.Group) {
       ctx.fillText(label.length > 30 ? label.slice(0, 29) + "\u2026" : label, 14, 24);
       bannerTex.needsUpdate = true;
     },
-    tick(t: number, dt: number) {
-      pulseT = Math.max(0, pulseT - dt);
-      const p = pulseT > 0 ? Math.sin((pulseT / 1.2) * Math.PI) : 0;
-      const w = working ? 1 : 0;
-      fire.intensity = 5 + w * 5 + Math.sin(t * (13 + w * 10)) * (0.8 + w) + Math.sin(t * 7.3) * 0.7 + p * 12;
-      fireMat.emissive.setRGB(1, 0.35 + Math.sin(t * 11) * 0.05 + p * 0.3, p * 0.3);
-      for (const m of puffs) {
-        const ph = (t * 0.35 + m.userData.phase) % 1;
-        m.position.set(0.8 + Math.sin(ph * 5 + m.userData.phase * 9) * 0.12 + ph * 0.3, 2.25 + ph * 1.4, -0.6 - ph * 0.2);
-        m.scale.setScalar(0.6 + ph * 1.6);
-        (m.material as THREE.MeshLambertMaterial).opacity = (working ? 0.75 : 0.55) * (1 - ph);
-      }
-      if (working) banner.position.y = 3.05 + Math.sin(t * 2) * 0.04;
-    },
-    pulse() { pulseT = 1.2; },
   };
 }

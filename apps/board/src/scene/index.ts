@@ -8,7 +8,9 @@ import { buildZones } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView, setFootprints, setRouter } from "./units";
 import { TargetView } from "./targets";
-import { Fx } from "./fx";
+import { Fx, type FxApi } from "./fx";
+import { ArtFx, lighting } from "../../../../packages/art/src";
+import { artOn } from "./art";
 import { WorkflowLayer } from "./workflow";
 import { ArrowLayer } from "./arrows";
 import { disposeTree, tileToWorld } from "./util";
@@ -26,25 +28,28 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   scene.background = new THREE.Color("#2c3d1e");
   const iso = new IsoCamera();
 
-  // Lighting: warm sun from the south-west, sky fill.
-  scene.add(new THREE.HemisphereLight("#fff3d6", "#4a6630", 1.4));
-  const sun = new THREE.DirectionalLight("#fff0cf", 2.4);
-  sun.position.set(MAP_SIZE / 2 - 10, 20, MAP_SIZE / 2 + 6);
-  sun.target.position.set(MAP_SIZE / 2, 0, MAP_SIZE / 2);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  const sc = sun.shadow.camera;
-  sc.left = -20; sc.right = 20; sc.top = 20; sc.bottom = -20; sc.near = 1; sc.far = 60;
-  sun.shadow.bias = -0.0005;
-  sun.shadow.normalBias = 0.02;
-  scene.add(sun, sun.target);
+  // Lighting: warm sun from the south-west, sky fill; or the packages/art rig behind the flag.
+  const rig = artOn("lighting") ? lighting(scene, renderer, { mapSize: MAP_SIZE }) : null;
+  if (!rig) {
+    scene.add(new THREE.HemisphereLight("#fff3d6", "#4a6630", 1.4));
+    const sun = new THREE.DirectionalLight("#fff0cf", 2.4);
+    sun.position.set(MAP_SIZE / 2 - 10, 20, MAP_SIZE / 2 + 6);
+    sun.target.position.set(MAP_SIZE / 2, 0, MAP_SIZE / 2);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const sc = sun.shadow.camera;
+    sc.left = -20; sc.right = 20; sc.top = 20; sc.bottom = -20; sc.near = 1; sc.far = 60;
+    sun.shadow.bias = -0.0005;
+    sun.shadow.normalBias = 0.02;
+    scene.add(sun, sun.target);
+  }
 
   // Layers of the world
   const world = new THREE.Group();
   const unitsG = new THREE.Group();
   const targetsG = new THREE.Group();
   const buildingsG = new THREE.Group();
-  const fx = new Fx();
+  const fx: FxApi = artOn("fx") ? artFx() : new Fx();
   const arrows = new ArrowLayer();
   const flow = new WorkflowLayer();
   scene.add(world, buildingsG, targetsG, unitsG, arrows.group, flow.group, fx.group);
@@ -103,6 +108,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
           fx.burst(p, "#9dff7a", 2.0, 1.0);
           fx.after(0.25, () => fx.burst(p, "#ffd45a", 1.4, 0.8));
           fx.text(p.clone().setY(1.2), `Resolved ${t.issue}`, { height: 0.3, dur: 3 });
+          for (const o of s.orders) if (o.targetId === t.id && o.status !== "proposed") units.get(o.unitId)?.celebrate();
         }
       }
     }
@@ -504,6 +510,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     applyHover();
     if (iso.version !== viewVersion) {
       viewVersion = iso.version;
+      rig?.follow(iso.target);
       bus.emit("view", { corners: iso.viewCorners() }); // minimap view frame, at most once per frame
     }
     for (const v of units.values()) v.tick(t, dt);
@@ -516,6 +523,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       for (const b of buildings.values()) if (b.kind === "river") fx.sparksAt(b.top, 3, "#ff9a3c");
     }
     fx.tick(dt);
+    rig?.update();
     renderer.render(scene, iso.camera);
   }
   frame();
@@ -536,5 +544,23 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     renderer.dispose();
     canvas.remove();
     box.remove();
+  };
+}
+
+/** packages/art effects behind the flag, adapted to the scene's FxApi (orb maps to rememberOrb). */
+function artFx(): FxApi {
+  const a = new ArtFx();
+  return {
+    group: a.group,
+    tick: (dt) => a.tick(dt),
+    beam: (from, to, color, dur, width) => { a.beam(from, to, color, dur, width); },
+    page: (from, to, delay, onArrive) => { a.page(from, to, delay, onArrive); },
+    orb: (from, to, onArrive) => { a.rememberOrb(from, to, onArrive); },
+    burst: (p, color, size, dur) => { a.burst(p, color, size, dur); },
+    text: (p, text, opts) => { a.text(p, text, opts); },
+    sparksAt: (p, n, color) => { a.sparksAt(p, n, color); },
+    after: (delay, fn) => { a.after(delay, fn); },
+    scroll: (from, to, opts, onArrive) => { a.scroll(from, to, opts, onArrive); },
+    portal: (p, color, dur) => { a.portal(p, color, dur); },
   };
 }

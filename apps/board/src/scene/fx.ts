@@ -83,6 +83,9 @@ function glowSprite(color: THREE.ColorRepresentation, size: number) {
 const beamGeo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
 const UP = new THREE.Vector3(0, 1, 0);
 
+/** What the scene uses from an effects layer (Fx here, or packages/art ArtFx through an adapter). */
+export type FxApi = Pick<Fx, "group" | "tick" | "beam" | "page" | "orb" | "burst" | "text" | "sparksAt" | "after" | "scroll" | "portal">;
+
 export class Fx {
   readonly group = new THREE.Group();
   private effects: Effect[] = [];

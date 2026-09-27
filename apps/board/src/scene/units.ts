@@ -1,6 +1,8 @@
 // Units: little medieval characters carrying staffs, tinted by team, animated by status, smoothly walking between tiles.
 import * as THREE from "three";
 import type { Unit } from "../core";
+import { makeUnit, type UnitAnim, type UnitHandle } from "../../../../packages/art/src";
+import { artOn } from "./art";
 import { hash, makeBubble, makeLabel, mat, mesh, tileToWorld } from "./util";
 import type { Router } from "./terrain";
 
@@ -83,6 +85,11 @@ export class UnitView {
   private raiseKind: "recall" | "remember" = "recall";
   private lastChop = 0;
   private teamMat: THREE.MeshLambertMaterial | null = null;
+  /** packages/art body (flag 'units'); the placeholder meshes are not built then. */
+  private art: UnitHandle | null = null;
+  private artTeam: string | null = null;
+  private speedNow = 0;
+  private celebrateT = 0;
   /** Called at the peak of each working strike with the impact point (sparks). */
   onStrike: ((p: THREE.Vector3) => void) | null = null;
 
@@ -121,6 +128,15 @@ export class UnitView {
   }
 
   private build(cls: string, teamColor: string | null) {
+    if (artOn("units")) {
+      const builtin = cls === "knight" || cls === "ranger" || cls === "scout" || cls === "oracle";
+      this.root.scale.setScalar(1);
+      this.art = makeUnit({ cls, teamColor, forged: !builtin, typeColor: null, seed: hash(this.id) });
+      this.art.onStrike = (p) => this.onStrike?.(p);
+      this.artTeam = teamColor;
+      this.root.add(this.art.object3d);
+      return;
+    }
     const team = new THREE.MeshLambertMaterial({ color: teamColor ?? NEUTRAL, flatShading: true });
     this.teamMat = team;
     const dark = mat("#3b2f25"), skin = mat(SKIN), leather = mat("#6b4a2b"), metal = mat("#b3b8bf");
@@ -179,6 +195,7 @@ export class UnitView {
 
   /** World position of the staff tip (for beams and orbs). */
   staffTip(out = new THREE.Vector3()) {
+    if (this.art) return this.art.staffTip(out);
     const gem = this.staffPivot.getObjectByName("gem")!;
     return gem.getWorldPosition(out);
   }
@@ -187,6 +204,8 @@ export class UnitView {
     const clsChanged = unit.class !== this.unit.class;
     this.unit = unit;
     if (clsChanged) {
+      this.art?.dispose();
+      this.art = null;
       this.root.clear();
       this.legs.length = 0;
       this.tinted.length = 0;
@@ -194,6 +213,7 @@ export class UnitView {
       this.build(unit.class, teamColor);
     }
     for (const m of this.tinted) (m.material as THREE.MeshLambertMaterial).color.set(teamColor ?? NEUTRAL);
+    if (this.art && teamColor !== this.artTeam) { this.art.setTeamColor(teamColor); this.artTeam = teamColor; } // rewrites vertex colours: only on change
     const d = this.worldOf(unit);
     if (d.distanceToSquared(this.dest) > 1e-6) {
       this.dest.copy(d);
@@ -219,6 +239,12 @@ export class UnitView {
       this.bubble.position.y = 0.95;
       this.group.add(this.bubble);
     }
+  }
+
+  /** Order done: a short cheer (art units play celebrate; placeholders raise the staff). */
+  celebrate(secs = 1.8) {
+    this.celebrateT = secs;
+    if (!this.art) this.flashRaise("remember", secs);
   }
 
   /** Raise the staff for a memory event even if the engine status lags behind. */
@@ -270,6 +296,7 @@ export class UnitView {
       this.moving = false;
     } else if (dist > 0.01) {
       const speed = THREE.MathUtils.clamp(remaining * 2.2, 3.0, 10); // engine steps 3 tiles/s (diagonals too); catch up without stutter or zipping
+      this.speedNow = speed;
       const step = Math.min(dist, speed * dt);
       pos.addScaledVector(to.normalize(), step);
       this.facing = turn(this.facing, Math.atan2(to.x, to.z), dt * 10);
@@ -285,6 +312,23 @@ export class UnitView {
       if (f.lengthSq() > 0.01) this.facing = turn(this.facing, Math.atan2(f.x, f.z), dt * 6);
     }
     this.root.rotation.y = this.facing;
+
+    if (this.art) {
+      this.raiseHold = Math.max(0, this.raiseHold - dt);
+      this.celebrateT = Math.max(0, this.celebrateT - dt);
+      const anim: UnitAnim = this.moving ? "walk"
+        : this.celebrateT > 0 ? "celebrate"
+        : status === "error" ? "error"
+        : status === "recalling" || status === "remembering" || this.raiseHold > 0 ? "cast"
+        : status === "working" ? "work"
+        : "idle";
+      this.art.play(anim, anim === "walk" ? { speed: this.speedNow / 3 } : undefined);
+      const glow = this.raiseHold > 0 ? this.raiseKind : status === "remembering" ? "remember" : status === "recalling" ? "recall" : null;
+      this.art.setGlow(glow);
+      this.art.tick(t, dt);
+      if (this.bubble) this.bubble.position.y = 0.95 + Math.sin(t * 3) * 0.03;
+      return;
+    }
 
     // Walk cycle
     if (walking) this.walkPhase += dt * 11;
@@ -350,6 +394,7 @@ export class UnitView {
       s?.material.dispose();
     }
     this.gemMat.dispose();
+    this.art?.dispose();
     for (const m of this.tinted) (m.material as THREE.Material).dispose();
   }
 }

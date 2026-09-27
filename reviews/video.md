@@ -133,3 +133,13 @@ VERDICT: CHANGES: capture one confirmed cancellation or omit the successful-veto
 ## Final deadline and structure (latest Analyst update)
 
 Take 1 is the only final take. Update 16:08 restores target 1:50, max 2:00: hero 0-2, approved anime 2-13, Orders 13-35, Teams 35-55, Forge 55-75, Autopilot/new issues 75-92, approved mock Loadout close-up 92-104, end 104-110. New narration is targeted for 16:15. Final mp4 plus thumbnail are due 16:24; reviewer performs a fast frame-sheet and sync check for P1 blockers from 16:24 to 16:26. Prior 75 second schedule is superseded.
+
+## V11: audio scheduling and script v3 (16:10-16:16 PDT)
+
+The editor extracted shared `voPlace.ts` scheduling and resolves each section with forward/backward passes. The effective placement check now reports no overlaps, resolving the earlier 0.213 second collision. Rechecked with the 1:50 manifest and current EDL: 109.733 second composition, no overlaps. Sent scoped scheduler approval to raid-video and Analyst. Final mixed-render sync remains pending.
+
+VERDICT: APPROVED
+
+Script v3 `56d69aa`: independently counted 180 words and measured 79.941 seconds of active speech. All 25 active/alternate WAV durations match the manifest within rounding, no voice-file overlaps, and no em or en dashes. Jokes, held-out wording, knight Loadout scope and conditional QM/Warden/veto lines pass. One prose number needs correction: Loadout has 12 - 8.663 = 3.337 seconds without narration, so 'every clip keeps at least 4 s without narration' should read 'every capability clip keeps at least 3 s without narration'. No audio regeneration required. Sent to raid-video-vo and Analyst.
+
+VERDICT: CHANGES: correct the written breathing-room sentence to at least 3 seconds.

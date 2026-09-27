@@ -46,7 +46,7 @@ def build_line(ln):
         os.replace(tmp, out)
         d = dur(out)
     return {"file": ln["id"] + ".wav", "id": ln["id"], "section": ln["section"], "duration": round(d, 2),
-            "text": ln["text"], "engine": engine}
+            "text": ln["text"], "engine": engine, **({"anchor": ln["anchor"]} if ln.get("anchor") else {})}
 
 
 def main():
@@ -93,11 +93,14 @@ def main():
             filt.append(f"[{n}:a]atrim=start=2.05,asetpts=PTS-STARTPTS,atrim=0:{INTRO_END},afade=t=out:st={INTRO_END - 0.5}:d=0.5,loudnorm=I=-18:TP=-1.5,aresample=44100,aformat=channel_layouts=stereo[a{n}]")
             n += 1
         if bed:
-            parts += ["-i", bed]
+            parts += ["-i", bed, "-i", bed]
             start = INTRO_END - 0.5 if intro else 0
-            filt.append(f"[{n}:a]atrim=0:{TOTAL - start},afade=t=in:d=1,afade=t=out:st={TOTAL - start - 2.5}:d=2.5,loudnorm=I=-30:TP=-6,aresample=44100,aformat=channel_layouts=stereo,adelay={int(start * 1000)}|{int(start * 1000)}[a{n}]")
-            n += 1
-        mix = "".join(f"[a{i}]" for i in range(n)) + f"amix=inputs={n}:normalize=0,apad=whole_dur={TOTAL},atrim=0:{TOTAL}[m]"
+            # The bed is 95 s; a second copy crossfades in so it covers the whole cut.
+            filt.append(f"[{n}:a][{n + 1}:a]acrossfade=d=3[bb{n}]")
+            filt.append(f"[bb{n}]atrim=0:{TOTAL - start},afade=t=in:d=1,afade=t=out:st={TOTAL - start - 2.5}:d=2.5,loudnorm=I=-30:TP=-6,aresample=44100,aformat=channel_layouts=stereo,adelay={int(start * 1000)}|{int(start * 1000)}[a{n}]")
+            n += 2
+        labels = [f"[a{i}]" for i in range(n) if f"[a{i}]" in "".join(filt)]
+        mix = "".join(labels) + f"amix=inputs={len(labels)}:normalize=0,apad=whole_dur={TOTAL},atrim=0:{TOTAL}[m]"
         ff(*parts, "-filter_complex", ";".join(filt + [mix]), "-map", "[m]", os.path.join(HERE, "music.wav"))
         manifest["music"] = {"file": "music.wav", "duration": round(dur(os.path.join(HERE, "music.wav")), 2),
                              "note": f"intro music 0 to {INTRO_END} s at -18 LUFS, march bed from {INTRO_END - 0.5} s at -30 LUFS; VO is -16 LUFS"}
@@ -107,7 +110,7 @@ def main():
             ("sfx_beam", 6.63), ("sfx_orb", 7.90), ("sfx_hammer", 8.87), ("sfx_hammer", 9.20), ("sfx_hammer", 9.53),
             ("sfx_sparkle", 9.77), ("sfx_riser", 9.2), ("sfx_clash", 11.20), ("sfx_slam", 11.27), ("sfx_sparkle", 11.60),
             ("sfx_whoosh", 12.60)]
-    cues += [("sfx_whoosh", float(SECTIONS[k][0])) for k in ("orders", "teams", "forge", "command")] + [("sfx_chime", float(SECTIONS["end"][0]))]
+    cues += [("sfx_whoosh", float(SECTIONS[k][0])) for k in SECTIONS if k not in ("hero", "intro", "end")] + [("sfx_chime", float(SECTIONS["end"][0]))]
     sfx, made = [], {}
     for name, at in cues:
         if name not in made:

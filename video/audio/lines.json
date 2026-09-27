@@ -66,112 +66,159 @@
    "id": "vo_orders_1",
    "section": "orders",
    "role": "herald",
-   "text": "Hear ye! Order a knight, a real QM agent, to a camp.",
-   "el": "Hear ye! Order a knight, a real Q M agent, to a camp.",
-   "say": "Hear ye! Order a knight, a real Q M agent, to a camp."
+   "text": "Hear ye, hear ye! Order a knight, a real QM agent, to a camp.",
+   "el": "[excited] Hear ye, hear ye! Order a knight, a real Q M agent, to a camp.",
+   "say": "Hear ye, hear ye! Order a knight, a real Q M agent, to a camp.",
+   "anchor": "select"
   },
   {
    "id": "vo_orders_2",
    "section": "orders",
    "role": "herald",
-   "text": "Blue beam: it recalls from GBrain.",
-   "el": "Blue beam: it recalls from G Brain.",
-   "say": "Blue beam: it recalls from G Brain."
+   "text": "Blue beam: first it checks the Library, our GBrain. Then it works the issue. For real.",
+   "el": "Blue beam: first, it checks the Library... our G Brain. Then it works the issue... For real.",
+   "say": "Blue beam: first it checks the Library, our G Brain. Then it works the issue. For real.",
+   "anchor": "recall_beam"
   },
   {
    "id": "vo_orders_3",
    "section": "orders",
    "role": "herald",
-   "text": "Gold orb: it remembers what it learned.",
-   "el": "Gold orb: it remembers what it learned."
+   "text": "Gold orb: what it learned goes back on the shelf.",
+   "el": "Gold orb: what it learned goes back on the shelf.",
+   "anchor": "remember_orb"
+  },
+  {
+   "id": "vo_orders_qm",
+   "section": "orders",
+   "role": "herald",
+   "alt": true,
+   "anchor": "qm_cut (only if the QM view shows the GBrain tool calls)",
+   "text": "Inside QM, the same knight: the order, its GBrain tool calls, the reply.",
+   "el": "Inside Q M, the same knight: the order... its G Brain tool calls... the reply."
   },
   {
    "id": "vo_teams_1",
    "section": "teams",
    "role": "herald",
-   "text": "Three units, one team: the Trio.",
-   "el": "Three units, one team: the Trio."
+   "text": "Three units? That's a team. Form the Trio: planner, implementer, reviewer.",
+   "el": "Three units? [mischievously] That's a team. Form the Trio: planner, implementer, reviewer.",
+   "anchor": "select3"
   },
   {
    "id": "vo_teams_2",
    "section": "teams",
    "role": "herald",
-   "text": "The reviewer checks the house rules.",
-   "el": "The reviewer checks the house rules..."
+   "text": "Right-click a camp, and the scrolls fly. The reviewer checks the work against the house rules.",
+   "el": "Right-click a camp... and the scrolls fly! The reviewer checks the work against the house rules.",
+   "anchor": "handoff"
   },
   {
    "id": "vo_teams_2b",
    "section": "teams",
    "role": "herald",
-   "text": "The reviewer is a Rule Warden, forged by River.",
-   "el": "The reviewer is a Rule Warden, forged by River.",
-   "alt": true
+   "text": "Right-click a camp, and the scrolls fly. The reviewer is a Rule Warden, forged by River.",
+   "el": "Right-click a camp... and the scrolls fly! The reviewer is a Rule Warden, forged by River.",
+   "alt": true,
+   "anchor": "handoff"
   },
   {
    "id": "vo_teams_3",
    "section": "teams",
    "role": "herald",
-   "text": "Verdict: approved!",
-   "el": "[excited] Verdict: APPROVED!"
+   "text": "Verdict: approved! The camp falls.",
+   "el": "[excited] Verdict: APPROVED! The camp falls.",
+   "anchor": "verdict"
   },
   {
    "id": "vo_teams_3b",
    "section": "teams",
    "role": "herald",
-   "text": "Verdict: changes! Back to work.",
-   "el": "Verdict: changes! Back to work.",
-   "alt": true
+   "text": "Verdict: changes! Back to the anvil, implementer.",
+   "el": "Verdict: changes! [mischievously] Back to the anvil, implementer.",
+   "alt": true,
+   "anchor": "verdict"
+  },
+  {
+   "id": "vo_teams_qm",
+   "section": "teams",
+   "role": "herald",
+   "alt": true,
+   "anchor": "qm_cut",
+   "text": "Same trio, inside QM: every handoff is a real conversation.",
+   "el": "Same trio, inside Q M: every handoff is a real conversation."
   },
   {
    "id": "vo_forge_1",
    "section": "forge",
    "role": "herald",
-   "text": "At the Forge, River fine-tunes new unit types.",
-   "el": "At the Forge... River fine-tunes new unit types."
+   "text": "Need a unit nobody has? To the Forge! River fine-tunes a model on practice orders.",
+   "el": "Need a unit nobody has? [excited] To the Forge! River fine-tunes a model on practice orders.",
+   "anchor": "forge_open"
   },
   {
    "id": "vo_forge_2",
    "section": "forge",
    "role": "herald",
    "text": "Refund Ranger, Rule Warden: each beats its base model on held-out test orders.",
-   "el": "Refund Ranger, Rule Warden: each beats its base model on held-out test orders."
+   "el": "Refund Ranger, Rule Warden: each beats its base model on held-out test orders.",
+   "anchor": "card"
   },
   {
    "id": "vo_forge_3",
    "section": "forge",
    "role": "herald",
    "text": "Train one, and out it walks!",
-   "el": "Train one, and out it walks!"
+   "el": "Train one, and out it walks!",
+   "anchor": "train"
   },
   {
    "id": "vo_auto_1",
-   "section": "command",
+   "section": "autopilot",
    "role": "herald",
-   "text": "A new issue? A fresh camp appears.",
-   "el": "A new issue? A fresh camp appears."
+   "text": "A new issue? A fresh camp appears on the map.",
+   "el": "A new issue? A fresh camp appears on the map.",
+   "anchor": "new_issue"
   },
   {
    "id": "vo_auto_2",
-   "section": "command",
+   "section": "autopilot",
    "role": "herald",
-   "text": "Autopilot proposes orders, with a fifteen second veto.",
-   "el": "Autopilot proposes orders... with a fifteen second veto."
+   "text": "Autopilot proposes orders, each with a fifteen second veto ring. Object now, or forever hold your peace.",
+   "el": "Autopilot proposes orders... each with a fifteen second veto ring. [mischievously] Object now, or forever hold your peace.",
+   "anchor": "proposed"
+  },
+  {
+   "id": "vo_auto_3",
+   "section": "autopilot",
+   "role": "herald",
+   "text": "Don't like one? Cancel it. Like one? Let it ride.",
+   "el": "Don't like one? Cancel it. Like one? [mischievously] Let it ride.",
+   "alt": true,
+   "anchor": "veto, only if a cancel is on screen"
   },
   {
    "id": "vo_loadout_1",
-   "section": "command",
+   "section": "loadout",
    "role": "herald",
-   "text": "And a knight's standing orders? Rewrite them in the game.",
-   "el": "And a knight's standing orders? [mischievously] Rewrite them in the game."
+   "text": "Every knight carries a loadout: standing orders, skills, and plugins.",
+   "el": "Every knight carries a loadout: standing orders, skills, and plugins.",
+   "anchor": "loadout_open"
+  },
+  {
+   "id": "vo_loadout_2",
+   "section": "loadout",
+   "role": "herald",
+   "text": "Rewrite its standing orders right here, mid-battle.",
+   "el": "Rewrite its standing orders right here... mid-battle.",
+   "anchor": "save"
   },
   {
    "id": "vo_end",
    "section": "end",
    "role": "herald",
    "text": "One human. Thirty-one AI agents. Built today.",
-   "el": "One human. Thirty-one AI agents. Built today.",
-   "max": 3.5,
-   "kokoroSpeed": 1.2
+   "el": "One human. Thirty-one AI agents. Built today."
   },
   {
    "id": "vo_end_b",
@@ -179,9 +226,7 @@
    "role": "herald",
    "text": "One human, a swarm of AI agents, built today.",
    "el": "One human, a swarm of AI agents, built today.",
-   "alt": true,
-   "max": 3.5,
-   "kokoroSpeed": 1.2
+   "alt": true
   }
  ],
  "sections": {
@@ -195,23 +240,27 @@
   ],
   "orders": [
    13,
-   15
+   22
   ],
   "teams": [
-   28,
-   14
+   35,
+   20
   ],
   "forge": [
-   42,
-   15
+   55,
+   20
   ],
-  "command": [
-   57,
-   14
+  "autopilot": [
+   75,
+   17
+  ],
+  "loadout": [
+   92,
+   12
   ],
   "end": [
-   71,
-   4
+   104,
+   6
   ]
  }
 }

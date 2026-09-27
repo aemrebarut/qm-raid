@@ -3,7 +3,7 @@
 import { api, type Building, type Bus, type FeedEntry, type Order, type Selection, type State, type Store, type Target, type Unit } from "../core";
 import { icon, kindIcon } from "../theme/icons";
 import { portraitArt } from "../theme/portrait";
-import { refreshTimes, relTime, stripName } from "../theme/text";
+import { humanize, modelLabel, orderPhrase, refreshTimes, relTime, stripName, toolPhrase } from "../theme/text";
 import { BarracksPanel } from "./barracks";
 import { slugChips } from "./chips";
 import { h, put, RowList, safeColor, safeUrl } from "./dom";
@@ -317,15 +317,39 @@ function tabBtn(label: string): HTMLButtonElement {
 }
 
 function feedRow(it: FeedItem, bus?: Bus, name?: string) {
+  const text = feedText(it, name);
+  const long = text.length > 140 || text.split("\n").length > 3;
+  const more = long ? h("button", { class: "hud-more hud-feed-more", type: "button", title: "Expand", "aria-expanded": "false" }, icon("chevron")) : null;
   const li = h("li", { class: `hud-feed-${it.kind}`, title: new Date(it.ts).toLocaleTimeString() },
     h("span", { class: "hud-feed-time", "data-ts": it.ts }, relTime(it.ts)),
     h("span", { class: "hud-feed-icon" }, icon(kindIcon(it.kind))),
-    it.tool ? h("code", null, it.tool) : null,
-    h("span", { class: "hud-feed-text" }, stripName(it.text, name), bus ? slugChips(it.slugs, bus) : null),
+    h("span", { class: "hud-feed-text", title: it.tool ?? null }, text, bus ? slugChips(it.slugs, bus) : null),
+    more,
   );
-  li.addEventListener("click", () => li.classList.toggle("hud-feed-open"));
+  more?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = li.classList.toggle("hud-feed-open");
+    more.setAttribute("aria-expanded", String(open));
+    more.dataset.open = String(open);
+    more.title = open ? "Collapse" : "Expand";
+  });
   return li;
 }
+
+function feedText(it: FeedItem, name?: string): string {
+  if (it.kind === "tool") return toolPhrase(it.tool, it.text, it.slugs);
+  if (it.kind === "order") return orderPhrase(it.text);
+  return humanize(stripName(it.text, name));
+}
+
+/** Class name for players: forged types show their Forge name ("Refund Ranger v2"), never the type id. */
+export function className(s: State, cls: string): { name: string; forged: boolean } {
+  if (BUILTIN_CLASSES.has(cls)) return { name: cls, forged: false };
+  const t = (s.unitTypes ?? []).find((x) => x.id === cls);
+  return { name: t?.name ?? cls.replace(/^forge-/, "").replace(/-/g, " "), forged: true };
+}
+
+export { modelLabel };
 
 /** Long text clamped to four lines with an expand chevron. */
 function clamped(text: string): HTMLElement {

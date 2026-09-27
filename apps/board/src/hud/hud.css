@@ -562,3 +562,28 @@
 .hud-side .ldo-status[data-state="applied"] { color: var(--ok); }
 .hud-side .ldo-status[data-state="error"] { color: var(--danger); }
 .hud-side .ldo-status[data-state="applying"] { color: var(--gold); }
+.hud-tag-river { color: var(--river); border-color: rgba(79, 167, 224, .4); }
+.hud-feed li { position: relative; }
+.hud-feed-more { align-self: flex-start; margin: 0 0 0 auto; padding: 0 2px; font-size: 14px; }
+.hud-feed-open .hud-feed-text { display: block; -webkit-line-clamp: unset; overflow: visible; white-space: pre-wrap; }
+.hud-feed-more:focus-visible { outline: 1px solid var(--gold); }
+
+/* i2 hud 23/24: one 320 px column; runs max 2, proposals max 3 as compact one-line rows (heads show the totals) */
+.hud-orders { flex-direction: column; flex-wrap: nowrap; align-items: stretch; width: 320px; padding-top: 4px; }
+.hud-orders .hud-card { width: 100%; }
+.hud-orders .hud-run-card:nth-child(n + 3 of .hud-run-card) { display: none; }
+.hud-orders .hud-card:not(.hud-run-card):nth-child(n + 4 of .hud-card:not(.hud-run-card)) { display: none; }
+.hud-card:not(.hud-run-card) { grid-template-columns: 26px minmax(0, 1fr) auto; grid-template-rows: auto; gap: 0 8px; padding: 6px 6px 6px 10px; }
+.hud-card:not(.hud-run-card) .hud-card-reason { display: none; }
+.hud-card:not(.hud-run-card) .hud-card-btns { grid-column: auto; gap: 4px; }
+.hud-card:not(.hud-run-card) .hud-btn-sm { height: 22px; padding: 0 7px; font-size: 11px; }
+.hud-card:not(.hud-run-card) .hud-ring-wrap, .hud-card:not(.hud-run-card) .hud-ring { width: 26px; height: 26px; }
+.hud-card:not(.hud-run-card) .hud-ring-secs { font-size: 10px; }
+.hud-run-card { gap: 6px; padding: 8px 8px 8px 12px; }
+.hud-run-card .hud-card-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: center; }
+.hud-run-card .hud-card-title { grid-column: 1 / -1; }
+.hud-run-card .hud-card-btns { position: absolute; top: 6px; right: 6px; }
+.hud-run-card { position: relative; }
+.hud-run-card .hud-card-title { padding-right: 64px; }
+.hud-run-card .hud-btn-sm { height: 20px; padding: 0 6px; font-size: 10.5px; }
+.hud-gfeed { margin-bottom: 4px; }

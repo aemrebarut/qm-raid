@@ -47,3 +47,44 @@ export function stripName(text: string, name: string | undefined): string {
 export function firstLine(text: string): string {
   return (text.split("\n").find((l) => l.trim()) ?? "").replace(/^\s*(#+|\d+\.|[-*])\s*/, "").trim();
 }
+
+const SLUG_IN_TEXT = /\b(?:rules|learnings|issues|components|customers|people|concepts|decisions|runbooks)\/[a-z0-9][a-z0-9-]*/gi;
+
+/** Engine and agent text for players: slugs become page titles, internal notes go. */
+export function humanize(text: string): string {
+  return text
+    .replace(/\s*\((?:engine )?fallback\)/gi, "")
+    .replace(SLUG_IN_TEXT, (m) => pageTitle(m));
+}
+
+/** "order active: LUM-101 Payment retry" -> "took LUM-101"; "workflow done: LUM-101" -> "finished LUM-101". */
+export function orderPhrase(text: string): string {
+  const m = /^(order|workflow) (\w+): (\S+)(.*)$/.exec(text);
+  if (!m) return humanize(text);
+  const verb = ({ proposed: "proposed", active: "took", done: "finished", cancelled: "dropped", failed: "failed", running: "started",
+    needs_human: "needs you on", } as Record<string, string>)[m[2]] ?? m[2];
+  return `${verb} ${m[3]}`;
+}
+
+/** A tool call as a short verb phrase: read a file, edited a file, ran tests, read Billing Idempotency. */
+export function toolPhrase(tool: string | undefined, text: string, slugs?: string[]): string {
+  const t = (tool ?? "").toLowerCase().replace(/^mcp__[a-z0-9-]+__/, "").replace(/^[a-z0-9-]+\./, "");
+  const page = slugs?.find((s) => typeof s === "string" && s) ?? (text.match(SLUG_IN_TEXT) ?? [])[0];
+  if (/gbrain/.test(tool ?? "") || /_page|^page|recall|remember/.test(t)) {
+    if (/put|write|remember|create|update|link/.test(t)) return page ? `wrote ${pageTitle(page)}` : "wrote to the Library";
+    if (/search|query/.test(t)) return "searched the Library";
+    return page ? `read ${pageTitle(page)}` : "read the Library";
+  }
+  if (/test/.test(t)) return "ran tests";
+  if (/edit|write|patch|replace|create/.test(t)) return "edited a file";
+  if (/read|view|cat|open/.test(t)) return "read a file";
+  if (/grep|glob|find|search|list|ls/.test(t)) return "searched the code";
+  if (/bash|shell|exec|run|command/.test(t)) return "ran a command";
+  if (/web|fetch|http/.test(t)) return "fetched a page";
+  return t ? `used ${t.replace(/[_-]+/g, " ")}` : humanize(text);
+}
+
+/** Model line for players: River checkpoints (river://...) are not shown. */
+export function modelLabel(model: string | null | undefined): string {
+  return !model || /^river:\/\//.test(model) || model.length > 32 ? "" : model;
+}

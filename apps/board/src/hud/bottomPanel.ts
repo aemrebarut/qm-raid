@@ -5,7 +5,7 @@ import { portraitArt } from "../theme/portrait";
 import { clear, h, safeColor, safeUrl } from "./dom";
 import { openFormation } from "./formation";
 import { Minimap } from "./minimap";
-import { BUILDINGS, portraitStyle, statusPill } from "./sidePanel";
+import { BUILDINGS, className, modelLabel, portraitStyle, statusPill } from "./sidePanel";
 
 interface Cmd { glyph: string; label: string; title: string; enabled: boolean; key?: string; armed?: boolean; run?: () => void }
 
@@ -207,16 +207,19 @@ export class BottomPanel {
       const team = s.teams.find((t) => t.id === u.team);
       const order = u.orderId ? s.orders.find((o) => o.id === u.orderId) : undefined;
       const target = order ? s.targets.find((t) => t.id === order.targetId) : undefined;
-      sig = `u:${u.id}:${u.name}:${u.status}:${u.model}:${u.effort}:${team?.color}:${team?.name}:${target?.id}:${order?.status}`;
+      sig = `u:${u.id}:${u.name}:${u.status}:${u.model}:${u.effort}:${team?.color}:${team?.name}:${target?.id}:${order?.status}:${s.unitTypes.length}`;
+      const cn = className(s, u.class);
+      const model = modelLabel(u.model);
       node = h("div", { class: "hud-sum-one" },
         h("div", { class: "hud-portrait hud-portrait-lg", style: portraitStyle(u.class, team?.color) }, portraitArt(u.class, team?.color, 104)),
         h("div", { class: "hud-sum-info" },
           h("div", { class: "hud-sum-name" }, u.name),
           h("div", { class: "hud-sum-row" },
-            h("span", { class: "hud-tag" }, u.class),
+            h("span", { class: "hud-tag", title: cn.forged ? u.class : null }, cn.name),
+            cn.forged ? h("span", { class: "hud-tag hud-tag-river" }, "River") : null,
             team ? h("span", { class: "hud-tag", style: `--team:${safeColor(team.color)}` }, team.name) : null,
             statusPill(u.status),
-            h("span", { class: "hud-sum-sub hud-dim", title: "Model (effort)" }, `${u.model} ${u.effort}`)),
+            h("span", { class: "hud-sum-sub hud-dim", title: u.model ?? "" }, model ? `${model} ${u.effort}` : u.effort)),
           target
             ? h("div", { class: "hud-sum-order" },
                 h("div", { class: "hud-sum-sub" }, h("span", { class: "hud-tag hud-tag-id" }, target.issue), " ", target.title),

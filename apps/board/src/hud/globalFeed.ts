@@ -2,7 +2,7 @@
 // One line each: icon, name, short verb phrase, object ("Bram recalled Billing Idempotency"), relative time.
 import type { Bus, FeedEntry, Store } from "../core";
 import { icon, kindIcon } from "../theme/icons";
-import { firstLine, pageTitle, refreshTimes, relTime, stripName } from "../theme/text";
+import { firstLine, humanize, orderPhrase, pageTitle, refreshTimes, relTime, stripName, toolPhrase } from "../theme/text";
 import { h, RowList } from "./dom";
 
 const LINES = 5;
@@ -40,12 +40,13 @@ export class GlobalFeed {
 }
 
 function phrase(e: FeedEntry, name: string, slug: string | undefined): [string, string] {
-  const text = firstLine(stripName(e.text, name));
+  const text = humanize(firstLine(stripName(e.text, name)));
   switch (e.kind) {
     case "recall": return ["recalled", slug ? pageTitle(slug) : text];
     case "remember": return ["remembered", slug ? pageTitle(slug) : text];
     case "handoff": return ["", text.replace(/:.*$/, "")];
-    case "tool": return ["used", e.tool ?? text];
+    case "tool": return ["", toolPhrase(e.tool, e.text, e.slugs)];
+    case "order": return ["", orderPhrase(e.text)];
     case "reply": return ["", text];
     case "error": return ["failed", text];
     default: return ["", text];

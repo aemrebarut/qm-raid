@@ -180,7 +180,7 @@ export function bakeRigid(host: THREE.Object3D, opts: { castShadow?: boolean } =
 // ---------- outline ----------
 
 /** Outline width in CSS pixels, constant at every zoom (screen space). One shared material, so one width. */
-export const OUTLINE_PX = 1.5;
+export const OUTLINE_PX = 2.6; // Emre 16:24: pieces must separate from the grass
 const outlineUniforms = {
   uOutlinePx: { value: OUTLINE_PX },
   uOutlineRes: { value: new THREE.Vector2(1920, 1080) },
@@ -191,7 +191,7 @@ const _size = new THREE.Vector2();
 /** One shared back-face material that pushes vertices out along their smoothed normal by a constant pixel width. */
 function getOutlineMaterial() {
   if (outlineMat) return outlineMat;
-  const m = new THREE.MeshBasicMaterial({ color: "#24170d", side: THREE.BackSide }); // warm dark brown
+  const m = new THREE.MeshBasicMaterial({ color: "#0d0804", side: THREE.BackSide }); // near-black brown
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, outlineUniforms);
     sh.vertexShader = sh.vertexShader

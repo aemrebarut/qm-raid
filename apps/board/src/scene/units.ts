@@ -36,6 +36,8 @@ const G = {
   staff: new THREE.CylinderGeometry(0.016, 0.02, 0.78, 5),
   gem: new THREE.OctahedronGeometry(0.045, 0),
   ring: new THREE.RingGeometry(0.26, 0.32, 28),
+  base: new THREE.RingGeometry(0.2, 0.3, 28),
+  blob: new THREE.CircleGeometry(0.3, 24),
   hit: new THREE.CylinderGeometry(0.42, 0.42, 1.1, 8), // generous pick volume, units are small
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
@@ -59,6 +61,7 @@ export class UnitView {
   private readonly tinted: THREE.Mesh[] = [];
   private readonly gemMat = new THREE.MeshLambertMaterial({ color: "#9fd6ff", emissive: STAFF_GEM_IDLE.clone() });
   private readonly selRing: THREE.Mesh;
+  private readonly baseRing: THREE.Mesh;
   private bubble: THREE.Sprite | null = null;
   private bubbleKey = "";
   private nameTag: THREE.Sprite | null = null;
@@ -104,6 +107,12 @@ export class UnitView {
     this.selRing.position.y = 0.025;
     this.selRing.visible = false;
     this.group.add(this.selRing);
+    // Always-on footprint (Emre 16:24): dark contact disc plus a team-coloured ring, so every unit reads against the grass.
+    const blob = new THREE.Mesh(G.blob, new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.42, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.015; blob.renderOrder = 1;
+    this.baseRing = new THREE.Mesh(G.base, new THREE.MeshBasicMaterial({ color: teamColor ?? "#f4f1e6", transparent: true, opacity: 0.95, depthWrite: false }));
+    this.baseRing.rotation.x = -Math.PI / 2; this.baseRing.position.y = 0.02; this.baseRing.renderOrder = 2;
+    this.group.add(blob, this.baseRing);
     // Pick volume: invisible (no draw call) but still raycast, three's Raycaster ignores visibility.
     const hit = mesh(G.hit, hitMat, 0, 0.55, 0, false);
     hit.visible = false;
@@ -209,6 +218,7 @@ export class UnitView {
       this.build(unit.class, teamColor);
     }
     for (const m of this.tinted) (m.material as THREE.MeshLambertMaterial).color.set(teamColor ?? NEUTRAL);
+    (this.baseRing.material as THREE.MeshBasicMaterial).color.set(teamColor ?? "#f4f1e6");
     if (this.art && teamColor !== this.artTeam) { this.art.setTeamColor(teamColor); this.artTeam = teamColor; } // rewrites vertex colours: only on change
     const d = this.worldOf(unit);
     if (d.distanceToSquared(this.dest) > 1e-6) {

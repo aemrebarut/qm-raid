@@ -16,6 +16,8 @@ const G = {
   crystal: new THREE.OctahedronGeometry(0.2, 0),
   camp: new THREE.CircleGeometry(0.5, 14),
   ring: new THREE.RingGeometry(0.5, 0.58, 32),
+  base: new THREE.RingGeometry(0.4, 0.5, 32),
+  blob: new THREE.CircleGeometry(0.5, 28),
   flagPole: new THREE.CylinderGeometry(0.02, 0.02, 0.8, 4),
   flag: new THREE.BoxGeometry(0.3, 0.2, 0.02),
   hit: new THREE.CylinderGeometry(0.45, 0.45, 1, 8),
@@ -38,6 +40,7 @@ export class TargetView {
   private readonly skin: THREE.MeshLambertMaterial;
   private readonly ring: THREE.Mesh;
   private readonly engagedRing: THREE.Mesh;
+  private readonly baseRing: THREE.Mesh;
   private readonly flag: THREE.Group;
   private readonly tag: THREE.Sprite;
   private readonly size: number;
@@ -83,6 +86,12 @@ export class TargetView {
     const hit = mesh(G.hit, hitMat, 0, 0.5, 0, false);
     hit.visible = false; // raycast only, never drawn
     this.group.add(this.ring, this.engagedRing, hit);
+    // Always-on footprint (Emre 16:24): dark disc plus a severity-coloured ring while the camp is open.
+    const blob = new THREE.Mesh(G.blob, new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.4, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.position.y = 0.06; blob.scale.setScalar(this.size); blob.renderOrder = 1;
+    this.baseRing = new THREE.Mesh(G.base, new THREE.MeshBasicMaterial({ color: SEV_PIP[t.severity] ?? SEV_PIP[2], transparent: true, opacity: 0.95, depthWrite: false }));
+    this.baseRing.rotation.x = -Math.PI / 2; this.baseRing.position.y = 0.07; this.baseRing.scale.setScalar(this.size); this.baseRing.renderOrder = 2;
+    this.group.add(blob, this.baseRing);
 
     if (this.art) {
       this.skin = new THREE.MeshLambertMaterial(); // unused with art bodies
@@ -200,6 +209,7 @@ export class TargetView {
       this.titleTag = null;
     }
     this.ring.visible = this.selected || this.hovered;
+    this.baseRing.visible = this.target.status !== "resolved";
     const m = this.ring.material as THREE.MeshBasicMaterial;
     m.color.set(this.selected ? "#f2e27a" : "#ffffff");
     m.opacity = this.selected ? 0.95 : 0.45;

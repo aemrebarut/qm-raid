@@ -10,8 +10,9 @@ export interface Selection {
   focus: "units" | "target" | "building" | null;
 }
 
-/** Pending command mode: the next click completes it (Adjust from the orders bar, Order from the command grid). */
-export type Command = { kind: "adjust"; orderId: string } | { kind: "order" } | null;
+/** Pending command mode: the next click completes it (Adjust from the orders bar, Order from the command grid,
+ *  Role from the formation view: the next unit click takes that workflow role). */
+export type Command = { kind: "adjust"; orderId: string } | { kind: "order" } | { kind: "role"; teamId: number; nodeId: string } | null;
 
 export type BusEvents = {
   select: string[];                 // selected unit ids (empty = none)

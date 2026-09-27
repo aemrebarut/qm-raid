@@ -129,3 +129,34 @@ test("store.run returns the newest running run", () => {
   expect(store.run(1)?.id).toBe("w1"); // w1 is still running
   expect(store.run(2)).toBeUndefined();
 });
+
+test("formation: formTeam picks the exact team or the lowest free group; assignRole joins and swaps", async () => {
+  const { formTeam, assignRole, commandUnit, linkSelection } = await import("../src/core");
+  const g = globalThis as any;
+  const orig = g.fetch;
+  const calls: string[] = [];
+  g.fetch = async (url: string, init: any) => { calls.push(`${init.method} ${url} ${init.body ?? ""}`); return new Response(JSON.stringify({ ok: true })); };
+  try {
+    const store = createStore(fixtureState());
+    const bus = createBus();
+    expect(await formTeam(store, bus, ["u1", "u2", "u3"])).toBe(1);
+    expect(calls).toEqual([]);
+    expect(await formTeam(store, bus, ["u4", "u6"])).toBe(3);
+    expect(calls.pop()).toBe(`POST /api/teams {"id":3,"members":["u4","u6"]}`);
+    expect(bus.selection.units).toEqual(["u4", "u6"]);
+
+    // Fixture team 1 is a trio: n1 planner u1, n2 implementer u2, n3 reviewer u3.
+    await assignRole(store, bus, 1, "n3", "u2"); // swap reviewer and implementer
+    const put = JSON.parse(calls.pop()!.split(" ").slice(2).join(" "));
+    expect(put.workflow.nodes.map((n: any) => `${n.id}:${n.unitId}`)).toEqual(["n1:u1", "n2:u3", "n3:u2"]);
+    expect(store.team(1)!.workflow!.nodes[2].unitId).toBe("u3"); // local state waits for the engine
+
+    linkSelection(store, bus);
+    bus.setCommand({ kind: "role", teamId: 1, nodeId: "n1" });
+    expect(commandUnit(bus, "u6")).toBe(true); // outsider joins the team, then takes planner
+    expect(bus.command).toBe(null);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls[0]).toBe(`POST /api/teams {"id":1,"members":["u1","u2","u3","u6"]}`);
+    expect(calls[1]).toContain(`"id":"n1","role":"planner","unitId":"u6"`);
+  } finally { g.fetch = orig; }
+});

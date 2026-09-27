@@ -5,6 +5,6 @@ export { createBus, type Bus, type Selection, type HoverRef, type BusEvents, typ
 export { api, type Api, type Reply, type GraphNode, type GraphEdge, type SearchHit } from "./api";
 export { connectEngine } from "./sse";
 export { fixtureState } from "./fixture";
-export { commandTarget, commandUnit, linkSelection, workflowTeam } from "./actions";
+export { assignRole, commandTarget, commandUnit, formTeam, linkSelection, workflowTeam } from "./actions";
 export { installKeys } from "./keys";
 export { devTools } from "./dev";

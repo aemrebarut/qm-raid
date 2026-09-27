@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current M1 checkpoint: all actionable findings below are resolved. Six board smoke tests, typecheck, build, health, and isolated interaction checks pass. The lead supplied live browser acceptance in `docs/TEST.md`; reviewer independently verified code and synthetic event/DOM behavior, not GPU pixels.
+M1 checkpoint: its actionable findings are resolved. Six board smoke tests, typecheck, build, health, and isolated interaction checks pass. The lead supplied live browser acceptance in `docs/TEST.md`; reviewer independently verified code and synthetic event/DOM behavior, not GPU pixels. Latest follow-up: Library request race in 9717398 remains open.
 
 ## Review procedure
 
@@ -97,3 +97,21 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - `bun test test/`: 6 passed, 0 failed, 38 assertions. Typecheck, production build (34 modules), and board `/health` pass.
 - Lead-provided browser evidence (`d5b3014`, `docs/TEST.md` M1 ui): live world renders, unit/target click panels work, right-click order u1 to t108 walks and recalls, no console errors on load. Distinct from reviewer's mocked-renderer evidence.
 - Analyst rule recorded for future Forge reviews: any check creating a type must pass `dryRun: true`; real River training is reserved for demo types. All command checks in this review used a mocked fetch.
+
+## Animation review: ab79a23
+
+- Read FX, scene wiring, unit and target changes. Tested real geometry/event handling with mocked rendering: recall and remember create transient objects, then object count returns to baseline after simulation; all transforms remain finite. Error tint and resolved fade update correctly.
+- Capture-phase keyup and editable focus clearing pass the held-key scenario. No new actionable findings in this commit. Visual appearance still requires browser verification.
+
+## Orders and Barracks review: 2679428, 96282ab
+
+- **P2 found in 2679428, resolved by 96282ab:** a retained proposal card captured its initial unit ID. Reassigning order o3 from u1 to u2 changed its title to Brom, while click and hover still targeted u1. The fix updates Card.unitId and reads it at event time; rerun shows title, selection, and hover all reference u2.
+- Countdown/urgency checks, Cancel and Go request paths, Adjust cleanup when the card disappears, stopping the timer when no cards remain, current-state autopilot toggles, and colour injection rejection pass.
+- Read detached side-panel rendering and Barracks additions in the corrected SHA `96282ab`. Barracks selection persists through state refresh and Train sends the selected class/team. No new actionable findings there.
+- Board smoke remains 6 passed / 38 assertions; production build and typecheck pass.
+
+## Library and Forge panel review: 9717398
+
+- Read all seven changed files. Isolated checks pass for safe markdown text/wikilinks, ready-only Forge Train requests, and expected engine proxy query encoding. No Forge type was created during review.
+- **P2 open, assigned to raid-ui-plan:** `LibraryPanel.openPage` and `search` do not discard superseded responses. Reproduced page A then B, resolving B before A: graph selection remains B while the page shows A. Search alpha then beta, resolving beta before alpha: results mix Beta and Alpha under the beta query. Track separate request generations for page/search and invalidate on empty query/reset; only the latest request may update the UI.
+- Lead reports live brain browser verification (31 pages, 78 links); independent reviewer tests used mocked HTTP responses to exercise reordered completions.

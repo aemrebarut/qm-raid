@@ -25,3 +25,6 @@ Start the engine stack first (M1 eng above), then `cd apps/board && bun install 
 - Order: select a unit, right-click a target. The unit walks there and its feed fills with recall, work, remember and the reply (engine plus mock-bridge, about 25 s).
 - Camera: drag to pan, wheel to zoom, WASD, H centres the Library. Esc clears the selection.
 - Engine down: the board keeps a synthetic fixture on screen (backend "fixture"). Tests: `cd apps/board && bun test test/` (6 pass), `bun run typecheck`.
+
+## M2 gbrain (MCP facade for QM agents, learnings)
+Brain up on 127.0.0.1:4616 and 4617. `cd services/brain && SMOKE_WRITE=1 bun run test`: all PASS (remember then recall, learning edges in /graph at once, parallel add_link keeps both links, engine-assigned slug used as given; cleans up after itself). MCP: `curl -s 127.0.0.1:4617/mcp -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"recall","arguments":{"componentId":"billing","targetId":"t102","unitId":"u1"}}}'` returns billing rules, LUM-102, Brightpath Clinics and Dev Patel plus the newest billing learnings. Real QM agent path proven by raid-qm-plan (gbrain_recall quoted the billing rule). Clean demo start: `world/reset.sh` (0 learnings, 0 units).

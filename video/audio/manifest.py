@@ -1,15 +1,15 @@
 # Builds the playable set and manifest.json for raid-video (raid-video-vo).
 # Usage: python3 manifest.py [eleven|kokoro]   (default eleven; any line missing there falls back to kokoro/)
 # Per line: trim silence, loudness to -16 LUFS, time-fit lines with a "max" (intro beats), write <id>.wav here.
-# Music: music.wav = intro music 0 to 15 s, then the march bed quietly to 109 s. SFX: absolute cue times.
+# Music: music.wav = the last 13 s of the intro music from frame 0 (its final hit lands on the title drop), then the march bed quietly to the end. SFX: absolute cue times.
 import json, os, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PREFER = sys.argv[1] if len(sys.argv) > 1 else "eleven"
-SECTIONS = {"intro": (0, 15), "orders": (15, 20), "teams": (35, 20), "forge": (55, 20),
-            "autopilot": (75, 15), "loadout": (90, 15), "end": (105, 4)}
-CARD = 1.2  # clip title card; the herald starts after it
-TOTAL = 109
+SECTIONS = {k: tuple(v) for k, v in json.load(open(os.path.join(HERE, "lines.json")))["sections"].items()}
+CARD = 1.0  # clip title card; the herald starts after it
+TOTAL = max(a + b for a, b in SECTIONS.values())
+INTRO_END = SECTIONS["orders"][0]
 
 
 def dur(p):
@@ -73,9 +73,12 @@ def main():
             t["offset"] = round(at, 2)
             at += t["duration"] + gap
         t["overrun"] = round(max(0, ts[-1]["offset"] + ts[-1]["duration"] - length), 2)
-        for a in alts:
-            if a["section"] == sec:
-                a["offset"] = ts[-1]["offset"]
+    # An alt line "<id>b" plays in place of <id>.
+    base = {t["id"]: t for t in tracks}
+    for a in alts:
+        b = base.get(a["id"][:-1])
+        if b:
+            a["offset"] = b["offset"]
     for t in tracks + alts:
         t.setdefault("offset", 0)
         t["at"] = round(SECTIONS[t["section"]][0] + t["offset"], 2)
@@ -87,37 +90,44 @@ def main():
         parts, filt, n = [], [], 0
         if intro:
             parts += ["-i", intro]
-            filt.append(f"[{n}:a]atrim=0:15,afade=t=out:st=14:d=1,loudnorm=I=-18:TP=-1.5,aresample=44100,aformat=channel_layouts=stereo[a{n}]")
+            filt.append(f"[{n}:a]atrim=start=2.05,asetpts=PTS-STARTPTS,atrim=0:{INTRO_END},afade=t=out:st={INTRO_END - 0.5}:d=0.5,loudnorm=I=-18:TP=-1.5,aresample=44100,aformat=channel_layouts=stereo[a{n}]")
             n += 1
         if bed:
             parts += ["-i", bed]
-            start = 14.5 if intro else 0
+            start = INTRO_END - 0.5 if intro else 0
             filt.append(f"[{n}:a]atrim=0:{TOTAL - start},afade=t=in:d=1,afade=t=out:st={TOTAL - start - 2.5}:d=2.5,loudnorm=I=-30:TP=-6,aresample=44100,aformat=channel_layouts=stereo,adelay={int(start * 1000)}|{int(start * 1000)}[a{n}]")
             n += 1
         mix = "".join(f"[a{i}]" for i in range(n)) + f"amix=inputs={n}:normalize=0,apad=whole_dur={TOTAL},atrim=0:{TOTAL}[m]"
         ff(*parts, "-filter_complex", ";".join(filt + [mix]), "-map", "[m]", os.path.join(HERE, "music.wav"))
         manifest["music"] = {"file": "music.wav", "duration": round(dur(os.path.join(HERE, "music.wav")), 2),
-                             "note": "intro music 0 to 15 s at -18 LUFS, march bed from 14.5 s at -30 LUFS; VO is -16 LUFS"}
-    # Intro cues: 0 to 2 s gameplay cold open, smash cut at 2.0, anime beats scaled to 2 to 15 s (raid-video-intro retimes).
-    cues = [("sfx_impact", 2.0), ("sfx_whoosh", 4.34), ("sfx_impact", 4.43), ("sfx_whoosh", 7.11), ("sfx_sparkle", 8.59),
-            ("sfx_whoosh", 9.71), ("sfx_hammer", 10.15), ("sfx_hammer", 10.58), ("sfx_hammer", 11.01), ("sfx_riser", 11.1),
-            ("sfx_impact", 12.83), ("sfx_slam", 12.92), ("sfx_sparkle", 13.18),
-            ("sfx_whoosh", 15.0), ("sfx_whoosh", 35.0), ("sfx_whoosh", 55.0), ("sfx_whoosh", 75.0), ("sfx_whoosh", 90.0),
-            ("sfx_chime", 105.0)]
+                             "note": f"intro music 0 to {INTRO_END} s at -18 LUFS, march bed from {INTRO_END - 0.5} s at -30 LUFS; VO is -16 LUFS"}
+    # Intro cues (absolute video time) from raid-video-intro's 11 s intro: smash cut 2.00 out of the gameplay hero.
+    cues = [("sfx_impact", 2.0), ("sfx_whoosh", 2.4), ("sfx_whoosh", 2.73),
+            ("sfx_land", 4.47), ("sfx_land", 4.70), ("sfx_land", 4.93), ("sfx_glint", 4.93), ("sfx_whoosh", 5.23), ("sfx_whoosh", 5.5),
+            ("sfx_beam", 6.63), ("sfx_orb", 7.90), ("sfx_hammer", 8.87), ("sfx_hammer", 9.20), ("sfx_hammer", 9.53),
+            ("sfx_sparkle", 9.77), ("sfx_riser", 9.2), ("sfx_clash", 11.20), ("sfx_slam", 11.27), ("sfx_sparkle", 11.60),
+            ("sfx_whoosh", 12.60)]
+    cues += [("sfx_whoosh", float(SECTIONS[k][0])) for k in ("orders", "teams", "forge", "command")] + [("sfx_chime", float(SECTIONS["end"][0]))]
     sfx, made = [], {}
     for name, at in cues:
         if name not in made:
             _, p = src_for(name)
             if p:
                 out = os.path.join(HERE, name + ".wav")
-                ff("-i", p, "-af", "loudnorm=I=-18:TP=-1", "-ar", "44100", out)
+                ff("-i", p, "-af", "loudnorm=I=-20:TP=-1", "-ar", "44100", out)
                 made[name] = round(dur(out), 2)
         if name in made:
             sfx.append({"file": name + ".wav", "at": at, "duration": made[name]})
     manifest["sfx"] = sfx
-    manifest["extras"] = [{"file": n + ".wav", "use": u} for n, u in
-                          (("sfx_scroll", "teams handoff scroll"), ("sfx_hammer", "forge train"), ("sfx_chime", "VERDICT: APPROVED stamp"))
-                          if n in made or os.path.exists(os.path.join(HERE, n + ".wav"))]
+    manifest["extras"] = []
+    for n, u in (("sfx_scroll", "teams handoff scroll"), ("sfx_hammer", "forge train"), ("sfx_chime", "VERDICT: APPROVED stamp"),
+                 ("sfx_beam", "recall beam in clips"), ("sfx_orb", "remember orb in clips")):
+        _, p = src_for(n)
+        if p and n not in made:
+            ff("-i", p, "-af", "loudnorm=I=-20:TP=-1", "-ar", "44100", os.path.join(HERE, n + ".wav"))
+            made[n] = round(dur(os.path.join(HERE, n + ".wav")), 2)
+        if n in made:
+            manifest["extras"].append({"file": n + ".wav", "use": u, "duration": made[n]})
     json.dump(manifest, open(os.path.join(HERE, "manifest.json"), "w"), indent=1)
     for sec, (start, length) in SECTIONS.items():
         ts = [t for t in tracks if t["section"] == sec]

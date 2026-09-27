@@ -1,84 +1,71 @@
-# QM Raid demo: narration script v1 (raid-video-vo)
+# QM Raid demo: narration script v2, 75 s cut (raid-video-vo)
 
-Target 1:49 (intro 15 s, five clips 90 s, end card 4 s). Slots from raid-video (36ece61): intro 0 to 15, orders 15 to 35, teams 35 to 55, forge 55 to 75, autopilot 75 to 90, loadout 90 to 105, end 105 to 109. Each clip opens with a 1.2 s title card; the herald starts after it.
+Structure (docs/lanes/video.md, Update 16:03; raid-video 155ca6c): hero 0 to 2 (gameplay, no VO), intro 2 to 13, orders 13 to 28, teams 28 to 42, forge 42 to 57, command 57 to 71, end 71 to 75. Clip title cards are 1.0 s; the herald starts after them.
 
-Voices (local Kokoro-82M, no API keys; fallback macOS `say -v Daniel`):
-- Intro: hype announcer, `am_puck`, fast and bright.
-- Clips and end card: medieval herald, `bm_george`, brisk.
+Voices: ElevenLabs eleven_v3 stock voices, Harry (hype anime announcer) for the intro, George (warm British herald) for everything after. Kokoro-82M (tts.py) is the local fallback. Durations below are measured on the delivered wavs (silence trimmed, -16 LUFS).
 
-Pace: about 2.6 words per second, never more than 80 percent of a slot filled, so the picture breathes. One wav per beat so the editor can slide each line onto the capture markers.
+Words: 121 spoken (about 53 s of speech in 75 s). The 170 word target would need about 70 s of speech at George's measured pace, leaving no air, so each clip keeps 3 to 7 s of silence for the game sounds and the reviewer's breathing-room request.
 
-## Intro 0:00 to 0:15 (hype announcer; beats and title cards from video/src/intro/STORYBOARD.md)
-| id | at (s) | line | words |
+## Intro (hype announcer, ElevenLabs Harry; beats from raid-video-intro) 0:02 to 0:13 (11 s slot, 10.0 s speech, 23 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_intro_1 | 0.0 | Your backlog is attacking! Your issues are monsters! | 8 |
-| vo_intro_2 | 2.8 | Your AI agents are units! | 5 |
-| vo_intro_3 | 6.0 | GBrain is their shared memory! | 5 |
-| vo_intro_4 | 9.0 | And River forges new unit types! | 6 |
-| vo_intro_5 | 12.3 | This is... QM RAID! | 4 |
+| vo_intro_1 | 2.1 | 2.02 | Your issues are monsters! |
+| vo_intro_2 | 4.3 | 2.05 | Your AI agents are units! |
+| vo_intro_3 | 6.45 | 1.94 | GBrain is their shared memory! |
+| vo_intro_4 | 8.65 | 2.12 | River forges new unit types! |
+| vo_intro_5 | 10.9 | 1.9 | This is QM RAID! |
 
-SFX (absolute): impact 0.1, whoosh 2.7, impact 2.8, whoosh 5.9, whoosh 8.9, hammer 9.4, 9.9, 10.4, sparkle 10.6, riser 10.6 to 12.5, impact 12.5, logo slam 12.6, sparkle 12.9. Intro drums under the whole 15 s.
-
-## Clip 1 Orders and memory 0:15 to 0:35 (herald)
-| id | marker (capture) | line | words |
+## Clip 1 Orders and memory 0:13 to 0:28 (15 s slot, 10.2 s speech, 25 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_orders_1 | unit selected, order given | Hear ye! Pick a knight, a real QM agent, and point it at a camp. Off it marches. | 17 |
-| vo_orders_2 | recall beam | Blue beam: it recalls from the Library, our GBrain. | 8 |
-| vo_orders_3 | QM reply arrives | It works the issue for real. | 6 |
-| vo_orders_4 | remember orb, page count up | Gold orb: what it learned goes back. One more page for the whole army. | 14 |
+| vo_orders_1 | 14.3 | 4.44 | Hear ye! Order a knight, a real QM agent, to a camp. |
+| vo_orders_2 | 20.21 | 2.78 | Blue beam: it recalls from GBrain. |
+| vo_orders_3 | 24.46 | 2.94 | Gold orb: it remembers what it learned. |
 
-## Clip 2 Teams 0:35 to 0:55
-| id | marker | line | words |
+## Clip 2 Teams 0:28 to 0:42 (14 s slot, 6.5 s speech, 14 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_teams_1 | three selected, Form team, Trio | Three units? Make them a team. Pick the Trio: planner, implementer, reviewer. | 12 |
-| vo_teams_2 | order on camp, first handoff | Right-click a camp, and the scrolls fly: plan, to fix, to review. | 12 |
-| vo_teams_3 | reviewer working | The reviewer checks the house rules, and gives the word: | 10 |
-| vo_teams_4 | VERDICT: APPROVED on screen | Verdict: approved! The camp falls. | 5 |
-| vo_teams_4b (alt) | only if the take shows CHANGES first | Verdict: changes! Back to the anvil, implementer. | 7 |
+| vo_teams_1 | 29.3 | 2.87 | Three units, one team: the Trio. |
+| vo_teams_2 | 35.0 | 1.78 | The reviewer checks the house rules. |
+| vo_teams_3 | 39.6 | 1.8 | Verdict: approved! |
+| vo_teams_2b (alt) | 35.0 | 3.2 | The reviewer is a Rule Warden, forged by River. |
+| vo_teams_3b (alt) | 39.6 | 2.97 | Verdict: changes! Back to work. |
 
-## Clip 3 The Forge (River AI) 0:55 to 1:15
-| id | marker | line | words |
+## Clip 3 The Forge (River AI) 0:42 to 0:57 (15 s slot, 11.9 s speech, 27 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_forge_1 | Forge panel, typing the description | Need a new kind of unit? To the Forge! Describe it: a Refund Ranger. | 13 |
-| vo_forge_2 | training progress | The Forge writes practice orders, and River fine-tunes a model on them. | 12 |
-| vo_forge_3 | trained vs base card | Then it faces the base model, on orders it has never seen. | 12 |
-| vo_forge_4 | Train unit, it walks out | Train one, and out it walks, straight to work. | 9 |
+| vo_forge_1 | 43.3 | 4.16 | At the Forge, River fine-tunes new unit types. |
+| vo_forge_2 | 48.04 | 5.8 | Refund Ranger, Rule Warden: each beats its base model on held-out test orders. |
+| vo_forge_3 | 54.43 | 1.97 | Train one, and out it walks! |
 
-No numbers in the VO: the card on screen carries them, so the narration stays true whatever the take shows.
-
-## Clip 4 Autopilot and new issues 1:15 to 1:30
-| id | marker | line | words |
+## Clip 4 Command montage (new issue, autopilot veto, 3 s Loadout edit) 0:57 to 1:11 (14 s slot, 10.7 s speech, 25 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_auto_1 | new issue button, camp spawns | A new issue? A fresh camp appears on the map. | 9 |
-| vo_auto_2 | proposals with rings | Autopilot proposes orders, each with a fifteen second veto ring. | 10 |
-| vo_auto_3 | one cancelled, one goes | Don't like one? Cancel it. Like one? Let it ride. | 10 |
+| vo_auto_1 | 58.3 | 2.8 | A new issue? A fresh camp appears. |
+| vo_auto_2 | 61.81 | 4.43 | Autopilot proposes orders, with a fifteen second veto. |
+| vo_loadout_1 | 66.96 | 3.44 | And a knight's standing orders? Rewrite them in the game. |
 
-## Clip 5 Loadout 1:30 to 1:45 (only if shipped and green; otherwise its time goes to clips 1 and 3)
-| id | marker | line | words |
+## End card 1:11 to 1:15 (4 s slot, 3.5 s speech, 7 words)
+| id | at (video s) | dur (s) | line |
 |---|---|---|---|
-| vo_loadout_1 | Loadout tab open | Every unit carries a loadout: standing orders, skills, and plugins, GBrain among them. | 13 |
-| vo_loadout_2 | edit saved, next order | Change them right in the game. The very next order carries them. | 12 |
+| vo_end | 71.3 | 3.5 | One human. Thirty-one AI agents. Built today. |
+| vo_end_b (alt) | 71 | 3.51 | One human, a swarm of AI agents, built today. |
 
-## End card 1:45 to 1:49
-| id | line | words |
-|---|---|---|
-| vo_end | Built today, by one human and thirty-one AI agents. | 9 |
-| vo_end_b (alt) | Built today, by one human and a swarm of AI agents. | 11 |
+Alts: `vo_teams_2b` names the Rule Warden; use it only if raid-video-cap confirms the Rule Warden reviewed in the take (default `vo_teams_2` does not name it). `vo_teams_3b` if the take shows CHANGES. `vo_end_b` has no number.
 
 ## Evidence for claims (for raid-video-rev)
-- "fifteen second veto ring": `services/engine/src/config.ts:22` `VETO_WINDOW_MS = 15000`; rings per docs/lanes/video.md clip 4.
-- "thirty-one AI agents": `herdr agent list` at 15:47 shows 30 `raid-*` agents (qm 3, eng 5, ui 4, gbrain/river/rev 3, art 5, look 4, video 6) plus the Analyst. The lane doc's "24" is stale. If anyone disagrees, use `vo_end_b` (no number).
 - "a real QM agent": knight = QM agent on gpt-6-astra (docs/CONTRACT.md class map); takes run on the real engine 4610 with real QM.
-- "recalls from the Library, our GBrain" / "gold orb ... one more page": README, COMMON.md (blue recall beam, gold remember orb), lane clip 1 (page count up).
-- "the scrolls fly": `apps/board/src/scene/index.ts:276` (workflow handoff scroll).
-- "checks the house rules": default reviewer instructions in docs/CONTRACT.md ("Recall the house rules. Review ... End with VERDICT").
-- "River fine-tunes a model": `river/runs/forge-refund-ranger-2/model.json` (River checkpoint on Qwen/Qwen3.5-9B, 24 steps). "orders it has never seen": held-out eval in `services/forge/src/server.ts:50`. Numbers only on the card.
-- "the very next order carries them": docs/CONTRACT.md Loadout ("Every order header also restates the unit's current instructions").
-- "GBrain among them": docs/CONTRACT.md Loadout (plugins are MCP servers or connectors, GBrain is one).
+- "recalls from GBrain" / "it remembers what it learned": blue recall beam and gold remember orb (README, COMMON.md); the page count rises on screen.
+- "checks the house rules": default reviewer instructions in docs/CONTRACT.md. Rule Warden only in the alt (see above).
+- "River fine-tunes new unit types": river/runs/forge-refund-ranger-2/model.json (River checkpoint on Qwen/Qwen3.5-9B); forge-rule-warden from the Analyst (GET 127.0.0.1:4612/types/forge-rule-warden/eval).
+- "each beats its base model on held-out test orders": Refund Ranger 0.82 vs 0.42, Rule Warden 0.917 vs 0.557 on 32 held-out review orders (docs/lanes/video.md 16:03 and the Analyst). Held-out orders are new phrasings of known synthetic issues, so the VO does not claim unseen issues. Numbers only on the cards, not in the VO.
+- "fifteen second veto": services/engine/src/config.ts:22 `VETO_WINDOW_MS = 15000`.
+- "a knight's standing orders ... rewrite them in the game": scoped to a QM knight (Loadout tab, PATCH /api/units/:id instructions; docs/CONTRACT.md Loadout). No claim about skills or plugins on Forge units.
+- "Thirty-one AI agents": herdr agent list at 15:47, 30 raid-* agents plus the Analyst; raid-video-rev counted independently.
 
-## Sound (ffmpeg synthesis only, original)
-- Intro: drum hits, whooshes, impacts, forge hammer clangs, sparkle, riser, logo slam (cue list above).
-- Clips: quiet march drum bed at about 100 bpm under all 94 s, ducked under the VO by the editor (bed at about minus 22 dB).
-- Title cards: a short whoosh at each clip start (15, 35, 55, 75, 90) and a soft chime on the end card (105).
+## Sound (all original, generated for this video)
+- ElevenLabs sound effects: impact, whoosh, land, glint, beam, orb, hammer, sparkle, riser, clash, slam, chime, scroll. Intro cues sit on raid-video-intro's hit times (smash cut 2.00, unit lands 4.47/4.70/4.93, beam 6.63, orb 7.90, hammers 8.87/9.20/9.53, clash 11.20, logo slam 11.27, wipe 12.60); a whoosh on each clip card and a chime on the end card. SFX at -20 LUFS.
+- ElevenLabs music (instrumental, original prompt): `music.wav` 75 s = the anime opener's last 13 s from frame 0 (its final hit lands on the title drop), then a quiet medieval march bed at -30 LUFS from 12.5 s, fading out at the end.
+- Extras for the editor: sfx_scroll (handoff), sfx_hammer (Train unit), sfx_chime (APPROVED stamp), sfx_beam and sfx_orb (recall and remember in clips).
 
-Files: `video/audio/*.wav` (gitignored), `video/audio/manifest.json` (committed), generators `video/audio/tts.py`, `video/audio/sfx.sh`, `video/audio/lines.json`.
+Files: `video/audio/<id>.wav` (gitignored, = line ids), `video/audio/manifest.json`. Regenerate: `python3 video/audio/eleven.py` (key read from video/.env inside the script), then `python3 video/audio/manifest.py`. Fallback: `tts.py` then `manifest.py kokoro`.

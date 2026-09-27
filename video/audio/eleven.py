@@ -39,6 +39,11 @@ SFX = [
     ("sfx_slam", 2.5, "huge logo slam, heavy cinematic impact with metallic ring and short reverb tail"),
     ("sfx_chime", 1.5, "warm fantasy victory chime, soft bells"),
     ("sfx_scroll", 0.8, "parchment scroll unrolling quickly, paper swish"),
+    ("sfx_land", 0.6, "cartoon character landing on the ground, short soft thud with a tiny bounce"),
+    ("sfx_glint", 0.7, "anime eye glint, bright high metallic ting shine"),
+    ("sfx_beam", 1.2, "magical blue energy beam firing upward, shimmering hum"),
+    ("sfx_orb", 0.9, "glowing orb landing with a soft magical pop and a bright ding"),
+    ("sfx_clash", 1.2, "two swords clashing hard, metallic clang with sparks, anime battle"),
 ]
 MUSIC = [
     ("music_intro", 15000, "Original high energy anime opening style instrumental, fast rock drums, driving electric guitar riff, synth stabs, 160 bpm, triumphant, builds to a big hit at the end, no vocals"),

@@ -2,7 +2,7 @@
 import { BRAIN_URL, CORS_ORIGINS } from "./config.ts";
 import { listenerCount, recentEvents, store } from "./store.ts";
 import { sseResponse } from "./sse.ts";
-import { forgeProxy } from "./forge.ts";
+import { forgeEval, forgeProxy } from "./forge.ts";
 import { spawnTarget } from "./targets.ts";
 import { getCatalog, patchLoadout } from "./loadout.ts";
 import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, ensureSpawned, goOrder, isResetting, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
@@ -75,6 +75,8 @@ async function route(req: Request): Promise<Response> {
     if (p === "/api/brain/stats") return brainProxy("/stats", "");
     if (p === "/api/brain/search") return brainProxy("/search", url.search);
     if (p === "/api/brain/page") return brainProxy("/page", url.search);
+    const fe = p.match(/^\/api\/forge\/types\/([^/]+)\/eval$/);
+    if (fe) { const r = await forgeEval(decodeURIComponent(fe[1]!)); return json(r.body, r.status); } // Forge answer unchanged
     if (p === "/api/catalog") { const r = await getCatalog(url.searchParams.get("unitId")); return r.ok ? json({ items: r.items }) : json({ ok: false, error: r.error }, r.status); }
     return json({ ok: false, error: "not found" }, 404);
   }

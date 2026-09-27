@@ -18,6 +18,7 @@ globalThis.fetch = (async (url: string, init?: RequestInit) => {
   if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
   if (String(url).endsWith("/reset") && brainResetGate) await brainResetGate;
   if (String(url).endsWith("/recall") && recallGate) await recallGate;
+  if (/\/types\/forge-scribe\/eval$/.test(String(url))) return new Response(JSON.stringify({ typeId: "forge-scribe", score: 0.82, base: 0.42 }), { status: 200 });
   if (String(url).endsWith("/catalog")) return new Response(JSON.stringify({ items: [{ id: "gbrain", name: "GBrain", description: "Team memory", kind: "plugin" }] }), { status: 200 });
   if (String(url).endsWith("/issues") && issuesAnswer) return new Response(JSON.stringify(issuesAnswer.body), { status: issuesAnswer.status });
   if (String(url).endsWith("/send") && sendStatuses.length) return new Response(JSON.stringify({ ok: false }), { status: sendStatuses.shift()! });
@@ -628,4 +629,42 @@ test("Loadout routes: GET /api/catalog proxy, PATCH loadout via the bridge, team
   expect(unit("u5")).toMatchObject({ effort: "high", team: 3 });
   expect((await req("PATCH", "/api/units/u5", { effort: "extreme" })).status).toBe(400);
   expect((await req("PATCH", "/api/units/nope", { instructions: "x" })).status).toBe(404);
+});
+
+test("GET /api/forge/types/:id/eval passes the Forge's eval through unchanged", async () => {
+  const { handle } = await import("../src/app.ts");
+  const r = await handle(new Request("http://127.0.0.1:4610/api/forge/types/forge-scribe/eval"));
+  expect(r.status).toBe(200);
+  expect(await r.json()).toEqual({ typeId: "forge-scribe", score: 0.82, base: 0.42 });
+});
+
+test("E18 with a real trio run: restart while the planner works, its reply still hands off to the implementer with the brief", async () => {
+  const { useFlow } = await import("../src/flowlink.ts");
+  useFlow(await import("../src/workflow.ts"));
+  expect(game.setTeamWorkflow(1, { preset: "trio" }).ok).toBe(true);
+  expect(createOrders({ teamId: 1, targetId: "t102" }).ok).toBe(true);
+  const plan = store.state.orders.find((o) => o.source === "workflow" && o.status === "active")!;
+  const planner = unit(plan.unitId);
+  for (let i = 0; i < 60 && planner.status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  expect(planner.status).toBe("working");
+  const runId = plan.runId!;
+
+  const saved = JSON.parse(JSON.stringify(game.gameSnapshot()));
+  store.state = fixtureState();
+  expect(game.restoreGame(saved)).toBe(true);
+  const run = store.state.workflowRuns.find((r) => r.id === runId)!;
+  expect(run.status).toBe("running");
+  expect(unit(plan.unitId).status).toBe("working");
+
+  calls.length = 0;
+  onBridgeEvent({ type: "reply", unitId: plan.unitId, orderId: plan.id, text: "1. retry with the idempotency key" });
+  const impl = store.state.orders.find((o) => o.runId === runId && o.status === "active")!;
+  expect(impl.nodeId).not.toBe(plan.nodeId);
+  for (let i = 0; i < 60 && unit(impl.unitId).status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  const text = calls.find((c) => c.url.endsWith(`/units/${impl.unitId}/send`))!.body.text as string;
+  expect(text).toContain("Role: implementer.");
+  expect(text).toContain(`- planner (${plan.unitId}): 1. retry with the idempotency key`);
+  expect(store.state.targets.find((t) => t.id === "t102")!.status).toBe("engaged");
 });

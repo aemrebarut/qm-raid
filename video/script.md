@@ -4,7 +4,7 @@ Structure (docs/lanes/video.md, Update 16:08; raid-video sections): hero 0 to 2 
 
 Voices: ElevenLabs eleven_v3 stock voices, Harry (hype anime announcer) for the intro, George (warm British herald) after it. Kokoro-82M (tts.py) is the local fallback. Durations are measured on the delivered wavs (silence trimmed, -16 LUFS).
 
-Words: 180 spoken, 80 s of speech in 110 s; every clip keeps at least 4 s without narration.
+Words: 180 spoken, 80 s of speech in 110 s; every capability clip keeps at least 3 s without narration.
 
 ## Intro (hype announcer, ElevenLabs Harry; beats from raid-video-intro) 0:02 to 0:13 (11 s slot, 10.0 s speech, 23 words)
 | id | anchor | at (s) | dur (s) | line |

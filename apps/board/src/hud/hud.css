@@ -33,7 +33,7 @@
 
 /* Right side panel */
 .hud-side {
-  position: absolute; top: 50px; right: 12px; bottom: 12px; width: 340px;
+  position: absolute; top: 50px; right: 12px; bottom: 184px; width: 340px;
   display: flex; flex-direction: column; gap: 8px; padding: 12px 14px;
   overflow-y: auto; font-size: 14px; line-height: 1.35;
 }
@@ -131,7 +131,7 @@
 
 /* Toasts (bottom centre) and the pending-command hint (top centre) */
 .hud-toasts {
-  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 184px; transform: translateX(-50%);
   display: flex; flex-direction: column-reverse; align-items: center; gap: 6px;
   pointer-events: none !important;
 }
@@ -148,3 +148,54 @@
 }
 .hud-command[hidden] { display: none; }
 .hud-btn-sm { padding: 2px 10px; font-size: 13px; }
+
+/* AoE bottom panel: command grid | selection summary | minimap */
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 160px; box-sizing: border-box;
+  display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 10px 14px;
+  border-top: 3px solid #2e2923; border-bottom: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 -3px 10px rgba(0,0,0,.45);
+}
+.hud-cmds { display: grid; grid-template-columns: repeat(3, 62px); grid-auto-rows: 62px; gap: 6px; }
+.hud-cmd {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  font: inherit; cursor: pointer; color: #f7ecd0; border: 2px solid #2e2923; border-radius: 3px; padding: 2px;
+  background: linear-gradient(180deg, #8a7654, #5a4a33);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.25), inset 0 -2px 0 rgba(0,0,0,.25);
+}
+.hud-cmd:hover:not(:disabled) { filter: brightness(1.15); }
+.hud-cmd:active:not(:disabled) { transform: translateY(1px); }
+.hud-cmd:disabled { opacity: .45; cursor: default; }
+.hud-cmd-empty { background: rgba(0,0,0,.18); border-color: rgba(0,0,0,.35); box-shadow: inset 0 2px 4px rgba(0,0,0,.35); cursor: default; }
+.hud-cmd-glyph { font-size: 22px; line-height: 1; filter: drop-shadow(0 1px 0 #000); }
+.hud-cmd-label { font-size: 11px; line-height: 1.1; text-align: center; text-shadow: 0 1px 0 #000; }
+
+.hud-summary {
+  height: 100%; box-sizing: border-box; min-width: 0; overflow: hidden; padding: 10px 14px; color: #2f2415;
+  background: linear-gradient(180deg, #efe1b8, #dcc690); border: 3px solid #3d352c; box-shadow: inset 0 0 14px rgba(110,70,20,.35);
+}
+.hud-sum-one { display: flex; gap: 14px; align-items: center; height: 100%; }
+.hud-sum-name { font-size: 20px; font-weight: 700; }
+.hud-sum-sub { color: #6a5a40; font-size: 13px; }
+.hud-sum-many { display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; }
+.hud-sum-empty { color: #6a5a40; font-style: italic; display: flex; flex-direction: column; gap: 4px; justify-content: center; height: 100%; }
+.hud-portrait-lg { width: 84px; height: 84px; font-size: 46px; }
+.hud-portrait-md { width: 44px; height: 44px; font-size: 24px; cursor: pointer; padding: 0; font-family: inherit; }
+.hud-portrait-md[data-status="working"] { box-shadow: 0 0 0 2px #c7771f, inset 0 0 6px rgba(0,0,0,.4); }
+.hud-portrait-md[data-status="error"] { box-shadow: 0 0 0 2px #b3261e, inset 0 0 6px rgba(0,0,0,.4); }
+
+.hud-minimap { padding: 4px; background: #2e2923; border: 3px solid #1f1b16; box-shadow: inset 0 0 8px #000; }
+.hud-minimap-canvas { display: block; cursor: crosshair; }
+
+/* Global feed, bottom left above the panel; display only */
+.hud-gfeed {
+  position: absolute; left: 12px; bottom: 170px; max-width: 46vw; margin: 0; padding: 0; list-style: none;
+  font-size: 13px; color: #f1e3bd; text-shadow: 0 1px 2px #000, 0 0 4px #000; pointer-events: none !important;
+}
+.hud-gfeed li { display: flex; gap: 6px; align-items: baseline; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-gfeed .hud-feed-time { color: #c9b78f; }
+.hud-gfeed code { font-size: 11px; color: #9fd0ff; }
+.hud-gfeed-text { overflow: hidden; text-overflow: ellipsis; }
+.hud-gfeed-error .hud-gfeed-text { color: #ff9d8a; }
+.hud-gfeed-recall .hud-gfeed-text { color: #9fd0ff; }
+.hud-gfeed-remember .hud-gfeed-text { color: #ffd98a; }

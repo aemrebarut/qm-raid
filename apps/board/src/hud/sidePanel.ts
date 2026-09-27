@@ -45,6 +45,11 @@ export class SidePanel {
     this.render();
   }
 
+  /** Focus the message box (command grid "Message"). */
+  focusMessage(): void {
+    if (!this.msg.el.hidden) this.msg.focus();
+  }
+
   private focusUnitId(): string | null {
     return this.sel.focus === "units" && this.sel.units.length === 1 ? this.sel.units[0] : null;
   }
@@ -199,7 +204,12 @@ export class SidePanel {
     const id = this.focusUnitId();
     if (!id) return "No unit selected.";
     const res = await api.message(id, text);
-    if (!res.ok) return res.error || "Send failed.";
+    if (!res.ok) {
+      const error = res.error || "Send failed.";
+      // The box may show another unit by now; do not lose the failure.
+      if (this.focusUnitId() !== id) this.bus.toast(`Message to ${this.store.unit(id)?.name ?? id} failed: ${error}`, "error");
+      return error;
+    }
     const mine = this.sent.get(id) ?? [];
     mine.push({ ts: Date.now(), kind: "you", text });
     this.sent.set(id, mine.slice(-20));
@@ -213,32 +223,45 @@ class MessageBox {
   private input = h("textarea", { class: "hud-input", rows: 2, placeholder: "Message this agent (Enter to send)" });
   private button = h("button", { class: "hud-btn", type: "submit" }, "Send");
   private note = h("div", { class: "hud-note" });
+  private gen = 0;
   readonly el = h("form", { class: "hud-section hud-msg" }, h("h3", null, "Orders"), this.input, h("div", { class: "hud-msg-row" }, this.note, this.button));
 
   constructor(private onSend: (text: string) => Promise<string | null>) {
     this.el.addEventListener("submit", (e) => { e.preventDefault(); void this.submit(); });
     this.input.addEventListener("keydown", (e) => {
       e.stopPropagation(); // keep WASD and hotkeys out of the scene while typing
+      if (e.key === "Escape") { this.input.blur(); return; }
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void this.submit(); }
     });
     this.input.addEventListener("keyup", (e) => e.stopPropagation());
   }
 
+  focus(): void {
+    this.input.focus();
+  }
+
+  // A new unit was focused: clear the box and orphan any send still in flight.
   reset(): void {
+    this.gen++;
     this.input.value = "";
     this.note.textContent = "";
+    this.button.disabled = false;
   }
 
   private async submit(): Promise<void> {
-    const text = this.input.value.trim();
+    const draft = this.input.value;
+    const text = draft.trim();
     if (!text || this.button.disabled) return;
+    const gen = ++this.gen;
     this.button.disabled = true;
     this.note.textContent = "Sending...";
+    this.note.dataset.error = "false";
     const err = await this.onSend(text);
+    if (gen !== this.gen) return; // another unit is shown now (or a newer send); leave its UI alone
     this.button.disabled = false;
     this.note.textContent = err ?? "Sent.";
     this.note.dataset.error = err ? "true" : "false";
-    if (!err) this.input.value = "";
+    if (!err && this.input.value === draft) this.input.value = ""; // keep edits made while sending
   }
 }
 
@@ -263,7 +286,7 @@ function feedRow(it: FeedItem) {
   );
 }
 
-const BUILDINGS: Record<string, { name: string; glyph: string; blurb: string }> = {
+export const BUILDINGS: Record<string, { name: string; glyph: string; blurb: string }> = {
   gbrain: { name: "The Library", glyph: "\u{1F4DA}", blurb: "GBrain: what every agent has learned." },
   barracks: { name: "Barracks", glyph: "\u{1F6E1}", blurb: "Train new agents." },
   river: { name: "The Forge", glyph: "\u{1F525}", blurb: "River: forge new kinds of agent." },

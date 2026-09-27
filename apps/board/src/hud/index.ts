@@ -2,6 +2,8 @@
 // (index.html gives #hud > * pointer events; the rest of #hud lets clicks through to the scene).
 import type { Bus, Store } from "../core";
 import "./hud.css";
+import { BottomPanel } from "./bottomPanel";
+import { GlobalFeed } from "./globalFeed";
 import { CommandHint, Toasts } from "./notices";
 import { SidePanel } from "./sidePanel";
 import { TopBar } from "./topBar";
@@ -11,7 +13,9 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
   const side = new SidePanel(store, bus);
   const toasts = new Toasts();
   const hint = new CommandHint(bus);
-  const parts = [top.root, side.root, hint.root, toasts.root];
+  const bottom = new BottomPanel(store, bus, () => side.focusMessage());
+  const gfeed = new GlobalFeed(store);
+  const parts = [top.root, gfeed.root, bottom.root, side.root, hint.root, toasts.root];
   el.append(...parts);
 
   // State changes can arrive many times per frame (unit.moved); render at most once per frame.
@@ -21,15 +25,20 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
     const s = store.getState();
     top.setState(s);
     side.setState(s);
+    bottom.setState(s);
+    gfeed.render();
   };
   const schedule = () => {
-    if (!queued) { queued = true; requestAnimationFrame(render); }
+    if (queued) return;
+    queued = true;
+    // rAF never fires in a hidden tab; fall back to a timer so the HUD stays current there too.
+    if (document.hidden) setTimeout(render, 200); else requestAnimationFrame(render);
   };
 
   const offs = [
     store.subscribe(schedule),
     store.onConnection((c) => top.setConnection(c)),
-    bus.on("selection", (sel) => side.setSelection(sel)),
+    bus.on("selection", (sel) => { side.setSelection(sel); schedule(); }),
     bus.on("toast", (t) => toasts.show(t.text, t.level)),
     bus.on("command", (c) => hint.set(c)),
   ];

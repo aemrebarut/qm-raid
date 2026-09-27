@@ -1,6 +1,6 @@
 // Top resource bar in the AoE style: tokens, spend, Library pages, idle agents, open issues, backend.
-import type { Connection, State } from "../core";
-import { h } from "./dom";
+import { api, type Bus, type Connection, type State } from "../core";
+import { clear, h, safeColor } from "./dom";
 
 export class TopBar {
   private tokens = value();
@@ -9,6 +9,7 @@ export class TopBar {
   private idle = value();
   private open = value();
   private backend = value();
+  private teams = h("span", { class: "hud-teams" });
   readonly root = h("header", { class: "hud-top hud-stone" },
     h("span", { class: "hud-top-title" }, "QM Raid"),
     res("\u{1FA99}", "Tokens", this.tokens),
@@ -17,7 +18,12 @@ export class TopBar {
     res("\u{1F9CD}", "Idle agents", this.idle),
     res("\u{1F47E}", "Open issues", this.open),
     res("\u{1F310}", "Backend", this.backend),
+    this.teams,
   );
+  private teamsSig: string | null = null;
+  private last: State | null = null;
+
+  constructor(private bus: Bus) {}
 
   setState(s: State): void {
     this.tokens.textContent = compact(s.stats.tokens);
@@ -27,6 +33,31 @@ export class TopBar {
     this.open.textContent = String(s.targets.filter((t) => t.status !== "resolved").length);
     this.backend.dataset.backend = s.backend;
     this.renderBackend(s.backend);
+    this.last = s;
+    this.renderTeams(s);
+  }
+
+  // Per-team autopilot toggles; rebuilt only when a team changes.
+  private renderTeams(s: State): void {
+    const sig = s.teams.map((t) => `${t.id}:${t.name}:${t.color}:${t.autopilot}:${t.members.length}`).join("|");
+    if (sig === this.teamsSig) return;
+    this.teamsSig = sig;
+    clear(this.teams);
+    for (const t of s.teams) {
+      const id = t.id;
+      this.teams.append(h("button", {
+        class: "hud-team", type: "button", "data-on": String(t.autopilot), style: `--team:${safeColor(t.color)}`,
+        title: `${t.name} (group ${t.id}, ${t.members.length} units): autopilot ${t.autopilot ? "on" : "off"}. Click to toggle.`,
+        onclick: () => void this.toggle(id),
+      }, h("span", { class: "hud-team-dot" }), `${t.id} ${t.name}`, h("span", { class: "hud-team-auto" }, t.autopilot ? "AUTO" : "manual")));
+    }
+  }
+
+  private async toggle(teamId: number): Promise<void> {
+    const t = this.last?.teams.find((x) => x.id === teamId);
+    if (!t) return;
+    const r = await api.patchTeam(teamId, { autopilot: !t.autopilot });
+    this.bus.toast(r.ok ? `${t.name}: autopilot ${t.autopilot ? "off" : "on"}` : r.error, r.ok ? "info" : "error");
   }
 
   private conn: Connection = "connecting";

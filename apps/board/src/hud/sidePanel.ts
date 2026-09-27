@@ -1,6 +1,6 @@
 // Right side panel: the selected unit (details, order, live feed, reply, message box) or target.
 import { api, type Building, type Bus, type FeedEntry, type Order, type Selection, type State, type Store, type Target, type Unit } from "../core";
-import { clear, h, put, safeUrl, timeOf } from "./dom";
+import { clear, h, put, safeColor, safeUrl, timeOf } from "./dom";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
 
@@ -87,7 +87,7 @@ export class SidePanel {
 
     put(this.body, 
       h("header", { class: "hud-side-head" },
-        h("div", { class: "hud-portrait", "data-class": u.class, style: `--team:${team?.color ?? "#8a7a5c"}` }, classGlyph(u.class)),
+        h("div", { class: "hud-portrait", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
         h("div", null,
           h("h2", null, u.name),
           h("div", { class: "hud-sub" }, `${u.class}${team ? ` · ${team.name}` : ""}`),
@@ -136,7 +136,7 @@ export class SidePanel {
           const team = s.teams.find((t) => t.id === u.team);
           return h("li", null,
             h("button", { class: "hud-roster-item", onclick: () => this.bus.select([u.id]) },
-              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: `--team:${team?.color ?? "#8a7a5c"}` }, classGlyph(u.class)),
+              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
               h("span", null, u.name),
               statusPill(u.status),
             ));

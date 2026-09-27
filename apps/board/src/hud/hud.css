@@ -199,3 +199,41 @@
 .hud-gfeed-error .hud-gfeed-text { color: #ff9d8a; }
 .hud-gfeed-recall .hud-gfeed-text { color: #9fd0ff; }
 .hud-gfeed-remember .hud-gfeed-text { color: #ffd98a; }
+
+/* Team autopilot toggles (top bar, right) */
+.hud-teams { margin-left: auto; display: inline-flex; gap: 6px; }
+.hud-team {
+  display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; cursor: pointer;
+  padding: 2px 8px; color: #f1e3bd; background: rgba(0,0,0,.25); border: 1px solid #2e2923; border-radius: 3px;
+}
+.hud-team:hover { background: rgba(0,0,0,.4); }
+.hud-team-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--team); box-shadow: 0 0 0 1px #000; }
+.hud-team-auto { font-size: 10px; letter-spacing: .08em; padding: 0 4px; border-radius: 2px; background: #4a4137; color: #bfb29a; }
+.hud-team[data-on="true"] .hud-team-auto { background: #c7a23a; color: #2e2410; font-weight: 700; }
+
+/* Orders bar: autopilot proposal cards, top left under the top bar */
+.hud-orders {
+  position: absolute; top: 50px; left: 12px; width: 360px; display: flex; flex-direction: column; gap: 6px;
+  max-height: calc(100vh - 50px - 180px - 160px); overflow-y: auto;
+}
+.hud-orders[hidden] { display: none; }
+.hud-orders-head { margin: 0; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #ffd98a; text-shadow: 0 1px 2px #000; }
+.hud-card {
+  display: grid; grid-template-columns: 40px 1fr; grid-template-rows: auto auto; gap: 4px 10px; align-items: center;
+  padding: 8px 10px; color: #2f2415; border-left: 5px solid var(--team, #8a7a5c);
+  background: linear-gradient(180deg, #efe1b8, #dcc690); border-top: 2px solid #3d352c; border-right: 2px solid #3d352c; border-bottom: 2px solid #3d352c;
+  box-shadow: 0 4px 12px rgba(0,0,0,.45);
+}
+.hud-card[data-adjusting="true"] { outline: 3px solid #ffd98a; }
+.hud-card-body { cursor: pointer; min-width: 0; }
+.hud-card-title { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.hud-card-reason { font-size: 12.5px; color: #6a5a40; font-style: italic; overflow-wrap: anywhere; }
+.hud-card-btns { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; }
+.hud-btn-cancel { background: linear-gradient(180deg, #a3453a, #6e2a22); }
+.hud-btn-go { background: linear-gradient(180deg, #4f8a3e, #2f5a25); }
+.hud-ring-wrap { position: relative; width: 40px; height: 40px; }
+.hud-ring { width: 40px; height: 40px; transform: rotate(-90deg); }
+.hud-ring-bg { fill: rgba(0,0,0,.12); stroke: rgba(0,0,0,.2); stroke-width: 4; }
+.hud-ring-fg { fill: none; stroke: #3d7a2c; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .25s linear; }
+.hud-card[data-urgent="true"] .hud-ring-fg { stroke: #b3261e; }
+.hud-ring-secs { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }

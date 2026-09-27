@@ -50,3 +50,8 @@ export function timeOf(ts: string | number | undefined): string {
   const d = ts === undefined ? new Date() : new Date(ts);
   return isNaN(d.getTime()) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
+
+// Colours from the backend go into style attributes; allow only hex colours.
+export function safeColor(c: string | null | undefined, fallback = "#8a7a5c"): string {
+  return c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : fallback;
+}

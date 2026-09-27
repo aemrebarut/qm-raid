@@ -4,18 +4,20 @@ import type { Bus, Store } from "../core";
 import "./hud.css";
 import { BottomPanel } from "./bottomPanel";
 import { GlobalFeed } from "./globalFeed";
+import { OrdersBar } from "./ordersBar";
 import { CommandHint, Toasts } from "./notices";
 import { SidePanel } from "./sidePanel";
 import { TopBar } from "./topBar";
 
 export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
-  const top = new TopBar();
+  const top = new TopBar(bus);
   const side = new SidePanel(store, bus);
   const toasts = new Toasts();
   const hint = new CommandHint(bus);
   const bottom = new BottomPanel(store, bus, () => side.focusMessage());
   const gfeed = new GlobalFeed(store);
-  const parts = [top.root, gfeed.root, bottom.root, side.root, hint.root, toasts.root];
+  const orders = new OrdersBar(bus);
+  const parts = [top.root, orders.root, gfeed.root, bottom.root, side.root, hint.root, toasts.root];
   el.append(...parts);
 
   // State changes can arrive many times per frame (unit.moved); render at most once per frame.
@@ -27,6 +29,7 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
     side.setState(s);
     bottom.setState(s);
     gfeed.render();
+    orders.setState(s);
   };
   const schedule = () => {
     if (queued) return;

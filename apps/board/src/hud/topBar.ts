@@ -49,7 +49,7 @@ export class TopBar {
         class: "hud-team", type: "button", "data-on": String(t.autopilot), style: `--team:${safeColor(t.color)}`,
         title: `${t.name} (group ${t.id}, ${t.members.length} units): autopilot ${t.autopilot ? "on" : "off"}. Click to toggle.`,
         onclick: () => void this.toggle(id),
-      }, h("span", { class: "hud-team-dot" }), `${t.id} ${t.name}`, h("span", { class: "hud-team-auto" }, t.autopilot ? "AUTO" : "manual")));
+      }, h("span", { class: "hud-team-dot" }), String(t.id), h("span", { class: "hud-team-name" }, t.name), h("span", { class: "hud-team-auto" }, t.autopilot ? "AUTO" : "manual")));
     }
   }
 

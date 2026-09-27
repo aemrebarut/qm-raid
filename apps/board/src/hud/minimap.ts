@@ -24,8 +24,7 @@ export class Minimap {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     this.canvas.width = W * dpr;
     this.canvas.height = H * dpr;
-    this.canvas.style.width = `${W}px`;
-    this.canvas.style.height = `${H}px`;
+    // CSS sizes the canvas to the bottom panel height (aspect ratio kept); clicks scale by its rect.
     this.ctx?.scale(dpr, dpr);
     this.canvas.addEventListener("click", (e) => {
       const r = this.canvas.getBoundingClientRect();

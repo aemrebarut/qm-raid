@@ -3,6 +3,7 @@
 import type { Bus, Store } from "../core";
 import "./hud.css";
 import { BottomPanel } from "./bottomPanel";
+import { h } from "./dom";
 import { GlobalFeed } from "./globalFeed";
 import { OrdersBar } from "./ordersBar";
 import { CommandHint, Toasts } from "./notices";
@@ -17,7 +18,8 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
   const bottom = new BottomPanel(store, bus, () => side.focusMessage());
   const gfeed = new GlobalFeed(store);
   const orders = new OrdersBar(bus);
-  const parts = [top.root, orders.root, gfeed.root, bottom.root, side.root, hint.root, toasts.root];
+  const dock = h("div", { class: "hud-dock" }, gfeed.root, orders.root);
+  const parts = [top.root, dock, bottom.root, side.root, hint.root, toasts.root];
   el.append(...parts);
 
   // State changes can arrive many times per frame (unit.moved); render at most once per frame.

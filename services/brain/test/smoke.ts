@@ -35,6 +35,9 @@ if (process.env.SMOKE_WRITE === "1") {
   await check("remember writes a learning that recall returns", async () => {
     const { slug } = await post("/remember", { unitId: "smoke", targetId: "t101", text: "Smoke learning: reuse inv_<invoiceId> as the key on retries." });
     const r = await post("/recall", { componentId: "billing", targetId: "t101", unitId: "u2" });
+    // Regression (raid-rev via river): the learning survives callers that keep only the first 1500 chars.
+    const early = r.context.slice(0, 1500).includes("Smoke learning: reuse inv_<invoiceId>");
+    if (!early) console.log("  learning text not in the first 1500 chars of recall context");
     // Regression (raid-rev): a new learning's edges are in /graph at once (no wait for gbrain's link sweep).
     const g = await get("/graph");
     const edgesNow = ["issues/lum-101", "components/billing", "units/smoke"].every((to) => g.edges.some((e: any) => e.from === slug && e.to === to));
@@ -54,7 +57,7 @@ if (process.env.SMOKE_WRITE === "1") {
     await post("/forget", { slug });
     const after = await post("/recall", { componentId: "billing", targetId: "t101", unitId: "u2" });
     await post("/forget", { slug: "units/smoke" });
-    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && edgesNow && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
+    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && early && edgesNow && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
   });
 }
 console.log(failed ? `${failed} failed` : "all passed");

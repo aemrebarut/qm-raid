@@ -126,13 +126,16 @@ async function recall(componentId?: string, targetId?: string, query?: string) {
     }
   }
   if (query) for (const r of await search(query)) add(r.slug);
+  // Past learnings go first and short, so callers that truncate the context (the Forge keeps 1500 chars) still see them.
   const parts: string[] = [];
-  if (learned.length) parts.push(`${learned.length} past learning(s) from other agents are included below; apply them.`);
-  for (const s of slugs) {
+  if (learned.length) parts.push(`${learned.length} past learning(s) from other agents; apply them.`);
+  const ordered = [...slugs.filter((s) => s.startsWith("learnings/")), ...slugs.filter((s) => !s.startsWith("learnings/"))];
+  for (const s of ordered) {
     const p = await load(s);
     if (!p) continue;
-    const label = s.startsWith("learnings/") ? "Past learning: " : "";
-    parts.push(`# ${label}${p.title} (${s})\n${p.body.trim().slice(0, 1500)}`);
+    const isLearning = s.startsWith("learnings/");
+    const text = isLearning ? p.body.trim().replace(/\n\nAbout \[\[[\s\S]*$/, "").slice(0, 600) : p.body.trim().slice(0, 1500);
+    parts.push(`# ${isLearning ? "Past learning: " : ""}${p.title} (${s})\n${text}`);
   }
   return { slugs, context: parts.join("\n\n") };
 }

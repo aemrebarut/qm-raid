@@ -58,3 +58,27 @@ Verdict: the world reads well; the HUD is what makes it look generated. Parchmen
 2. Issue plaques over camps are illegible white specks at overview: severity pip plus short id (`LUM-102`) with halo, only when zoomed in, hovered or selected.
 3. Unit nameplates ("Ada idle") tiny: name on hover or selection only; status as a small coloured pip over the head; role badges (P, I, R shields) over members of a formed team.
 4. Floating slug label `lum-101-u3-1790547859718` near the Library (i1-overview): show the page title or nothing.
+
+## Iteration 2 (shots art1-* with ?art=on, 15:38; i2-* art off, 15:40)
+Verdict: big step. The slate HUD, SVG icons, 3D portraits, hint strip, preset cards, Forge queue and Library codex now read as one game. Remaining slop is mostly raw ids and tool names in text, stacked card walls, and panels that are taller than their content. From here we shoot with `?art=on` (likely demo default).
+
+### raid-look-hud
+20. Raw ids in the unit card (art1-forged): class tag `FORGE-REFUND-RANGER-2` and the model line `river://b9401460-.../sampler_weights/...`. Forged units: tag = the type's name (`Refund Ranger v2`) plus a small blue `RIVER` mark; model line hidden (tooltip at most). Base units: `gpt-6-astra high` in `--ink-3` is fine.
+21. Tool and event names in feeds (art1-overview, art1-unit): `used mcp__gbrain__get_page`, `used gbrain.get_page`, `used read_file`, `used edit_file`, `run_tests`, `order active: LUM-101 ...`, `Reading rules/billing-idempotency`, `(engine fallback)`. Map to verbs: read a file, edited a file, ran tests, read Billing rules (page title), took LUM-101; drop `(engine fallback)`; slugs inside text become titles.
+22. Side panel is full height even when the content is 4 lines (art1-unit, art1-forged): size to content with a max height, anchored top right.
+23. Card wall (art1-proposals): 3 run cards + 5 proposals cover the left half of the map. One column, 320 px, bottom left above the minimap: runs max 2 then `+N`; proposals as compact one-line rows (ring, `Dara > LUM-101`, Go and Cancel icon buttons with hotkeys), max 3 then `+N`. Use the chevron icon, not the arrow glyph.
+24. Header labels `RUN` / `RUNS 3` / `PROPOSALS 5` collide with the fading feed rows (art1-overview y 514): 8 px gap, the feed ends above the card stack.
+25. Bottom centre with a group selected is a wide empty slab with two portraits (art1-formation): shrink it to the portrait strip or show the group summary (team, count, formation) in it.
+26. Run card wording still `Needs you: loops used up · loop 3/2` (hud 17).
+
+### raid-look-panels
+10. Graph occupies the middle third of the field (art1-library): zoom to fit the node bounding box with 48 px padding on open and on resize; keep hover and labels.
+11. Hover card clipping at the bottom edge (raid-look-rev R4: placeTip clamps X only): clamp Y too, flip above the node when near the bottom.
+
+### raid-ui-scene
+5. Zone and building names read about 9 px at 1512 overview (art1-overview): zones 13 px with .14em tracking, buildings 11 px, both slightly brighter; keep the halo.
+6. Nameplate `Refund Ranger 7 · walking` (art1-forged) is a dot compound: name only, status is the pip.
+7. Speech bubble over units `Ada: plan for LUM-101: 1. Reproduce LUM-101 with a...` (art1-proposals): no `Ada:` prefix, max 8 words, fades after 4 s.
+
+### raid-ui-plan (newIssue.ts, loadout.ts)
+1. Spawn dialog and Loadout: shots next iteration (Loadout tab not mounted yet at 15:38). Keep to the tokens at the top; buttons one word, no helper sentences.

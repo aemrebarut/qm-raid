@@ -1,5 +1,5 @@
 // Game rules: world loading, orders, movement, teams, and mapping bridge events to engine events.
-import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, World } from "../../../contract/types.ts";
+import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Team, Unit, Workflow, World } from "../../../contract/types.ts";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { AUTOPILOT_EVERY_MS, BRAIN_RESET, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
@@ -7,6 +7,7 @@ import { fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
 import { forgeType, pollForge, startForge } from "./forge.ts";
+import { flow, type NodeBrief } from "./flowlink.ts";
 import { bridgeFor, deleteOnBridge, followBridgeEvents, patchOnBridge, sendToBridge, spawnOnBridge } from "./bridge.ts";
 
 type Result = { ok: true; [k: string]: unknown } | { ok: false; error: string; status?: number };
@@ -22,6 +23,8 @@ function runtime(unitId: string): Runtime {
 }
 
 let customers = new Map<string, Customer>();
+// Team workflows: the brief (role, instructions, previous replies) for each workflow order, used in its prompt.
+const briefs = new Map<string, NodeBrief>();
 // Autopilot: per-unit work history for /propose, and the proposal context per proposed order for the veto log.
 const history = new Map<string, { targetId: string; component: string }[]>();
 type ProposeContext = { units: unknown[]; targets: unknown[]; memory: string };
@@ -110,6 +113,17 @@ function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string
   ].join("\n");
 }
 
+// Workflow orders: normal prompt + "Role: <role>. <instructions>" + "Previous work:" (latest last).
+function briefText(b: NodeBrief | undefined): string {
+  if (!b) return "";
+  const lines = [``, `Role: ${b.role}. ${b.instructions}`];
+  if (b.previous.length) {
+    lines.push(`Previous work:`);
+    for (const p of b.previous) lines.push(`- ${p.role} (${p.unitId}): ${p.reply.trim()}`);
+  }
+  return lines.join("\n");
+}
+
 async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   const t = targetById(o.targetId);
   if (!t) return failOrder(o, "target vanished");
@@ -119,7 +133,7 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   r.gbrainReads = 0;
   r.gbrainWrites = 0;
   r.learningSlug = `learnings/${t.issue}-${u.id}-${Date.now()}`.toLowerCase();
-  const req = { text: orderPrompt(u, o, t, r.learningSlug), orderId: o.id, targetId: t.id, componentId: t.component };
+  const req = { text: orderPrompt(u, o, t, r.learningSlug) + briefText(briefs.get(o.id)), orderId: o.id, targetId: t.id, componentId: t.component };
   // Every await may see a cancel, retire, adjust or reset: re-check before each send.
   const current = () => isLive(o) && o.status === "active" && unitById(u.id) === u && u.orderId === o.id;
   const spawned = await ensureSpawned(u);
@@ -181,7 +195,9 @@ function completeOrder(o: Order, reply: string): void {
     h.push({ targetId: t.id, component: t.component });
     history.set(o.unitId, h.slice(-10));
   }
-  refreshTarget(t, true);
+  // A workflow step does not resolve the target; the run does (setTargetStatus) when its last node finishes.
+  if (o.source === "workflow") flowEnded(o);
+  refreshTarget(t, o.source !== "workflow");
   void brainFallback(o, reply, used);
 }
 
@@ -216,6 +232,7 @@ function failOrder(o: Order, reason: string): void {
   emit("unit.activity", { unitId: o.unitId, orderId: o.id, kind: "error", text: reason });
   emit("order.updated", { order: o });
   releaseUnit(o);
+  if (o.source === "workflow") flowEnded(o);
   refreshTarget(targetById(o.targetId));
 }
 
@@ -422,7 +439,14 @@ function cancelIfOpen(o: Order | undefined): void {
   o.status = "cancelled";
   emit("order.updated", { order: o });
   releaseUnit(o);
+  if (o.source === "workflow") flowEnded(o);
   refreshTarget(targetById(o.targetId));
+}
+
+// Tells workflow.ts that a step ended (done / failed / cancelled, reply set). May re-enter through the hooks.
+function flowEnded(o: Order): void {
+  briefs.delete(o.id);
+  try { flow.onOrderEnded(o); } catch (err) { console.error("[engine] workflow onOrderEnded failed:", err); }
 }
 
 export function createOrders(body: any): Result {
@@ -435,6 +459,10 @@ export function createOrders(body: any): Result {
   else if (body.teamId !== undefined) {
     const team = teamById(Number(body.teamId));
     if (!team) return fail("unknown teamId");
+    if (team.workflow) {
+      const res = flow.startRun(team.id, t.id);
+      return res.ok ? { ok: true, run: res.run } : fail(res.error);
+    }
     ids = [...team.members];
   } else return fail("unitIds or teamId required");
   const units = [...new Set(ids)].map(unitById).filter((u): u is Unit => !!u);
@@ -460,8 +488,81 @@ export function cancelOrder(id: string): Result {
   const o = orderById(id);
   if (!o) return fail("unknown order", 404);
   if (o.status !== "active" && o.status !== "proposed") return fail(`order is ${o.status}`);
+  // Cancelling any order of a running workflow run cancels the run (and with it its active orders).
+  const run = o.source === "workflow" ? flow.runForOrder(o.id) : undefined;
+  if (run && run.status === "running") {
+    const res = flow.cancelRun(run.id);
+    if (res.ok) { cancelIfOpen(o); return { ok: true, order: o, run }; }
+  }
   cancelIfOpen(o);
   return { ok: true, order: o };
+}
+
+// ---------- team workflows (hooks for workflow.ts, team workflow routes) ----------
+
+function startWorkflowOrder(unitId: string, targetId: string, brief: NodeBrief): string | null {
+  const u = unitById(unitId);
+  const t = targetById(targetId);
+  if (!u || !t) return null;
+  cancelIfOpen(u.orderId ? orderById(u.orderId) : undefined);
+  const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null, reply: null };
+  S().orders.push(o);
+  briefs.set(o.id, brief);
+  u.orderId = o.id;
+  u.status = "moving";
+  runtime(u.id).dest = destFor(u, t);
+  emit("order.updated", { order: o });
+  emit("unit.updated", { unit: u });
+  emit("unit.status", { unitId: u.id, status: u.status });
+  refreshTarget(t);
+  return o.id;
+}
+
+function setTargetStatus(targetId: string, status: Target["status"]): void {
+  const t = targetById(targetId);
+  if (!t || t.status === status) return;
+  t.status = status;
+  emit("target.updated", { target: t });
+}
+
+flow.initWorkflows({
+  startOrder: startWorkflowOrder,
+  cancelOrder: (orderId) => cancelIfOpen(orderById(orderId)),
+  setTargetStatus,
+});
+
+const PRESETS = ["solo", "pair", "trio", "fanout", "custom"];
+
+export function setTeamWorkflow(id: number, body: any): Result {
+  const team = teamById(id);
+  if (!team) return fail("unknown team", 404);
+  if (!body || typeof body !== "object") return fail("body must be a JSON object");
+  let w: Workflow;
+  if (body.workflow && typeof body.workflow === "object") {
+    const err = flow.validateWorkflow(body.workflow, team.members);
+    if (err) return fail(err);
+    w = body.workflow;
+  } else if (typeof body.preset === "string" && PRESETS.includes(body.preset) && body.preset !== "custom") {
+    const res = flow.presetWorkflow(body.preset, team.members);
+    if ("error" in res) return fail(res.error);
+    w = res;
+  } else return fail("preset (solo, pair, trio, fanout) or workflow required");
+  team.workflow = w;
+  emit("team.updated", { team });
+  return { ok: true, team };
+}
+
+export function clearTeamWorkflow(id: number): Result {
+  const team = teamById(id);
+  if (!team) return fail("unknown team", 404);
+  team.workflow = null;
+  emit("team.updated", { team });
+  return { ok: true, team };
+}
+
+// A workflow binds member units to roles; when a bound unit leaves the team, the graph no longer fits.
+function dropWorkflowFor(team: Team, unitId: string): void {
+  if (team.workflow?.nodes.some((n) => n.unitId === unitId)) team.workflow = null;
 }
 
 export async function messageUnit(id: string, body: any): Promise<Result> {
@@ -488,7 +589,7 @@ function setTeam(u: Unit, team: number | null, changed: Set<Team>): void {
   if (u.team === team) return;
   for (const t of S().teams) {
     const i = t.members.indexOf(u.id);
-    if (i >= 0 && t.id !== team) { t.members.splice(i, 1); changed.add(t); }
+    if (i >= 0 && t.id !== team) { t.members.splice(i, 1); dropWorkflowFor(t, u.id); changed.add(t); }
   }
   if (team !== null) {
     const t = teamById(team) ?? createTeam(team);
@@ -499,7 +600,7 @@ function setTeam(u: Unit, team: number | null, changed: Set<Team>): void {
 }
 
 function createTeam(id: number): Team {
-  const t: Team = { id, name: TEAM_NAMES[id - 1] ?? `Team ${id}`, color: TEAM_COLORS[id - 1] ?? "#888888", autopilot: false, members: [] };
+  const t: Team = { id, name: TEAM_NAMES[id - 1] ?? `Team ${id}`, color: TEAM_COLORS[id - 1] ?? "#888888", autopilot: false, members: [], workflow: null };
   S().teams.push(t);
   S().teams.sort((a, b) => a.id - b.id);
   return t;
@@ -545,7 +646,7 @@ export function retireUnit(id: string): Result {
   void deleteOnBridge(u);
   for (const t of S().teams) {
     const i = t.members.indexOf(u.id);
-    if (i >= 0) { t.members.splice(i, 1); emit("team.updated", { team: t }); }
+    if (i >= 0) { t.members.splice(i, 1); dropWorkflowFor(t, u.id); emit("team.updated", { team: t }); }
   }
   S().units.splice(S().units.indexOf(u), 1);
   const r = rt.get(u.id);
@@ -582,6 +683,7 @@ export function assignTeam(body: any): Result {
   for (const uid of [...team.members]) if (!members.includes(uid)) {
     const u = unitById(uid)!;
     team.members.splice(team.members.indexOf(uid), 1);
+    dropWorkflowFor(team, uid);
     u.team = null;
     void patchOnBridge(u, null);
     changedUnits.add(u);
@@ -614,6 +716,7 @@ export async function resetWorld(): Promise<Result> {
   rt.clear();
   history.clear();
   proposals.clear();
+  briefs.clear();
   if (BRAIN_RESET) {
     const brain = await sendJson("POST", `${BRAIN_URL}/reset`, {}, 30000);
     if (brain.status !== 200) logOnce("brainreset", `brain /reset failed (status ${brain.status}); world reloads anyway`);
@@ -703,7 +806,7 @@ export function adjustOrder(id: string, body: any): Result {
 let proposing = false;
 async function autopilotTick(): Promise<void> {
   if (proposing) return;
-  const teams = S().teams.filter((t) => t.autopilot);
+  const teams = S().teams.filter((t) => t.autopilot && !t.workflow); // workflow teams are driven by their run
   if (!teams.length) return;
   const units = [...new Set(teams.flatMap((t) => t.members))].map(unitById).filter((u): u is Unit => !!u && u.status === "idle" && !u.orderId);
   if (!units.length) return;
@@ -728,7 +831,7 @@ async function autopilotTick(): Promise<void> {
       const u = p && typeof p.unitId === "string" ? unitById(p.unitId) : undefined;
       const t = p && typeof p.targetId === "string" ? targetById(p.targetId) : undefined;
       if (!u || !t || u.status !== "idle" || u.orderId || !units.includes(u) || busy.has(t.id) || t.status !== "open") continue;
-      if (!S().teams.some((tm) => tm.autopilot && tm.members.includes(u.id))) continue;
+      if (!S().teams.some((tm) => tm.autopilot && !tm.workflow && tm.members.includes(u.id))) continue;
       busy.add(t.id);
       const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "proposed", source: "autopilot", vetoDeadline: Date.now() + VETO_WINDOW_MS, reply: null };
       S().orders.push(o);

@@ -28,6 +28,13 @@ export const SSE_MAX_QUEUE = 2000;
 export const CORS_ORIGINS = ["http://127.0.0.1:4611", "http://localhost:4611", "http://127.0.0.1:4619", "http://localhost:4619",
   ...(process.env.CORS_ORIGINS ?? "").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean)];
 
+// Team workflows: default role instructions (CONTRACT.md "Team workflows"); a node's own instructions override.
+export const ROLE_INSTRUCTIONS: Record<string, string> = {
+  planner: "Recall first. Write a short numbered plan for the implementer; do not implement.",
+  implementer: "Recall first. Implement the plan or apply the review changes; remember what you learned.",
+  reviewer: "Recall the house rules. Review the implementation against the plan and the rules. End with VERDICT: APPROVED or VERDICT: CHANGES: <what>.",
+};
+
 export const TILES_PER_SEC = 3;
 export const GRID = 24;
 export const MEMORY_RECENT_MAX = 20;

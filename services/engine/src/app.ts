@@ -3,13 +3,13 @@ import { BRAIN_URL, CORS_ORIGINS } from "./config.ts";
 import { listenerCount, recentEvents, store } from "./store.ts";
 import { sseResponse } from "./sse.ts";
 import { forgeProxy } from "./forge.ts";
-import { adjustOrder, assignTeam, cancelOrder, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, spawnUnit } from "./game.ts";
+import { adjustOrder, assignTeam, cancelOrder, clearTeamWorkflow, createOrders, goOrder, messageUnit, patchTeam, patchUnit, resetWorld, retireUnit, setTeamWorkflow, spawnUnit } from "./game.ts";
 
 // Only listed browser origins get CORS headers; any other page can neither read nor change engine state.
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin");
   if (!origin || !CORS_ORIGINS.includes(origin)) return {};
-  return { "access-control-allow-origin": origin, vary: "Origin", "access-control-allow-methods": "GET, POST, PATCH, DELETE, OPTIONS", "access-control-allow-headers": "content-type" };
+  return { "access-control-allow-origin": origin, vary: "Origin", "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS", "access-control-allow-headers": "content-type" };
 }
 
 function json(body: unknown, status = 200): Response {
@@ -61,10 +61,13 @@ async function route(req: Request): Promise<Response> {
   }
 
   if (m === "DELETE") {
-    const mm = p.match(/^\/api\/units\/([^/]+)$/);
-    return mm ? reply(retireUnit(decodeURIComponent(mm[1]!))) : json({ ok: false, error: "not found" }, 404);
+    let dm = p.match(/^\/api\/units\/([^/]+)$/);
+    if (dm) return reply(retireUnit(decodeURIComponent(dm[1]!)));
+    dm = p.match(/^\/api\/teams\/(\d+)\/workflow$/);
+    if (dm) return reply(clearTeamWorkflow(Number(dm[1])));
+    return json({ ok: false, error: "not found" }, 404);
   }
-  if (m !== "POST" && m !== "PATCH") return json({ ok: false, error: "method not allowed" }, 405);
+  if (m !== "POST" && m !== "PATCH" && m !== "PUT") return json({ ok: false, error: "method not allowed" }, 405);
   const b = await body(req);
   if (b === null) return json({ ok: false, error: "content-type must be application/json" }, 415);
   if (b === undefined) return json({ ok: false, error: "invalid JSON body" }, 400);
@@ -80,6 +83,8 @@ async function route(req: Request): Promise<Response> {
     if ((mm = p.match(/^\/api\/units\/([^/]+)\/message$/))) return reply(await messageUnit(decodeURIComponent(mm[1]!), b));
     if (p === "/api/teams") return reply(assignTeam(b));
     if (p === "/api/reset") return reply(await resetWorld());
+  } else if (m === "PUT") {
+    if ((mm = p.match(/^\/api\/teams\/(\d+)\/workflow$/))) return reply(setTeamWorkflow(Number(mm[1]), b));
   } else {
     if ((mm = p.match(/^\/api\/units\/([^/]+)$/))) return reply(patchUnit(decodeURIComponent(mm[1]!), b));
     if ((mm = p.match(/^\/api\/teams\/(\d+)$/))) return reply(patchTeam(Number(mm[1]), b));

@@ -65,9 +65,9 @@ export function buildBuilding(b: Building): BuildingView {
   };
 }
 
-function title(group: THREE.Group, name: string, sub: string, y: number) {
+function title(group: THREE.Group, name: string, sub: string, y: number, x = 0, z = 0) {
   const l = makeLabel(`${name} · ${sub}`, { height: 0.42 });
-  l.position.set(0, y, 0);
+  l.position.set(x, y, z);
   group.add(l);
 }
 
@@ -108,7 +108,7 @@ function library(group: THREE.Group) {
     group.add(mesh(new THREE.BoxGeometry(0.08, 0.35, 0.08), wood, x, 0.27, z));
     group.add(mesh(new THREE.BoxGeometry(0.28, 0.05, 0.2), mat("#8a2f2f"), x, 0.47, z));
   }
-  title(group, "Library", "GBrain", 3.75);
+  title(group, "Library", "GBrain", 2.05, -0.55, 0.9); // over the hall, keeps the spire clear for beams
 
   let pulseT = 0;
   const orbMat = orb.material as THREE.MeshLambertMaterial;
@@ -215,9 +215,9 @@ function forge(group: THREE.Group) {
   const bannerTex = new THREE.CanvasTexture(bannerCanvas);
   bannerTex.colorSpace = THREE.SRGBColorSpace;
   const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: bannerTex, depthTest: false, transparent: true }));
-  banner.scale.set(1.9, 1.9 * 72 / 320, 1);
+  banner.scale.set(2.6, 2.6 * 72 / 320, 1);
   banner.center.set(0.5, 0);
-  banner.position.set(0, 3.0, 0);
+  banner.position.set(0, 3.05, 0);
   banner.renderOrder = 10;
   banner.visible = false;
   group.add(banner);
@@ -260,7 +260,7 @@ function forge(group: THREE.Group) {
         m.scale.setScalar(0.6 + ph * 1.6);
         (m.material as THREE.MeshLambertMaterial).opacity = (working ? 0.75 : 0.55) * (1 - ph);
       }
-      if (working) banner.position.y = 3.0 + Math.sin(t * 2) * 0.04;
+      if (working) banner.position.y = 3.05 + Math.sin(t * 2) * 0.04;
     },
     pulse() { pulseT = 1.2; },
   };

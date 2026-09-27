@@ -9,6 +9,7 @@ import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView, setRouter } from "./units";
 import { TargetView } from "./targets";
 import { Fx } from "./fx";
+import { WorkflowLayer } from "./workflow";
 import { ArrowLayer } from "./arrows";
 import { disposeTree, tileToWorld } from "./util";
 
@@ -45,7 +46,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const buildingsG = new THREE.Group();
   const fx = new Fx();
   const arrows = new ArrowLayer();
-  scene.add(world, buildingsG, targetsG, unitsG, arrows.group, fx.group);
+  const flow = new WorkflowLayer();
+  scene.add(world, buildingsG, targetsG, unitsG, arrows.group, flow.group, fx.group);
 
   const units = new Map<string, UnitView>();
   const targets = new Map<string, TargetView>();
@@ -173,7 +175,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   reconcile(store.getState());
   const offs: (() => void)[] = [];
   syncArrows();
-  offs.push(store.subscribe((s) => { reconcile(s); syncArrows(); }));
+  flow.sync(store.getState());
+  offs.push(store.subscribe((s) => { reconcile(s); syncArrows(); flow.sync(s); }));
   offs.push(bus.on("selection", () => { syncSelection(); syncArrows(); }));
   offs.push(bus.on("hover", () => syncSelection()));
   offs.push(bus.on("focusTile", ({ x, y }) => { userCamera = true; iso.focus(x + 0.5, y + 0.5); }));
@@ -181,6 +184,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     if (ev.type === "memory.recall") recallFx(ev.unitId, ev.slugs ?? [], ev.summary);
     else if (ev.type === "memory.remember") rememberFx(ev.unitId, ev.slug, ev.summary);
     else if (ev.type === "unit.spawned") justSpawned.add(ev.unit.id); // reconcile walks it out of its building
+    else if (ev.type === "workflow.handoff") handoffFx(ev.fromUnitId, ev.toUnitId, ev.summary);
   }));
 
   // ---- GBrain memory animations ----
@@ -219,6 +223,23 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       fx.burst(libOrb(), "#ffd45a", 2.2, 1.0);
       fx.text(() => libOrb().add(new THREE.Vector3(0, 0.4, 0)), "+1 page", { color: "#ffe9a8", bg: null, height: 0.34, dur: 2 });
       if (slug) fx.text(() => libOrb().add(new THREE.Vector3(0, 0.85, 0)), shortSlug(slug), { color: "#fff6d8", bg: null, height: 0.22, dur: 2.4 });
+    });
+  }
+
+  /** Workflow handoff: a scroll flies from the giver to the receiver, then the summary floats over the receiver. */
+  function handoffFx(fromId: string, toId: string, summary: string) {
+    const a = units.get(fromId), b = units.get(toId);
+    if (!a || !b) return;
+    const s = store.getState();
+    const color = teamColor(s, b.unit.team) ?? "#ffd45a";
+    const head = (v: UnitView) => () => v.group.position.clone().setY(1.25);
+    a.flashRaise("remember", 0.9);
+    fx.burst(head(a)(), color, 0.6, 0.5);
+    fx.scroll(head(a), head(b), { color }, () => {
+      b.flashRaise("recall", 0.9);
+      fx.burst(head(b)(), color, 0.9, 0.6);
+      const text = summary.replace(/\s+/g, " ").trim();
+      if (text) fx.text(() => head(b)().add(new THREE.Vector3(0, 0.55, 0)), text.length > 52 ? text.slice(0, 51) + "\u2026" : text, { height: 0.24, dur: 3.2 });
     });
   }
 
@@ -476,6 +497,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);
     arrows.tick(t, units, targets);
+    flow.tick(t, units);
     if (forgeBusy && (forgeSparkT -= dt) <= 0) {
       forgeSparkT = 0.12;
       for (const b of buildings.values()) if (b.kind === "river") fx.sparksAt(b.top, 3, "#ff9a3c");
@@ -486,7 +508,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   frame();
 
   // Debug handle for review: raid.scene.units, raid.scene.camera
-  (window as any).raidScene = { scene, iso, units, targets, buildings, renderer, fx, recallFx, rememberFx };
+  (window as any).raidScene = { scene, iso, units, targets, buildings, renderer, fx, recallFx, rememberFx, handoffFx, flow };
 
   return () => {
     cancelAnimationFrame(raf);

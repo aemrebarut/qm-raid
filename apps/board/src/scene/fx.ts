@@ -42,6 +42,37 @@ function pageTexture() {
   return pageTex;
 }
 
+let scrollTex: THREE.Texture | null = null;
+function scrollTexture() {
+  if (scrollTex) return scrollTex;
+  const c = document.createElement("canvas");
+  c.width = 72; c.height = 56;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#f1e1b4";
+  ctx.strokeStyle = "#6b4e2a";
+  ctx.lineWidth = 3;
+  ctx.fillRect(12, 10, 48, 36);
+  ctx.strokeRect(12, 10, 48, 36);
+  // Rolled ends
+  for (const x of [8, 64]) {
+    ctx.fillStyle = "#d9c08a";
+    ctx.beginPath();
+    ctx.ellipse(x, 28, 7, 22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#7a6440";
+  for (let i = 0; i < 3; i++) ctx.fillRect(20, 18 + i * 8, i === 2 ? 20 : 32, 3);
+  // Wax seal
+  ctx.fillStyle = "#b3261e";
+  ctx.beginPath();
+  ctx.arc(50, 40, 6, 0, Math.PI * 2);
+  ctx.fill();
+  scrollTex = new THREE.CanvasTexture(c);
+  scrollTex.colorSpace = THREE.SRGBColorSpace;
+  return scrollTex;
+}
+
 function glowSprite(color: THREE.ColorRepresentation, size: number) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   s.scale.setScalar(size);
@@ -163,6 +194,28 @@ export class Fx {
       (g.children[0] as THREE.Mesh).geometry.dispose();
       onArrive?.();
     }, "#ffc94a");
+  }
+
+  /** Rolled scroll flying in an arc from unit to unit (workflow handoff), glowing in the team colour. */
+  scroll(from: Pt, to: Pt, opts: { color?: THREE.ColorRepresentation; dur?: number } = {}, onArrive?: () => void) {
+    const color = opts.color ?? "#ffd45a";
+    const g = new THREE.Group();
+    const glow = glowSprite(color, 0.9);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: scrollTexture(), transparent: true, depthTest: false }));
+    s.scale.set(0.5, 0.39, 1);
+    s.renderOrder = 12;
+    glow.renderOrder = 11;
+    glow.material.depthTest = false;
+    g.add(glow, s);
+    const dur = opts.dur ?? 1.4;
+    const dist = at(from).distanceTo(at(to));
+    this.fly(g, from, to, dur, 1.2 + dist * 0.12, () => {
+      s.material.dispose();
+      glow.material.dispose();
+      onArrive?.();
+    }, color);
+    // Tumble the scroll a little in flight
+    this.add({ t: 0, dur, update: (k) => { s.material.rotation = Math.sin(k * Math.PI * 3) * 0.35; }, done: () => {} });
   }
 
   /** Expanding flat ring and glow at a point. */

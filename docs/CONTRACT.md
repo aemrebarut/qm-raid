@@ -11,10 +11,11 @@ Coordinates: the map is a 24 x 24 tile grid, integers `x` (east) and `y` (south)
              "team": 1, "status": "idle", "pos": {"x": 12, "y": 14}, "orderId": null,
              "qm": {"sessionId": null, "sessionUrl": null}}],
   "targets": [{"id": "t12", "issue": "LUM-12", "title": "Retry double-charges a card", "component": "billing", "kind": "bug",
-               "severity": 3, "status": "open", "pos": {"x": 4, "y": 3}, "customers": ["customers/acme-robotics"]}],
+               "severity": 3, "status": "open", "pos": {"x": 4, "y": 3}, "customers": ["acme-robotics"]}],
   "teams": [{"id": 1, "name": "Red", "color": "#d64545", "autopilot": false, "members": ["u1"]}],
   "orders": [{"id": "o1", "unitId": "u1", "targetId": "t12", "status": "active", "source": "user",
               "vetoDeadline": null, "reply": null}],
+  "unitTypes": [{"id": "knight", "name": "Knight", "source": "builtin", "status": "ready", "progress": 1, "stage": "", "model": "gpt-6-astra"}],
   "memory": {"pages": 42, "recent": [{"ts": 1790546460000, "unitId": "u1", "op": "recall", "slugs": ["components/billing"], "summary": "..."}]},
   "stats": {"spentUsd": 0.0, "tokens": 0},
   "backend": "mock"

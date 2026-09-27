@@ -30,7 +30,9 @@ const briefs = new Map<string, NodeBrief>();
 // Autopilot: per-unit work history for /propose, and the proposal context per proposed order for the veto log.
 const history = new Map<string, { targetId: string; component: string }[]>();
 type ProposeContext = { units: unknown[]; targets: unknown[]; memory: string };
-const proposals = new Map<string, { proposal: Proposal; context: ProposeContext }>();
+// W3: a whole-team proposal also names its team (the veto log row carries it).
+type VetoProposal = Proposal & { teamId?: number };
+const proposals = new Map<string, { proposal: VetoProposal; context: ProposeContext }>();
 let nextOrder = 1;
 let nextUnit = 1;
 // True while POST /api/reset runs: the old world is already dead and nothing may start, walk or send.
@@ -560,6 +562,15 @@ function startWorkflowOrder(unitId: string, targetId: string, brief: NodeBrief):
   const u = unitById(unitId);
   const t = targetById(targetId);
   if (!u || !t) return null;
+  // W3: the team proposal being approved (go, expiry or adjust) becomes this entry step in place: same id, nothing cancelled.
+  const p = adopting;
+  if (p && u.orderId === p.id && p.status === "proposed" && p.teamId !== undefined && p.targetId === t.id && isLive(p)) {
+    adopting = null; // one entry only (duel starts its second implementer as a new order)
+    Object.assign(p, { status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null });
+    activate(p);
+    briefs.set(p.id, brief);
+    return p.id;
+  }
   cancelIfOpen(u.orderId ? orderById(u.orderId) : undefined);
   const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null, reply: null };
   S().orders.push(o);
@@ -834,11 +845,11 @@ export async function resetWorld(): Promise<Result> {
 
 // ---------- autopilot (E10, E11) ----------
 
-function logVeto(o: Order, action: "cancel" | "adjust" | "go" | "expired", adjustedTo: { unitId?: string; targetId?: string } = {}): void {
+function logVeto(o: Order, action: "cancel" | "adjust" | "go" | "expired", adjustedTo: { unitId?: string; targetId?: string } = {}, runId?: string): void {
   const p = proposals.get(o.id);
   if (!p) return;
   proposals.delete(o.id);
-  const row = JSON.stringify({ ts: Date.now(), proposal: p.proposal, context: p.context, action, adjustedTo }) + "\n";
+  const row = JSON.stringify({ ts: Date.now(), proposal: p.proposal, context: p.context, action, adjustedTo, ...(runId ? { runId } : {}) }) + "\n";
   // One write at a time so rows land in resolution order.
   vetoWrites = vetoWrites
     .then(() => mkdir(dirname(VETO_LOG), { recursive: true }))
@@ -862,10 +873,30 @@ function activate(o: Order): void {
   refreshTarget(t);
 }
 
-function resolveProposal(o: Order, action: "go" | "expired"): void {
+function resolveProposal(o: Order, action: "go" | "expired" | "adjust", adjustedTo: { unitId?: string; targetId?: string } = {}): void {
   if (o.status !== "proposed") return;
-  logVeto(o, action);
+  if (o.teamId !== undefined) return startTeamProposal(o, action, adjustedTo);
+  logVeto(o, action, adjustedTo);
   activate(o);
+}
+
+// W3: approving a team proposal starts that team's workflow run on its target. startRun asks for the entry step through
+// startWorkflowOrder, which takes this proposal order over (adopting) instead of making a new one.
+let adopting: Order | null = null;
+function startTeamProposal(o: Order, action: "go" | "expired" | "adjust", adjustedTo: { unitId?: string; targetId?: string }): void {
+  let res: ReturnType<typeof flow.startRun>;
+  adopting = o;
+  try {
+    res = flow.startRun(o.teamId!, o.targetId);
+  } catch (err) {
+    res = { ok: false, error: `workflow start failed: ${err}` };
+  } finally {
+    adopting = null;
+  }
+  logVeto(o, action, adjustedTo, res.ok ? res.run.id : undefined);
+  if (!res.ok) return failOrder(o, res.error);
+  // The team's entry moved to another unit since the proposal: the run started without it.
+  if (o.status === "proposed") cancelIfOpen(o);
 }
 
 export function goOrder(id: string): Result {
@@ -873,7 +904,7 @@ export function goOrder(id: string): Result {
   if (!o) return fail("unknown order", 404);
   if (o.status !== "proposed") return fail(`order is ${o.status}, not proposed`);
   resolveProposal(o, "go");
-  return { ok: true, order: o };
+  return approved(o);
 }
 
 export function adjustOrder(id: string, body: any): Result {
@@ -893,24 +924,41 @@ export function adjustOrder(id: string, body: any): Result {
     if (!u) return fail("unknown unitId");
     adjustedTo.unitId = u.id;
   }
-  logVeto(o, "adjust", adjustedTo);
   if (adjustedTo.unitId && adjustedTo.unitId !== o.unitId) {
     releaseUnit(o);
     const nu = unitById(adjustedTo.unitId)!;
     cancelIfOpen(nu.orderId ? orderById(nu.orderId) : undefined);
     o.unitId = nu.id;
+    delete o.teamId; // W3: another unit than the team's entry turns a team proposal into a plain order for that unit
   }
   if (adjustedTo.targetId) o.targetId = adjustedTo.targetId;
-  activate(o);
-  return { ok: true, order: o };
+  resolveProposal(o, "adjust", adjustedTo);
+  return approved(o);
+}
+
+// The autopilot team a unit may be proposed for: a plain team with autopilot on, or (W3) a workflow team with autopilot
+// on whose entry unit this is, with no run going and every bound unit free (the proposal is for the whole team's run).
+function proposalTeam(u: Unit): Team | null {
+  const tm = S().teams.find((x) => x.autopilot && x.members.includes(u.id));
+  if (!tm?.workflow) return tm ?? null;
+  const w = tm.workflow;
+  const entry = w.nodes.find((n) => n.id === (w.entries?.[0] ?? w.entry))?.unitId;
+  if (entry !== u.id || S().workflowRuns.some((r) => r.teamId === tm.id && r.status === "running")) return null;
+  return w.nodes.every((n) => { const m = unitById(n.unitId); return !!m && m.status === "idle" && !m.orderId; }) ? tm : null;
+}
+
+// Answer of go / adjust: the order, plus the run a team proposal started; a run that could not start fails the proposal.
+function approved(o: Order): Result {
+  if (o.status === "failed") return fail(o.reply ?? "order failed");
+  const run = o.runId ? flow.runForOrder(o.id) : undefined;
+  return run ? { ok: true, order: o, run } : { ok: true, order: o };
 }
 
 let proposing = false;
 async function autopilotTick(): Promise<void> {
   if (proposing || resetting) return;
-  const teams = S().teams.filter((t) => t.autopilot && !t.workflow); // workflow teams are driven by their run
-  if (!teams.length) return;
-  const units = [...new Set(teams.flatMap((t) => t.members))].map(unitById).filter((u): u is Unit => !!u && u.status === "idle" && !u.orderId);
+  if (!S().teams.some((t) => t.autopilot)) return;
+  const units = S().units.filter((u) => u.status === "idle" && !u.orderId && proposalTeam(u));
   if (!units.length) return;
   const taken = new Set(S().orders.filter((o) => o.status === "active" || o.status === "proposed").map((o) => o.targetId));
   const targets = S().targets.filter((t) => t.status !== "resolved" && !taken.has(t.id));
@@ -934,11 +982,13 @@ async function autopilotTick(): Promise<void> {
       const u = p && typeof p.unitId === "string" ? unitById(p.unitId) : undefined;
       const t = p && typeof p.targetId === "string" ? targetById(p.targetId) : undefined;
       if (!u || !t || u.status !== "idle" || u.orderId || !units.includes(u) || busy.has(t.id) || t.status !== "open") continue;
-      if (!S().teams.some((tm) => tm.autopilot && !tm.workflow && tm.members.includes(u.id))) continue;
+      const tm = proposalTeam(u);
+      if (!tm) continue;
       busy.add(t.id);
       const o: Order = { id: `o${nextOrder++}`, unitId: u.id, targetId: t.id, status: "proposed", source: "autopilot", vetoDeadline: Date.now() + VETO_WINDOW_MS, reply: null };
+      if (tm.workflow) o.teamId = tm.id; // W3: going through starts the team's workflow run
       S().orders.push(o);
-      proposals.set(o.id, { proposal: { unitId: u.id, targetId: t.id, reason: String(p.reason ?? "") }, context });
+      proposals.set(o.id, { proposal: { unitId: u.id, targetId: t.id, reason: String(p.reason ?? ""), ...(tm.workflow ? { teamId: tm.id } : {}) }, context });
       u.orderId = o.id;
       u.status = "waiting_approval";
       emit("order.proposed", { order: o });
@@ -957,7 +1007,7 @@ async function autopilotTick(): Promise<void> {
 type SavedRuntime = Pick<Runtime, "sentOrderId" | "learningSlug" | "recalled" | "gbrainCalls" | "gbrainReads" | "gbrainWrites">;
 export interface GameSave {
   backend: string; state: State; nextOrder: number; nextUnit: number; customers: Customer[];
-  briefs: [string, NodeBrief][]; proposals: [string, { proposal: Proposal; context: ProposeContext }][];
+  briefs: [string, NodeBrief][]; proposals: [string, { proposal: VetoProposal; context: ProposeContext }][];
   history: [string, { targetId: string; component: string }[]][]; runtime: Record<string, SavedRuntime>; flow: unknown;
 }
 

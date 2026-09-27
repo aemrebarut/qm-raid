@@ -366,11 +366,14 @@ test("F2: workflow wiring with a fake flow (routes, run start, prompt brief, ste
   expect(cancelled).toEqual(["r1"]);
   expect(order(second.id).status).toBe("cancelled");
   expect(unit("u2").status).toBe("idle");
-  // Autopilot skips workflow teams.
+  // Autopilot proposes a workflow team only through its entry unit, as a whole-team proposal (W3); other members never.
   patchTeam(1, { autopilot: true });
-  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t102", reason: "x" }] };
+  proposeAnswer = { proposals: [{ unitId: "u2", targetId: "t102", reason: "x" }, { unitId: "u1", targetId: "t103", reason: "y" }] };
   await autopilotTick();
-  expect(store.state.orders.some((o) => o.source === "autopilot")).toBe(false);
+  const ap = store.state.orders.filter((o) => o.source === "autopilot");
+  expect(ap.map((o) => `${o.unitId}:${o.status}:${o.teamId}`)).toEqual(["u1:proposed:1"]);
+  expect(cancelOrder(ap[0]!.id).ok).toBe(true);
+  patchTeam(1, { autopilot: false });
   proposeAnswer = { proposals: [] };
   // DELETE clears; a bound unit leaving the team clears too.
   expect((await handle(new Request("http://e/api/teams/1/workflow", { method: "DELETE" }))).status).toBe(200);
@@ -747,4 +750,85 @@ test("a reply that names learnings or rules no recall showed emits one memory.re
   const mark2 = recentEvents().at(-1)!.seq;
   onBridgeEvent({ type: "reply", unitId: "u1", orderId: o2.id, text: "Applied rules/refund-window." });
   expect(recentEvents().filter((e: any) => e.seq > mark2 && e.type === "memory.recall").length).toBe(0);
+});
+
+test("W3: autopilot proposes a whole-team run for the entry unit; go, expiry and adjust start the run with the proposal as the entry step", async () => {
+  const { rmSync, readFileSync } = await import("node:fs");
+  const { useFlow } = await import("../src/flowlink.ts");
+  useFlow(await import("../src/workflow.ts"));
+  rmSync(VETO, { force: true });
+  expect(game.setTeamWorkflow(1, { preset: "trio" }).ok).toBe(true);
+  patchTeam(1, { autopilot: true });
+  proposeAnswer = { proposals: [{ unitId: "u2", targetId: "t101", reason: "not the entry" }, { unitId: "u1", targetId: "t101", reason: "sev 3" }] };
+  await autopilotTick();
+  const props = store.state.orders.filter((o) => o.status === "proposed");
+  expect(props.map((o) => `${o.unitId}:${o.targetId}:${o.teamId}`)).toEqual(["u1:t101:1"]);
+  const p = props[0]!;
+  expect(unit("u1").status).toBe("waiting_approval");
+  expect(unit("u2").status).toBe("idle");
+
+  const g = goOrder(p.id) as any;
+  expect(g.ok).toBe(true);
+  expect(g.run.steps[0]).toMatchObject({ nodeId: "planner", unitId: "u1", orderId: p.id });
+  expect(order(p.id)).toMatchObject({ status: "active", source: "workflow", runId: g.run.id, nodeId: "planner", vetoDeadline: null, teamId: 1 });
+  expect(store.state.orders.length).toBe(1); // no second order, nothing cancelled
+  expect(unit("u1").status).toBe("moving");
+  expect(store.state.targets.find((t) => t.id === "t101")!.status).toBe("engaged");
+  // a running run: no more team proposals
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t104", reason: "busy" }, { unitId: "u2", targetId: "t104", reason: "member" }] };
+  await autopilotTick();
+  expect(store.state.orders.filter((o) => o.status === "proposed").length).toBe(0);
+  // the planner step runs like any workflow order and hands off
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  expect(calls.findLast((c) => c.url.endsWith("/units/u1/send"))!.body.orderId).toBe(p.id);
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: p.id, text: "1. plan" });
+  expect(store.state.orders.some((o) => o.runId === g.run.id && o.unitId === "u2" && o.status === "active")).toBe(true);
+  expect(cancelOrder(p.id).ok).toBe(false); // done step
+  expect(game.cancelOrder(store.state.orders.find((o) => o.unitId === "u2" && o.status === "active")!.id).ok).toBe(true);
+  expect(store.state.workflowRuns.find((r) => r.id === g.run.id)!.status).toBe("cancelled");
+
+  // expiry starts the run too; adjust {targetId} runs on the new target
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t102", reason: "sev 2" }] };
+  await autopilotTick();
+  const e = store.state.orders.find((o) => o.status === "proposed")!;
+  e.vetoDeadline = Date.now() - 1;
+  tick();
+  expect(order(e.id)).toMatchObject({ status: "active", source: "workflow", nodeId: "planner" });
+  const eRun = store.state.workflowRuns.find((r) => r.steps[0]?.orderId === e.id)!;
+  expect(cancelOrder(e.id).ok).toBe(true);
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t104", reason: "sev 2" }] };
+  await autopilotTick();
+  const a = store.state.orders.find((o) => o.status === "proposed")!;
+  const adj = adjustOrder(a.id, { targetId: "t105" }) as any;
+  expect(adj.ok).toBe(true);
+  expect(adj.run.targetId).toBe("t105");
+  expect(order(a.id)).toMatchObject({ status: "active", source: "workflow", targetId: "t105" });
+  expect(cancelOrder(a.id).ok).toBe(true);
+
+  // adjust {unitId} to another unit: a plain order for it; a team that lost its workflow fails the proposal
+  await autopilotTick();
+  const b = store.state.orders.find((o) => o.status === "proposed")!;
+  expect(b.teamId).toBe(1);
+  expect(adjustOrder(b.id, { unitId: "u5" }).ok).toBe(true);
+  expect(order(b.id)).toMatchObject({ unitId: "u5", status: "active", source: "autopilot" });
+  expect(order(b.id).teamId).toBeUndefined();
+  expect(unit("u1").status).toBe("idle");
+  cancelOrder(b.id);
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t106", reason: "sev 2" }] };
+  await autopilotTick();
+  const c = store.state.orders.find((o) => o.status === "proposed")!;
+  game.clearTeamWorkflow(1);
+  const gc = goOrder(c.id);
+  expect(gc.ok).toBe(false);
+  expect(order(c.id).status).toBe("failed");
+  expect(unit("u1").status).toBe("idle");
+  patchTeam(1, { autopilot: false });
+  proposeAnswer = { proposals: [] };
+
+  await Bun.sleep(100);
+  const rows = readFileSync(VETO, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  expect(rows.map((r) => `${r.action}:${r.proposal.teamId}:${r.runId ? "run" : "-"}`)).toEqual(["go:1:run", "expired:1:run", "adjust:1:run", "adjust:1:-", "go:1:-"]);
+  expect(rows[0]).toMatchObject({ proposal: { unitId: "u1", targetId: "t101", reason: "sev 3", teamId: 1 }, action: "go", runId: g.run.id });
+  expect(rows[1].runId).toBe(eRun.id);
 });

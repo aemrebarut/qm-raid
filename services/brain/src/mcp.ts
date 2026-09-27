@@ -81,6 +81,7 @@ export function startMcp(ops: BrainOps, port: number) {
   Bun.serve({
     hostname: "127.0.0.1",
     port,
+    idleTimeout: 255,
     async fetch(req) {
       const url = new URL(req.url);
       if (req.method === "GET" && url.pathname === "/health") return Response.json({ ok: true, service: "brain-mcp" });

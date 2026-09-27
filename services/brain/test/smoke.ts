@@ -122,13 +122,17 @@ if (process.env.SMOKE_RESET === "1") {
   await check("reset removes spawned issues and learnings and refills the pool", async () => {
     const first = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
     await post("/remember", { unitId: "smoke", targetId: "t101", text: "Smoke learning before reset." });
+    const t0 = Date.now();
     const r = await post("/reset", {});
+    const fast = Date.now() - t0 < 15000;
+    if (!fast) console.log("  reset took", Date.now() - t0, "ms");
     const g = await get("/graph");
     const clean = !g.nodes.some((x: any) => x.type === "learning" || x.type === "unit" || x.id === `issues/lum-${first.id.slice(1)}`);
     const w = await get("/world");
     const again = (await post("/issues", { pos: { x: 5, y: 2 } })).target;
     await post("/reset", {});
-    return r.ok && clean && w.targets.length === 9 && again.title === first.title && again.issue === first.issue;
+    // Numbers keep counting while hidden pages wait for the background delete; the pool refills at once.
+    return r.ok && fast && clean && w.targets.length === 9 && again.title === first.title;
   });
 }
 console.log(failed ? `${failed} failed` : "all passed");

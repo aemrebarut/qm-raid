@@ -1,6 +1,6 @@
 // Brain service: the game world and GBrain game memory over HTTP (docs/CONTRACT.md, Brain API).
 import { tool, childPid } from "./gbrain.ts";
-import { loadWorld, issueSlug, BRAIN_DIR, WORLD_DIR } from "./world.ts";
+import { loadWorld, issueSlug, parsePage, BRAIN_DIR, WORLD_DIR } from "./world.ts";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { startMcp } from "./mcp.ts";
@@ -11,6 +11,9 @@ const MCP_PORT = Number(process.env.BRAIN_MCP_PORT ?? 4617);
 const HOST = "127.0.0.1";
 // Leftovers from the pre-hackathon smoke test; not part of the Lumen world.
 const HIDDEN = new Set(["people/sam-ortiz", "meetings/2026-09-20-acme-kickoff"]);
+// Reset hides game-made pages at once and deletes them in the background (every gbrain write is slow under load).
+const tombstones = new Set<string>();
+const alive = (slug: string) => !HIDDEN.has(slug) && !tombstones.has(slug);
 
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 class HttpError extends Error {
@@ -23,6 +26,7 @@ type PageRow = { slug: string; type: string; title: string; updated_at?: string 
 
 async function getPage(slug: string): Promise<{ slug: string; title: string; type: string; body: string; fm: Record<string, any> } | null> {
   try {
+    if (tombstones.has(slug)) return null;
     const p = await tool<any>("get_page", { slug });
     if (!p || typeof p !== "object" || !p.slug) return null;
     return { slug: p.slug, title: p.title ?? slug, type: p.type ?? "", body: p.compiled_truth ?? "", fm: p.frontmatter ?? {} };
@@ -44,7 +48,7 @@ async function listAll(filter: { type?: string } = {}): Promise<PageRow[]> {
 }
 
 async function listPages(): Promise<PageRow[]> {
-  return (await listAll()).filter((r) => !HIDDEN.has(r.slug));
+  return (await listAll()).filter((r) => alive(r.slug));
 }
 
 // Write lock: each mutation's whole read-modify-write runs alone (the gbrain queue only orders single RPCs).
@@ -68,7 +72,7 @@ const slugMs = (s: string) => Number(s.split("-").pop()) || 0;
 
 // Newest learnings whose body links the component or the issue.
 async function learningsFor(comp: string | undefined, issue: string | undefined): Promise<string[]> {
-  const rows = await listAll({ type: "learning" }).catch(() => [] as PageRow[]);
+  const rows = (await listAll({ type: "learning" }).catch(() => [] as PageRow[])).filter((r) => alive(r.slug));
   const out: string[] = [];
   for (const slug of rows.map((r) => r.slug).sort((a, b) => slugMs(b) - slugMs(a)).slice(0, 40)) {
     const p = await getPage(slug);
@@ -121,7 +125,7 @@ async function spawnedTargets(): Promise<Target[]> {
   const worldSlugs = new Set(worldFiles().map((f) => f.slug));
   const out: Target[] = [];
   for (const r of await listAll({ type: "issue" })) {
-    if (worldSlugs.has(r.slug)) continue;
+    if (worldSlugs.has(r.slug) || !alive(r.slug)) continue;
     const t = await targetFromPage(r.slug);
     if (t) out.push(t);
   }
@@ -238,6 +242,7 @@ async function ensureUnitPage(unitId: string) {
     await tool("restore_page", { slug }).catch(() => {});
     await tool("put_page", { slug, content, force: true });
   }
+  tombstones.delete(slug);
   return slug;
 }
 
@@ -256,6 +261,7 @@ async function remember(unitId: string, targetId: string | undefined, text: stri
   const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim().slice(0, 2000)}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
   // A repeated remember on the same slug overwrites that learning.
   await tool("put_page", { slug, content }).catch(() => tool("put_page", { slug, content, force: true }));
+  tombstones.delete(slug);
   invalidateGraph();
   return { slug };
 }
@@ -263,7 +269,7 @@ async function remember(unitId: string, targetId: string | undefined, text: stri
 async function search(q: string) {
   const rows = await tool<any[]>("search", { query: q, limit: 10 });
   return (Array.isArray(rows) ? rows : [])
-    .filter((r) => !HIDDEN.has(r.slug))
+    .filter((r) => alive(r.slug))
     .map((r) => ({ slug: r.slug, title: r.title, snippet: String(r.chunk_text ?? "").replace(/\s+/g, " ").slice(0, 200) }));
 }
 
@@ -299,7 +305,9 @@ async function createIssue(b: any) {
   const world = loadWorld();
   const x = Number(b.pos?.x), y = Number(b.pos?.y);
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x > 23 || y > 23) throw new HttpError(400, "pos {x, y} with integer tiles 0..23 required");
-  const existing = await listAll({ type: "issue" });
+  const allIssues = await listAll({ type: "issue" });
+  // Issues hidden by a reset still count for numbering (their slugs are taken until the background delete).
+  const existing = allIssues.filter((r) => alive(r.slug));
   let spec: PoolIssue;
   if (!b.title) {
     const pool: PoolIssue[] = JSON.parse(readFileSync(POOL_FILE, "utf8"));
@@ -326,7 +334,7 @@ async function createIssue(b: any) {
   const severity = [1, 2, 3].includes(Number(spec.severity)) ? Number(spec.severity) : 2;
   const customers = (Array.isArray(spec.customers) ? spec.customers : []).map(String).filter((c) => world.customers.some((x) => x.id === c));
   // The brain is the only allocator: next unused LUM number (under the write lock), target id t<number>.
-  const nums = [...existing.map((r) => r.slug), ...world.targets.map((t) => issueSlug(t.issue))]
+  const nums = [...allIssues.map((r) => r.slug), ...world.targets.map((t) => issueSlug(t.issue))]
     .map((sl) => Number(/^issues\/lum-(\d+)$/.exec(sl)?.[1]) || 0);
   const num = Math.max(100, ...nums) + 1;
   const issue = `LUM-${num}`;
@@ -369,25 +377,45 @@ function worldFiles(dir = BRAIN_DIR, prefix = ""): { slug: string; content: stri
 
 // Demo reset: soft-delete game-made pages (learnings, units) and rewrite the world pages from world/brain.
 async function reset() {
-  let deleted = 0;
-  for (const type of ["learning", "unit"]) {
-    const rows = await listAll({ type });
-    for (const r of rows) {
-      await tool("delete_page", { slug: r.slug, force: true }).then(() => deleted++).catch((e) => console.error("[brain] reset delete", r.slug, e.message));
-    }
-  }
-  // Spawned issues (issue pages not in world/brain) go too, which refills the issue pool.
+  // Learnings, units and spawned issues (issue pages not in world/brain) vanish from every read at once; the pool refills.
   const worldSlugs = new Set(worldFiles().map((f) => f.slug));
-  for (const r of await listAll({ type: "issue" })) {
-    if (worldSlugs.has(r.slug)) continue;
-    await tool("delete_page", { slug: r.slug, force: true }).then(() => deleted++).catch((e) => console.error("[brain] reset delete", r.slug, e.message));
-  }
+  const doomed: string[] = [];
+  for (const type of ["learning", "unit"]) for (const r of await listAll({ type })) doomed.push(r.slug);
+  for (const r of await listAll({ type: "issue" })) if (!worldSlugs.has(r.slug)) doomed.push(r.slug);
+  for (const slug of doomed) tombstones.add(slug);
+  // Rewrite only world pages whose text changed (add_link edits); each write is slow.
   let restored = 0;
   for (const f of worldFiles()) {
+    const page = await getPage(f.slug);
+    if (page && page.body.trim() === parsePage(f.content).body.trim()) continue;
     await tool("put_page", { slug: f.slug, content: f.content, force: true }).then(() => restored++).catch((e) => console.error("[brain] reset put", f.slug, e.message));
   }
   invalidateGraph();
-  return { ok: true, deleted, restored };
+  void purge();
+  return { ok: true, deleted: doomed.length, restored };
+}
+
+// Background delete of tombstoned pages, one write-lock turn each so agents' remembers interleave.
+let purging = false;
+async function purge() {
+  if (purging) return;
+  purging = true;
+  const attempted = new Set<string>();
+  try {
+    for (;;) {
+      const slug = [...tombstones].find((s) => !attempted.has(s));
+      if (!slug) break;
+      attempted.add(slug);
+      await exclusive(async () => {
+        if (!tombstones.has(slug)) return; // re-created since the reset
+        await tool("delete_page", { slug, force: true });
+        tombstones.delete(slug);
+      }).catch((e) => console.error("[brain] purge", slug, (e as Error).message));
+    }
+  } finally {
+    purging = false;
+  }
+  console.log(`[brain] purge done; ${tombstones.size} still hidden`);
 }
 
 async function body(req: Request): Promise<any> {
@@ -434,6 +462,7 @@ async function route(req: Request): Promise<Response> {
     const spawnedIssue = slug.startsWith("issues/") && !worldFiles().some((f) => f.slug === slug);
     if (!/^(learnings\/|units\/)/.test(slug) && !spawnedIssue) return fail("only learnings/*, units/* and spawned issues can be forgotten");
     await exclusive(() => tool("delete_page", { slug, force: true }));
+    tombstones.delete(slug);
     invalidateGraph();
     return json({ ok: true, slug });
   }
@@ -443,6 +472,7 @@ async function route(req: Request): Promise<Response> {
 Bun.serve({
   hostname: HOST,
   port: PORT,
+  idleTimeout: 255, // Bun's 10 s default dropped slow requests (engine saw status 0 on /reset)
   async fetch(req) {
     try {
       return await route(req);

@@ -285,7 +285,7 @@ export const Library: React.FC<{x: number; y: number; scale?: number; glow?: num
         <path d="M0,-14 L0,18" stroke={L} strokeWidth={3} />
       </g>
       <g transform="translate(-80,56)">
-        <rect x={-150} y={-30} width={300} height={60} rx={10} fill="url(#g-plate)" stroke={C.gold} strokeWidth={5} />
+        <rect x={-190} y={-30} width={380} height={60} rx={10} fill="url(#g-plate)" stroke={C.gold} strokeWidth={5} />
         <text x={0} y={16} textAnchor="middle" fontFamily={FONT_HEAD} fontWeight={900} fontSize={40} fill={C.goldHi} style={{letterSpacing: 4}}>
           GBRAIN LIBRARY
         </text>

@@ -1,11 +1,11 @@
-// QM Raid anime intro (raid-video-intro). 15 s at 30 fps, 1920x1080, code-drawn only.
+// QM Raid anime intro (raid-video-intro). 11 s at 30 fps, after the editor's 2 s gameplay hero shot, 1920x1080, code-drawn only.
 // Beats and art direction: STORYBOARD.md in this folder.
 import React from "react";
 import {AbsoluteFill, Easing, interpolate, random, Sequence, useCurrentFrame, useVideoConfig} from "remotion";
 import {C, Camera, Defs, Flash, FONT_BODY, FONT_HEAD, Halftone, HLines, RadialLines, slam, Sparkles, Sparks, Star, Title, Vignette} from "./anime";
 import {Anvil, BigStar, Burst, Chibi, Forge, Hammer, Library, NameCard, Slime} from "./chars";
 
-export const INTRO_FRAMES = 450;
+export const INTRO_FRAMES = 330;
 
 const clamp = {extrapolateLeft: "clamp", extrapolateRight: "clamp"} as const;
 const SLIMES = [C.danger, "#6cbf4a", C.violet, "#e39a3b"];
@@ -23,17 +23,17 @@ const Stage: React.FC<{children: React.ReactNode}> = ({children}) => (
 const SceneHorde: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const zoom = interpolate(f, [0, 84], [0.78, 1.1], {...clamp, easing: Easing.out(Easing.quad)});
+  const zoom = interpolate(f, [0, 66], [0.8, 1], {...clamp, easing: Easing.out(Easing.quad)});
   const rows = [
     {n: 8, y: 600, s: 0.45, tags: [] as string[]},
     {n: 6, y: 760, s: 0.7, tags: ["", "Noon reindex slows search", "", "", "CSV import fails", ""]},
-    {n: 4, y: 975, s: 1.05, tags: ["Duplicate refunds", "OIDC login loops", "Welcome email x2", "Invoice off by 1 cent"]},
-  ];
-  const scout = slam(f, fps, 48);
-  const huh = slam(f, fps, 56);
+    {n: 4, y: 975, s: 1.05, tags: ["Duplicate refunds", "OIDC login loops", "Welcome email x2", "Invoice off by 1 cent"], xs: [260, 700, 1130, 1540]},
+  ] as {n: number; y: number; s: number; tags: string[]; xs?: number[]}[];
+  const scout = slam(f, fps, 34);
+  const huh = slam(f, fps, 42);
   return (
     <AbsoluteFill style={{background: "linear-gradient(180deg, #1a0b18 0%, #3a1224 55%, #5e1c16 100%)"}}>
-      <Camera hits={[2, 14, 24, 48]} amp={14}>
+      <Camera hits={[3, 12, 22, 34]} amp={14} impacts={[2]}>
         <Halftone color="rgba(255,90,70,0.25)" />
         <HLines color="#ffd9c8" count={46} speed={80} opacity={0.28} seed="h1" />
         <AbsoluteFill style={{transform: `scale(${zoom})`, transformOrigin: "50% 75%"}}>
@@ -41,7 +41,7 @@ const SceneHorde: React.FC = () => {
             {rows.map((r, ri) =>
               Array.from({length: r.n}).map((_, i) => {
                 const span = 1920 / r.n;
-                const x = span * (i + 0.5) + (random(`hx-${ri}-${i}`) - 0.5) * span * 0.3;
+                const x = r.xs ? r.xs[i] : span * (i + 0.5) + (random(`hx-${ri}-${i}`) - 0.5) * span * 0.3;
                 const tag = r.tags[i] || undefined;
                 return (
                   <Slime
@@ -61,21 +61,38 @@ const SceneHorde: React.FC = () => {
         <Stage>
           {scout > 0.01 && (
             <g transform={`translate(0,${(1 - scout) * 300})`}>
-              <Chibi kind="scout" x={1740} y={1060} scale={0.8} flip face="panic" sweat={((f - 48) % 20) / 20} bob={Math.abs(Math.sin(f * 0.8)) * 6} />
+              <Chibi kind="scout" x={1790} y={1060} scale={0.8} flip face="panic" sweat={((f - 34) % 20) / 20} bob={Math.abs(Math.sin(f * 0.8)) * 6} />
             </g>
           )}
           {huh > 0.01 && (
-            <g transform={`translate(1790,720) scale(${huh}) rotate(8)`}>
+            <g transform={`translate(1765,815) scale(${huh}) rotate(-8)`}>
               <text textAnchor="middle" fontFamily={FONT_HEAD} fontWeight={900} fontSize={96} fill="#fff" stroke={C.line} strokeWidth={10} paintOrder="stroke">
                 !?
               </text>
             </g>
           )}
         </Stage>
-        <Title lines={[{text: "YOUR ISSUES"}, {text: "ARE MONSTERS!", fill: "red"}]} at={12} y={180} size={150} stagger={12} />
+        <Title lines={[{text: "YOUR ISSUES"}, {text: "ARE MONSTERS!", fill: "red"}]} at={12} y={180} size={150} stagger={10} />
       </Camera>
       <Vignette />
-      <Flash at={0} len={3} />
+      <SmashOpen />
+    </AbsoluteFill>
+  );
+};
+
+// Smash cut in from the gameplay hero shot: an ink-on-white impact frame.
+const SmashOpen: React.FC = () => {
+  const f = useCurrentFrame();
+  if (f > 2) return null;
+  return (
+    <AbsoluteFill style={{background: "#fff"}}>
+      <RadialLines color={C.line} opacity={0.9} count={110} inner={260} seed="smash" />
+      <Stage>
+        <Burst x={960} y={540} r={300} color={C.danger} points={16} rot={f * 9} />
+        <text x={960} y={610} textAnchor="middle" fontFamily={FONT_HEAD} fontWeight={900} fontSize={200} fill="#fff" stroke={C.line} strokeWidth={16} paintOrder="stroke">
+          !!
+        </text>
+      </Stage>
     </AbsoluteFill>
   );
 };
@@ -85,13 +102,13 @@ const SceneSquad: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
   const cast = [
-    {kind: "knight" as const, name: "ADA", sub: "KNIGHT  gpt-6-astra", x: 480, at: 6, face: "fierce" as const},
-    {kind: "ranger" as const, name: "BRAM", sub: "RANGER  gpt-6-sol", x: 960, at: 18, face: "fierce" as const},
-    {kind: "scout" as const, name: "CATO", sub: "SCOUT  gpt-6-luna", x: 1440, at: 30, face: "happy" as const},
+    {kind: "knight" as const, name: "ADA", sub: "KNIGHT · gpt-6-astra", x: 480, at: 2, face: "fierce" as const},
+    {kind: "ranger" as const, name: "BRAM", sub: "RANGER · gpt-6-sol", x: 960, at: 9, face: "fierce" as const},
+    {kind: "scout" as const, name: "CATO", sub: "SCOUT · gpt-6-luna", x: 1440, at: 16, face: "happy" as const},
   ];
   return (
     <AbsoluteFill style={{background: `radial-gradient(circle at 50% 58%, #fff3c9 0%, ${C.goldHi} 22%, ${C.gold} 48%, #7a4a14 100%)`}}>
-      <Camera hits={[0, 12, 24, 36]} amp={16} impacts={[2]}>
+      <Camera hits={[0, 8, 15, 22]} amp={16} impacts={[2]}>
         <RadialLines color="#fff" opacity={0.5} cy={620} spin={0.004} seed="r2" />
         <Halftone color="rgba(90,50,10,0.35)" />
         <Sparkles count={26} seed="s2" size={26} />
@@ -112,10 +129,32 @@ const SceneSquad: React.FC = () => {
             );
           })}
         </Stage>
-        <Title lines={[{text: "YOUR AI AGENTS"}, {text: "ARE UNITS!"}]} at={44} y={170} size={140} stagger={10} />
+        <Title lines={[{text: "YOUR AI AGENTS"}, {text: "ARE UNITS!"}]} at={31} y={170} size={140} stagger={8} />
       </Camera>
       <Vignette strength={0.35} />
       <Flash at={0} len={2} />
+      <Glint from={22} to={31} />
+    </AbsoluteFill>
+  );
+};
+
+// Anime close-up: Ada's eyes with a star glint, letterboxed.
+const Glint: React.FC<{from: number; to: number}> = ({from, to}) => {
+  const f = useCurrentFrame();
+  if (f < from || f >= to) return null;
+  const t = (f - from) / (to - from);
+  const sc = 5.4 + t * 0.8;
+  const g = Math.sin(Math.min(1, t * 1.6) * Math.PI);
+  return (
+    <AbsoluteFill style={{background: `linear-gradient(135deg, #7a1f18, ${C.danger} 50%, #7a1f18)`}}>
+      <HLines color="#ffd9c8" count={50} speed={120} opacity={0.4} seed="gl" />
+      <Stage>
+        <Chibi kind="knight" x={960} y={560 + 170 * sc} scale={sc} face="fierce" />
+        <Star x={960 + 28 * sc} y={560 - 6 * sc} s={110 * g} color="#fff" rot={t * 90} />
+        <Star x={960 + 28 * sc} y={560 - 6 * sc} s={40 * g} color={C.goldHi} rot={45 + t * 90} />
+        <rect x={0} y={0} width={1920} height={150} fill="#000" />
+        <rect x={0} y={930} width={1920} height={150} fill="#000" />
+      </Stage>
     </AbsoluteFill>
   );
 };
@@ -124,21 +163,21 @@ const SceneSquad: React.FC = () => {
 const SceneLibrary: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const up = slam(f, fps, 8, 14);
+  const up = slam(f, fps, 4, 14);
   const lib = {x: 470, y: 900};
   const from = {x: lib.x + 145, y: lib.y - 330};
   const gem = {x: 1420 - 64 * 1.5, y: 920 - (70 + 60 * Math.min(1, up) + 168) * 1.5};
-  const beamP = interpolate(f, [12, 20], [0, 1], clamp);
-  const beamO = interpolate(f, [40, 47], [1, 0], clamp);
-  const orbT = interpolate(f, [46, 64], [0, 1], {...clamp, easing: Easing.inOut(Easing.cubic)});
+  const beamP = interpolate(f, [7, 13], [0, 1], clamp);
+  const beamO = interpolate(f, [28, 33], [1, 0], clamp);
+  const orbT = interpolate(f, [31, 45], [0, 1], {...clamp, easing: Easing.inOut(Easing.cubic)});
   const ctrl = {x: (gem.x + from.x) / 2, y: 180};
   const bez = (t: number) => ({
     x: (1 - t) * (1 - t) * gem.x + 2 * (1 - t) * t * ctrl.x + t * t * from.x,
     y: (1 - t) * (1 - t) * gem.y + 2 * (1 - t) * t * ctrl.y + t * t * from.y,
   });
   const orb = bez(orbT);
-  const pulse = Math.max(0, 1 - Math.abs(f - 66) / 8);
-  const page = slam(f, fps, 64);
+  const pulse = Math.max(0, 1 - Math.abs(f - 47) / 8);
+  const page = slam(f, fps, 45);
   const ex = from.x + (gem.x - from.x) * beamP;
   const ey = from.y + (gem.y - from.y) * beamP;
   const glyphs = Array.from({length: 10}).map((_, i) => {
@@ -150,7 +189,7 @@ const SceneLibrary: React.FC = () => {
   });
   return (
     <AbsoluteFill style={{background: "linear-gradient(180deg, #0a1330 0%, #1a2d5c 62%, #22386a 100%)"}}>
-      <Camera hits={[64]} amp={10}>
+      <Camera hits={[45]} amp={10}>
         <Halftone color="rgba(150,190,255,0.18)" />
         <Sparkles count={30} seed="s3" size={12} box={[0, 0, 1920, 560]} color="#cfe3ff" />
         <Stage>
@@ -175,18 +214,18 @@ const SceneLibrary: React.FC = () => {
               <circle cx={orb.x} cy={orb.y} r={34} fill="url(#g-orb)" stroke={C.line} strokeWidth={5} />
             </g>
           )}
-          <Tag x={(from.x + gem.x) / 2} y={(from.y + gem.y) / 2 + 80} text="RECALL" color={C.recall} p={slam(f, fps, 16)} fade={beamO} />
-          <Tag x={ctrl.x} y={300} text="REMEMBER" color={C.remember} p={slam(f, fps, 48)} fade={interpolate(f, [70, 78], [1, 0], clamp)} />
+          <Tag x={(from.x + gem.x) / 2} y={(from.y + gem.y) / 2 + 80} text="RECALL" color={C.recall} p={slam(f, fps, 10)} fade={beamO} />
+          <Tag x={ctrl.x} y={470} text="REMEMBER" color={C.remember} p={slam(f, fps, 33)} fade={interpolate(f, [44, 50], [1, 0], clamp)} />
           {page > 0.01 && (
-            <g transform={`translate(${lib.x + 380},${lib.y - 520 - page * 30}) scale(${page}) rotate(-6)`}>
-              <Burst x={0} y={-6} r={120} color={C.goldHi} points={12} rot={f * 2} />
-              <text textAnchor="middle" y={22} fontFamily={FONT_HEAD} fontWeight={900} fontSize={64} fill={C.line}>
+            <g transform={`translate(340,${340 - page * 20}) scale(${page}) rotate(-6)`}>
+              <Burst x={0} y={-6} r={170} color={C.goldHi} points={14} rot={f * 2} />
+              <text textAnchor="middle" y={20} fontFamily={FONT_HEAD} fontWeight={900} fontSize={60} fill={C.line}>
                 +1 PAGE
               </text>
             </g>
           )}
         </Stage>
-        <Title lines={[{text: "GBRAIN IS THEIR"}, {text: "SHARED MEMORY", fill: "blue"}]} at={2} x={1100} y={150} size={120} stagger={10} />
+        <Title lines={[{text: "GBRAIN IS THEIR"}, {text: "SHARED MEMORY", fill: "blue"}]} at={2} x={1100} y={150} size={120} stagger={8} />
       </Camera>
       <Vignette />
       <Flash at={0} len={2} color={C.recall} peak={0.8} />
@@ -212,26 +251,28 @@ const Tag: React.FC<{x: number; y: number; text: string; color: string; p: numbe
 const SceneForge: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const hits = [12, 27, 42];
+  const hits = [8, 18, 28];
   const angle = interpolate(
     f,
-    [0, 9, 12, 14, 22, 27, 29, 37, 42, 46, 60],
+    [0, 5, 8, 10, 14, 18, 20, 24, 28, 31, 42],
     [70, 80, 0, 12, 80, 0, 12, 85, 0, 10, 95],
     clamp,
   );
   const anvilTop = {x: 1200, y: 940 - 74 * 1.3};
-  const born = slam(f, fps, 50, 10);
-  const pillar = interpolate(f, [44, 50, 62, 72], [0, 1, 1, 0], clamp);
+  const born = slam(f, fps, 35, 10);
+  const pillar = interpolate(f, [29, 35, 46, 56], [0, 1, 1, 0], clamp);
   const heat = Math.max(0.4, ...hits.map((h) => Math.max(0, 1 - Math.abs(f - h) / 6)));
   return (
     <AbsoluteFill style={{background: "radial-gradient(circle at 40% 72%, #3d2614 0%, #1c110b 60%, #0f0906 100%)"}}>
-      <Camera hits={hits.concat([50])} amp={16}>
+      <Camera hits={hits.concat([35])} amp={16}>
         <Halftone color="rgba(79,167,224,0.2)" />
         <Stage>
           <ellipse cx={960} cy={1000} rx={1200} ry={150} fill="#130c08" />
           <Forge x={540} y={930} scale={1.05} frame={f} heat={heat} />
           <Anvil x={anvilTop.x} y={940} scale={1.3} />
-          <Hammer x={1500} y={anvilTop.y - 60} angle={angle} scale={1} />
+          <g opacity={interpolate(f, [31, 36], [1, 0], clamp)}>
+            <Hammer x={1500} y={anvilTop.y - 60} angle={angle} scale={1} />
+          </g>
           {hits.map((h, i) => (
             <Sparks key={h} at={h} x={anvilTop.x - 20} y={anvilTop.y - 6} seed={`sp4-${i}`} count={34} power={1.1} />
           ))}
@@ -249,9 +290,9 @@ const SceneForge: React.FC = () => {
               <Chibi kind="forged" x={980} y={960} scale={1.45} face="fierce" staffUp={1} glow={0.6 + 0.4 * Math.sin(f * 0.4)} bob={Math.abs(Math.sin(f * 0.25)) * 6} />
             </g>
           )}
-          <NameCard x={980} y={660 - 540} name="REFUND RANGER" sub="NEW UNIT TYPE, TRAINED WITH RIVER" accent="#8fd0ff" p={slam(f, fps, 60)} w={560} />
+          <NameCard x={1480} y={640} name="REFUND RANGER" sub="NEW UNIT TYPE, TRAINED WITH RIVER" accent="#8fd0ff" p={slam(f, fps, 42)} w={560} />
         </Stage>
-        <Title lines={[{text: "RIVER FORGES", fill: "blue"}, {text: "NEW UNIT TYPES!"}]} at={2} x={1180} y={170} size={120} stagger={10} />
+        <Title lines={[{text: "RIVER FORGES", fill: "blue"}, {text: "NEW UNIT TYPES!"}]} at={2} x={1180} y={170} size={120} stagger={8} />
       </Camera>
       <Vignette />
       {hits.map((h) => (
@@ -265,12 +306,12 @@ const SceneForge: React.FC = () => {
 const SceneFinale: React.FC = () => {
   const f = useCurrentFrame();
   const {fps} = useVideoConfig();
-  const CLASH = 15;
+  const CLASH = 12;
   const pre = f < CLASH + 2;
   const run = interpolate(f, [0, CLASH], [0, 1], {...clamp, easing: Easing.in(Easing.quad)});
   const zoom = pre ? interpolate(f, [0, CLASH], [1, 1.35], clamp) : 1;
-  const logo = slam(f, fps, 18, 10);
-  const sub = slam(f, fps, 30);
+  const logo = slam(f, fps, 14, 10);
+  const sub = slam(f, fps, 24);
   const squad = [
     {kind: "knight" as const, x: 330},
     {kind: "ranger" as const, x: 590},
@@ -279,7 +320,7 @@ const SceneFinale: React.FC = () => {
   ];
   return (
     <AbsoluteFill style={{background: pre ? "linear-gradient(180deg, #2a241c, #14100c)" : `radial-gradient(circle at 50% 40%, #fff3c9 0%, ${C.goldHi} 20%, ${C.gold} 45%, #6a3e10 100%)`}}>
-      <Camera hits={[CLASH, CLASH + 3, 18]} amp={24} impacts={[CLASH + 2]}>
+      <Camera hits={[CLASH, CLASH + 3, 14]} amp={24} impacts={[CLASH + 2]}>
         {pre ? (
           <>
             <HLines color={C.goldHi} count={60} speed={140} opacity={0.5} seed="h5" dir={1} />
@@ -298,7 +339,7 @@ const SceneFinale: React.FC = () => {
           <>
             <RadialLines color="#fff" opacity={0.55} cy={420} spin={0.003} seed="r5" />
             <Halftone color="rgba(90,50,10,0.3)" />
-            <Sparkles count={34} seed="s5" size={28} start={18} />
+            <Sparkles count={34} seed="s5" size={28} start={14} />
             <Stage>
               {[0, 1, 2].map((i) => {
                 const t = f - CLASH;
@@ -337,8 +378,8 @@ const SceneFinale: React.FC = () => {
                       QM RAID
                     </text>
                   </g>
-                  <BigStar x={-540} y={-150} s={60 * Math.max(0, Math.sin((f - 18) * 0.2))} />
-                  <BigStar x={540} y={150} s={60 * Math.max(0, Math.sin((f - 24) * 0.2))} />
+                  <BigStar x={-540} y={-150} s={60 * Math.max(0, Math.sin((f - 14) * 0.2))} />
+                  <BigStar x={540} y={150} s={60 * Math.max(0, Math.sin((f - 20) * 0.2))} />
                 </g>
               )}
               {sub > 0.01 && (
@@ -356,7 +397,7 @@ const SceneFinale: React.FC = () => {
       </Camera>
       <Vignette strength={0.35} />
       <Flash at={CLASH} len={2} />
-      <Wipe start={78} />
+      <Wipe start={54} />
     </AbsoluteFill>
   );
 };
@@ -382,19 +423,19 @@ const Wipe: React.FC<{start: number}> = ({start}) => {
 
 export const Intro: React.FC = () => (
   <AbsoluteFill style={{background: "#000"}}>
-    <Sequence from={0} durationInFrames={84} name="1 Horde">
+    <Sequence from={0} durationInFrames={66} name="1 Horde">
       <SceneHorde />
     </Sequence>
-    <Sequence from={84} durationInFrames={96} name="2 Squad">
+    <Sequence from={66} durationInFrames={66} name="2 Squad">
       <SceneSquad />
     </Sequence>
-    <Sequence from={180} durationInFrames={90} name="3 Library">
+    <Sequence from={132} durationInFrames={66} name="3 Library">
       <SceneLibrary />
     </Sequence>
-    <Sequence from={270} durationInFrames={90} name="4 Forge">
+    <Sequence from={198} durationInFrames={66} name="4 Forge">
       <SceneForge />
     </Sequence>
-    <Sequence from={360} durationInFrames={90} name="5 Finale">
+    <Sequence from={264} durationInFrames={66} name="5 Finale">
       <SceneFinale />
     </Sequence>
   </AbsoluteFill>

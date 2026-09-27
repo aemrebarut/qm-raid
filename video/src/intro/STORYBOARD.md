@@ -1,7 +1,8 @@
 # Intro storyboard (raid-video-intro)
 
-15 s anime-style opener, fully code-drawn in Remotion (SVG and CSS, no images, no copyrighted characters, music or sound).
-Composition `Intro`: 1920x1080, 30 fps, 450 frames. Component: `import {Intro} from "./intro/Intro"` (named export), also `INTRO_FRAMES = 450`.
+11 s anime-style opener, fully code-drawn in Remotion (SVG and CSS, no images, no copyrighted characters, music or sound).
+It plays at video 0:02 to 0:13, right after the editor's 2 s real gameplay hero shot (Emre 16:03), and opens on a smash cut.
+Composition `Intro`: 1920x1080, 30 fps, 330 frames. Component: `import {Intro} from "./intro/Intro"` (named export), also `INTRO_FRAMES = 330`.
 
 ## The four plain claims (each gets one beat, one title card, one VO line)
 1. Your issues are monsters.
@@ -9,14 +10,16 @@ Composition `Intro`: 1920x1080, 30 fps, 450 frames. Component: `import {Intro} f
 3. GBrain is their shared memory.
 4. River forges new unit types.
 
-## Beats (frame ranges at 30 fps)
-| # | Time | Frames | Picture | Title card | VO (announcer, hype) |
-|---|------|--------|---------|------------|----------------------|
-| 1 | 0.0 to 2.8 | 0 to 84 | Black, a 2 frame white flash, horizontal speed lines. A horde of slime monsters (red, green, violet) bounces toward camera, each carrying an issue tag from our synthetic Lumen backlog ("Refund webhook retries issue duplicate refunds", "OIDC login loops..."). Screen shake on every landing. Tiny chibi scout pops in lower right with a sweat drop. | YOUR ISSUES / ARE MONSTERS! | "Your backlog is attacking! Your issues are monsters!" |
-| 2 | 2.8 to 6.0 | 84 to 180 | Impact frame (3 frames, inverted ink on white), then a gold radial burst with rotating speed lines. Chibi squad slams in one by one: Ada (knight), Bram (ranger), Cato (scout), each with a slanted name card (name, class, model). | YOUR AI AGENTS / ARE UNITS! | "Your AI agents are units!" |
-| 3 | 6.0 to 9.0 | 180 to 270 | The Library (stone monastery, blue window, crest). Ada raises the staff: blue recall beam from the Library with rising glyph sparks; then a gold orb arcs back into the Library, it pulses, "+1 PAGE" pops. | GBRAIN IS THEIR / SHARED MEMORY | "GBrain is their shared memory!" |
-| 4 | 9.0 to 12.0 | 270 to 360 | The Forge (smithy, River-blue furnace glow). Hammer strikes on the anvil x3 with white impact flashes and spark bursts; a new unit steps out glowing River-blue with runes: "REFUND RANGER". | RIVER FORGES / NEW UNIT TYPES! | "And River forges new unit types!" |
-| 5 | 12.0 to 15.0 | 360 to 450 | Dramatic push-in: squad charges from the left, the horde from the right, clash at 12.5 s with a big impact frame and shake. Logo slam "QM RAID" in gold on a stone plate, sparkles, subtitle "An RTS board for your AI agent swarm". Last 10 frames: speed-line wipe to white for the editor's cut. | QM RAID | "This is... QM RAID!" |
+## Beats (intro frames at 30 fps; video time = 2.0 s + intro time)
+| # | Intro frames | Video time | Picture | Title card | VO (announcer, hype) |
+|---|--------------|------------|---------|------------|----------------------|
+| 1 | 0 to 66 | 2.0 to 4.2 | Smash cut: 3 frame ink-on-white impact frame with a red burst and "!!". A horde of slime monsters bounces in, each front slime carrying an issue tag from our synthetic Lumen backlog. Chibi scout panics lower right with a sweat drop and "!?". | YOUR ISSUES / ARE MONSTERS! | "Your issues are monsters!" (2.1) |
+| 2 | 66 to 132 | 4.2 to 6.4 | Impact frame, gold radial burst. Ada (knight), Bram (ranger), Cato (scout) slam in with name cards (name, class, model). Eye-glint close-up on Ada (letterboxed), then the title. | YOUR AI AGENTS / ARE UNITS! | "Your AI agents are units!" (4.3) |
+| 3 | 132 to 198 | 6.4 to 8.6 | The GBrain Library. Ada raises the staff: blue RECALL beam from the Library; a gold REMEMBER orb arcs back, the Library pulses, "+1 PAGE" pops. | GBRAIN IS THEIR / SHARED MEMORY | "GBrain is their shared memory!" (6.45) |
+| 4 | 198 to 264 | 8.6 to 10.8 | The Forge (River). Three hammer strikes with flashes and sparks; a River-blue pillar and the REFUND RANGER steps out ("new unit type, trained with River"). | RIVER FORGES / NEW UNIT TYPES! | "River forges new unit types!" (8.65) |
+| 5 | 264 to 330 | 10.8 to 13.0 | Squad charges, horde charges, clash with impact frame and shake; slimes fly off KO; logo slam "QM RAID" on a stone plate, subtitle "An RTS board for your AI agent swarm". Last 12 frames: speed-line wipe to white. | QM RAID | "This is QM RAID!" (10.9) |
+
+Hits (video time): smash 2.00; title slams 2.40, 2.73; units land 4.47, 4.70, 4.93; glint 4.93; title slams 5.23, 5.50; recall beam 6.63; orb lands 7.90; hammer 8.87, 9.20, 9.53; new unit 9.77; clash 11.20; logo 11.27; subtitle 11.60; wipe 12.60 to 13.00.
 
 ## Art direction (shared with raid-video-fx so the whole video reads as one style)
 - Palette (from the board, apps/board/src/theme/tokens.css): gold `#d9a441` (hi `#f3c969`), bronze metal `#8c7a5a` / lo `#3b3326` / hi `#c8ad7a`, parchment ink `#ece6d8`, stone dark `#1b1712` / `#2a241c`, recall blue `#6fa8ff`, River blue `#4fa7e0`, remember gold `#e0b454`, ok green `#7cc47f`, danger red `#d65a45`, team red `#d64545`, team blue `#3f7fd6`, violet `#b08ce8`, outline warm brown `#24170d` (the game's unit outline).

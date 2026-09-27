@@ -312,6 +312,9 @@ export const Title: React.FC<{
   x?: number;
 }> = ({lines, at, y = 170, size = 140, gap, stagger = 9, x = 960}) => (
   <AbsoluteFill>
+    {lines.map((l, i) => (
+      <Flash key={`f${i}`} at={at + i * stagger} len={1} peak={0.7} />
+    ))}
     <svg width={1920} height={1080} style={{overflow: "visible"}}>
       <Defs />
       {lines.map((l, i) => (

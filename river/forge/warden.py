@@ -175,7 +175,7 @@ def verdict_correct(text: str, meta: dict) -> float:
     return 1.0 if not meta["winner"] or winner_of(line) == meta["winner"] else 0.0
 
 
-WINNER = re.compile(r"winner:\s*([^);,]*)", re.I)
+WINNER = re.compile(r"winner:\s*([^);]*)", re.I)  # to ")" or ";": a comma list of candidates is ambiguous
 
 
 def winner_of(line: str) -> str | None:

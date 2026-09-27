@@ -5,7 +5,7 @@ from forge import datagen, warden
 m = {"verdict": "APPROVED", "winner": "u3", "cites": ["components/billing"]}
 head = "Rules: components/billing\nFinding: x.\n"
 for last, want in [("VERDICT: APPROVED (winner: u2; u3 is rejected)", 0.0), ("VERDICT: APPROVED (winner: u3; u2 is rejected)", 1.0),
-                   ("VERDICT: APPROVED (winner: u2 or u3)", 0.0), ("VERDICT: APPROVED (winner: u3, winner: u2)", 0.0),
+                   ("VERDICT: APPROVED (winner: u2 or u3)", 0.0), ("VERDICT: APPROVED (winner: u3, winner: u2)", 0.0), ("VERDICT: APPROVED (winner: u3, u2)", 0.0),
                    ("VERDICT: APPROVED (winner: u3)", 1.0), ("VERDICT: APPROVED", 0.0), ("VERDICT: CHANGES: both break it", 0.0)]:
     assert warden.verdict_correct(head + last, m) == want, last
     assert warden.agrees(head + last, m) == (want == 1.0), last

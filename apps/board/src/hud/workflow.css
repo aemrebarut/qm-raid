@@ -1,0 +1,23 @@
+/* Workflow styles owned by raid-ui-hud (Formation diagram glyphs, team run cards in the orders bar).
+   Loaded after hud.css; base card and button looks come from hud.css (raid-look-hud). */
+.hud-wf-glyph { font-size: 13px; font-weight: 700; fill: #2e2410; font-variant-numeric: tabular-nums; }
+
+.hud-run-card { grid-template-columns: minmax(0, 1fr); }
+.hud-run-card .hud-card-body { grid-column: 1 / -1; }
+.hud-run-card[data-status="needs_human"] { outline: 2px solid #7a4fa0; }
+.hud-run-card[data-status="failed"] { outline: 2px solid #b3261e; }
+.hud-run-card[data-status="done"] { opacity: .85; }
+.hud-run-card .hud-card-btns:not(:has(button:not([hidden]))) { display: none; }
+.hud-run-chain { display: flex; align-items: center; gap: 0; margin: 4px 0 2px; }
+.hud-run-col { display: inline-flex; flex-direction: column; gap: 2px; }
+.hud-run-link { width: 14px; height: 2px; background: #6b5a3f; }
+.hud-run-pip {
+  width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
+  font-size: 10px; font-weight: 700; color: #2e2410; background: #f3e6c2; border: 2px solid var(--team, #8a7a5c);
+  transition: background-color .15s ease, box-shadow .15s ease;
+}
+.hud-run-pip[data-state="active"] { background: #ffd98a; box-shadow: 0 0 0 2px rgba(255,217,138,.6); animation: hud-wf-pulse 1.1s ease-in-out infinite; }
+.hud-run-pip[data-state="done"], .hud-run-pip[data-state="approved"] { background: #3d8a3a; color: #fff; }
+.hud-run-pip[data-state="changes"] { background: #c7771f; color: #fff; }
+.hud-run-pip[data-state="failed"] { background: #b3261e; color: #fff; }
+@keyframes hud-wf-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }

@@ -2,6 +2,7 @@
 // (index.html gives #hud > * pointer events; the rest of #hud lets clicks through to the scene).
 import type { Bus, Store } from "../core";
 import "./hud.css";
+import "./workflow.css";
 import { BottomPanel } from "./bottomPanel";
 import { h } from "./dom";
 import { GlobalFeed } from "./globalFeed";

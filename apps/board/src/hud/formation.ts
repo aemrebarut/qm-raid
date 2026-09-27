@@ -4,7 +4,6 @@
 // dropdown or a button under the cursor survives the frequent state renders.
 import { api, type Bus, type State, type Store, type Team, type Unit, type Workflow, type WorkflowRun, type WorkflowStep } from "../core";
 import { clear, h, put, safeColor, timeOf } from "./dom";
-import { classGlyph } from "./sidePanel";
 
 type Preset = Exclude<Workflow["preset"], "custom">;
 export type NodeState = "idle" | "active" | "done" | "approved" | "changes" | "failed";
@@ -69,7 +68,7 @@ export class FormationPanel {
   private diagram = h("div", { class: "hud-wf-diagram" });
   private run = h("div", { class: "hud-wf-run" });
   readonly root = h("section", { class: "hud-section hud-wf", hidden: true },
-    h("h3", null, "Formation"), this.presets, this.slots, this.diagram, this.run);
+    h("h3", { title: "Team workflow: work passes from unit to unit (plan, build, review)" }, "Formation"), this.presets, this.slots, this.diagram, this.run);
   private teamId: number | null = null;
   private sigs = { presets: "", slots: "", diagram: "", run: "" };
 
@@ -114,8 +113,7 @@ export class FormationPanel {
     this.sigs.slots = sig;
     clear(this.slots);
     if (!wf) {
-      this.slots.append(h("p", { class: "hud-hint" }, "Pick a formation and the team works one issue together: the plan, the fix and the review pass from unit to unit."));
-      return;
+      return; // the Off chip is lit; preset tooltips explain the shapes
     }
     const teamId = team.id;
     for (const n of wf.nodes) {
@@ -185,7 +183,7 @@ export class FormationPanel {
       const g = el("g", { class: "hud-wf-node", "data-state": state, "data-node": n.id, transform: `translate(${p.x} ${p.y})`, style: `--team:${safeColor(team.color)}` });
       const title = el("title");
       title.textContent = `${cap(n.role)}: ${u?.name ?? n.unitId} (${state}). Click to select.`;
-      const glyph = label(0, 5, u ? classGlyph(u.class) : "?", "hud-wf-glyph");
+      const glyph = label(0, 4.5, initial(u?.name ?? n.unitId), "hud-wf-glyph");
       g.append(title, el("circle", { r: R + 4, class: "hud-wf-halo" }), el("circle", { r: R, class: "hud-wf-disc" }), glyph,
         label(0, R + 11, cap(n.role), "hud-wf-role-label"), badge(state));
       g.addEventListener("click", () => this.bus.select([unitId]));
@@ -197,16 +195,19 @@ export class FormationPanel {
   }
 
   private renderRun(s: State, team: Team, wf: Workflow | null, run: WorkflowRun | undefined): void {
-    const last = run?.steps.at(-1);
-    const sig = run ? `${run.id}:${run.status}:${run.loops}:${run.steps.length}:${last?.status}:${last?.summary}:${wf?.maxLoops}` : `none:${!!wf}`;
+    // Every shown row counts: in a fan-out an earlier branch can finish while the last one is still active.
+    const t = run ? s.targets.find((x) => x.id === run.targetId) : undefined;
+    const sig = run
+      ? JSON.stringify([run.id, run.status, run.loops, run.steps.length, wf?.maxLoops, t?.issue, t?.title, wf?.nodes.map((n) => [n.id, n.role]),
+          run.steps.slice(-STEPS_SHOWN).map((st) => [st.nodeId, st.unitId, st.orderId, st.status, st.summary, st.ts, s.units.find((u) => u.id === st.unitId)?.name])])
+      : `none:${!!wf}`;
     if (sig === this.sigs.run) return;
     this.sigs.run = sig;
     clear(this.run);
     if (!run) {
-      if (wf) this.run.append(h("p", { class: "hud-hint" }, "With the whole team selected, right-click a camp to start a run."));
+      if (wf) this.run.append(h("div", { class: "hud-sub", title: "Select the whole team, then right-click a camp to start a run" }, "Ready"));
       return;
     }
-    const t = s.targets.find((x) => x.id === run.targetId);
     const active = activeStep(run);
     put(this.run,
       h("div", { class: "hud-wf-run-head" },
@@ -218,7 +219,7 @@ export class FormationPanel {
         ? h("div", { class: "hud-card-btns" }, h("button", {
             class: "hud-btn hud-btn-sm hud-btn-cancel", type: "button", title: "Cancel the run (cancels its active order)",
             onclick: () => void this.cancel(active.orderId),
-          }, "Cancel run"))
+          }, "Cancel"))
         : null,
     );
   }
@@ -241,7 +242,9 @@ export class FormationPanel {
     const r = await api.setWorkflow(teamId, { workflow });
     const who = this.store.unit(unitId)?.name ?? unitId;
     this.bus.toast(r.ok ? `${who} is now ${wf.nodes.find((n) => n.id === nodeId)?.role ?? nodeId}` : r.error, r.ok ? "info" : "error");
-    if (!r.ok) { this.sigs.slots = ""; const t = this.store.team(teamId); if (t) this.setState(this.store.getState(), t); } // put the select back
+    // Put the select back, but only if this team is still the one shown (the user may have moved on).
+    const t = this.store.team(teamId);
+    if (!r.ok && t && teamId === this.teamId && !this.root.hidden) { this.sigs.slots = ""; this.setState(this.store.getState(), t); }
   }
 
   private async cancel(orderId: string): Promise<void> {
@@ -293,4 +296,8 @@ function el(tag: string, attrs: Record<string, string | number> = {}): SVGElemen
 
 function cap(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+function initial(name: string): string {
+  return (name.trim()[0] ?? "?").toUpperCase();
 }

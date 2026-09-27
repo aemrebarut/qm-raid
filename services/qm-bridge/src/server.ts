@@ -1,7 +1,8 @@
 // qm-bridge: Bridge API (docs/CONTRACT.md) on 127.0.0.1:4614 backed by real QM agents, one QM conversation per unit.
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { BridgeEvent, SendRequest, SpawnRequest } from "../../../contract/types.ts";
+import type { BridgeEvent, CatalogItem, Loadout, SendRequest, SpawnRequest } from "../../../contract/types.ts";
+import { fetchCatalog, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout } from "./loadout.ts";
 import {
   PORTAL_URL,
   findSessionId,
@@ -33,6 +34,7 @@ interface Send extends SendRequest {
   t?: { send: number; depth: number; queued?: number; first?: number }; // per-order timing (epoch ms)
 }
 interface Unit extends SpawnRequest {
+  loadout?: Loadout;
   threadRef: string;
   sessionId: string | null;
   queue: Send[];
@@ -147,7 +149,8 @@ function header(u: Unit, s: Send): string {
     s.componentId && `component ${s.componentId}`,
     u.team != null && `team ${u.team}`,
   ].filter(Boolean);
-  return `[${tags.join(" | ")}]\n${s.text}`;
+  // Standing orders and loadout are restated on every order, so they hold whatever QM keeps as its session prompt.
+  return [`[${tags.join(" | ")}]`, ...loadoutLines(u.loadout), s.text].join("\n");
 }
 
 const warned = new Set<string>();
@@ -369,11 +372,28 @@ function introText(u: Unit): string {
     `You are ${u.name}, a ${u.role} agent${u.team != null ? ` on team ${u.team}` : ""} on the QM Raid board. ` +
     `You will get orders to work product issues; each order starts with a [unit | order | target | component | team] header. ` +
     `Use the gbrain tools, when you have them, to recall before you work and to remember what you learn. ` +
+    (u.loadout ? `${loadoutLines(u.loadout).join(" ")} ` : "") +
     `Reply to this message with one short line saying you are ready.`
   );
 }
 
-async function createUnit(b: Partial<SpawnRequest> & { id: string }): Promise<Unit> {
+// Loadout change: one visible marker turn, queued behind any active order (never interrupts); no terminal event.
+function applyLoadout(u: Unit, next: Loadout | null): boolean {
+  if (!next || sameLoadout(u.loadout, next)) return false;
+  u.loadout = next;
+  enqueue(u, { text: loadoutMarker(next), intro: true });
+  return true;
+}
+
+let catalogCache: { at: number; items: CatalogItem[] } | null = null;
+async function catalogItems(): Promise<CatalogItem[]> {
+  if (catalogCache && Date.now() - catalogCache.at < 30_000) return catalogCache.items;
+  const items = await fetchCatalog();
+  catalogCache = { at: Date.now(), items };
+  return items;
+}
+
+async function createUnit(b: Partial<SpawnRequest> & { id: string; loadout?: Loadout }): Promise<Unit> {
   const u: Unit = {
     id: b.id,
     name: b.name ?? b.id,
@@ -381,6 +401,7 @@ async function createUnit(b: Partial<SpawnRequest> & { id: string }): Promise<Un
     effort: b.effort ?? "",
     role: b.role ?? "worker",
     team: b.team ?? null,
+    ...(b.loadout ? { loadout: b.loadout } : {}),
     threadRef: await threadRefFor(`${THREAD_NS}-${b.id}`),
     sessionId: null,
     queue: [],
@@ -398,16 +419,19 @@ function retire(u: Unit): void {
 }
 
 async function spawn(req: Request): Promise<Response> {
-  const b = await body<SpawnRequest>(req);
+  const b = await body<SpawnRequest & { loadout?: unknown }>(req);
   if (!b.id) return json({ ok: false, error: "id required" }, 400);
+  const loadout = normalizeLoadout(b.loadout); // optional, so the engine's 404 re-spawn keeps it
   const existing = units.get(b.id);
   if (existing) {
-    // Same unit again (engine restart, re-spawn without delete): keep the conversation, refresh settings, no extra turn.
+    // Same unit again (engine restart, re-spawn without delete): keep the conversation, refresh settings, no extra
+    // turn unless the loadout changed.
     existing.name = b.name ?? existing.name;
     existing.model = b.model ?? existing.model;
     existing.effort = b.effort ?? existing.effort;
     existing.role = b.role ?? existing.role;
     if ("team" in b) existing.team = b.team ?? null;
+    applyLoadout(existing, loadout);
     existing.sessionId ??= await findSessionId(existing.threadRef).catch(() => null);
     saveUnits();
     return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
@@ -415,7 +439,7 @@ async function spawn(req: Request): Promise<Response> {
   await catalog;
   let u: Unit | null = null;
   try {
-    u = await createUnit({ ...b, id: b.id });
+    u = await createUnit({ ...b, id: b.id, ...(loadout ? { loadout } : {}) });
     u.sessionId = await findSessionId(u.threadRef); // throws when QM is down -> 502
     units.set(u.id, u);
     if (!u.sessionId) {
@@ -513,6 +537,7 @@ const server = Bun.serve({
     const parts = url.pathname.split("/").filter(Boolean);
     const m = req.method;
 
+    if (m === "GET" && url.pathname === "/catalog") return json({ items: await catalogItems() });
     if (m === "GET" && url.pathname === "/health") {
       return json({ ok: true, service: "qm-bridge", qm: PORTAL_URL, units: units.size });
     }
@@ -557,12 +582,25 @@ const server = Bun.serve({
         return json({ ok: true, queued: u.queue.length });
       }
       if (m === "PATCH" && !parts[2]) {
-        const b = await body<{ team: number | null }>(req);
-        if ("team" in b) {
-          u.team = b.team ?? null;
-          saveUnits();
+        // {team?, loadout?, model?, effort?}: model/effort apply from the next turn (unknown models run on QM's
+        // default, with a warning); a changed loadout queues one marker turn.
+        const b = await body<{ team: number | null; loadout: unknown; model: string; effort: string }>(req);
+        if ("team" in b) u.team = b.team ?? null;
+        if (typeof b.model === "string" && b.model) u.model = b.model;
+        if (typeof b.effort === "string" && b.effort) u.effort = b.effort;
+        if ("loadout" in b) {
+          const next = normalizeLoadout(b.loadout);
+          if (!next) return json({ ok: false, error: "loadout must be {instructions, skills, plugins}" }, 400);
+          applyLoadout(u, next);
         }
-        return json({ ok: true });
+        saveUnits();
+        return json({
+          ok: true,
+          loadout: u.loadout ?? null,
+          model: u.model,
+          effort: u.effort,
+          sessionUrl: u.sessionId ? sessionUrl(u.sessionId) : null,
+        });
       }
       if (m === "DELETE" && !parts[2]) {
         retire(u);

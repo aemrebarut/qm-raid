@@ -1,7 +1,8 @@
-// Unit tests for src/qm.ts with a fetch fixture (no QM needed). Run: bun test test/qm.test.ts
+// Unit tests for src/qm.ts, src/tools.ts and src/loadout.ts with fetch fixtures (no QM needed). Run: bun test test/qm.test.ts
 import { afterEach, expect, test } from "bun:test";
 import { waitRun } from "../src/qm.ts";
 import { normalizeTool, toolArgs } from "../src/tools.ts";
+import { fetchCatalog, loadoutLines, loadoutMarker, normalizeLoadout } from "../src/loadout.ts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -55,4 +56,40 @@ test("GET retries once on 5xx", async () => {
   const run = await waitRun("r3", 5_000, 1);
   expect(run.status).toBe("done");
   expect(n).toBe(2);
+});
+
+test("loadout: normalize, marker turn and order-header lines", () => {
+  expect(normalizeLoadout("x")).toBeNull();
+  const l = normalizeLoadout({ instructions: "  Always write the test first.  ", skills: ["raid-board", "raid-board", 3, ""], plugins: ["gbrain"] })!;
+  expect(l).toEqual({ instructions: "Always write the test first.", skills: ["raid-board"], plugins: ["gbrain"] });
+  expect(loadoutMarker(l)).toContain("Loadout changed. Standing orders from now on: Always write the test first.");
+  expect(loadoutMarker(l)).toContain("Plugins: use only gbrain (GBrain always on)");
+  expect(loadoutLines(l)).toEqual(["Standing orders: Always write the test first.", "Loadout: skills raid-board | plugins gbrain"]);
+  expect(loadoutLines(undefined)).toEqual([]);
+  const long = loadoutLines({ instructions: "x".repeat(900), skills: [], plugins: [] });
+  expect(long).toHaveLength(1);
+  expect(long[0]!.length).toBeLessThan(830);
+});
+
+test("catalog: QM skills (by name) plus GBrain when QM lists no MCP servers; fixed fallback when QM is down", async () => {
+  globalThis.fetch = (async (url: string) => {
+    if (String(url).endsWith("/api/skills"))
+      return new Response(
+        JSON.stringify({
+          skills: [
+            { id: "u1", name: "memory", description: "Search your memory. More text.", status: "published", shadowed: false },
+            { id: "u2", name: "raid-board", description: "Work as a unit.", status: "published", shadowed: false },
+            { id: "u3", name: "old", description: "Shadowed.", status: "published", shadowed: true },
+          ],
+        }),
+      );
+    return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
+  }) as unknown as typeof fetch;
+  const items = await fetchCatalog();
+  expect(items.map((i) => `${i.kind}:${i.id}`)).toEqual(["skill:raid-board", "skill:memory", "plugin:gbrain"]);
+  expect(items[1]!.description).toBe("Search your memory.");
+  globalThis.fetch = (async () => {
+    throw new Error("ECONNREFUSED");
+  }) as unknown as typeof fetch;
+  expect((await fetchCatalog()).map((i) => i.id)).toEqual(["raid-board", "gbrain"]);
 });

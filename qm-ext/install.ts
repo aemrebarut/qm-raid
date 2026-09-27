@@ -51,18 +51,21 @@ async function registerMcp(): Promise<void> {
 
 async function installSkills(): Promise<void> {
   const ref = process.env.RAID_REF ?? (await Bun.$`git rev-parse HEAD`.text()).trim();
-  const { pack } = await api<{ pack: { id: string } }>("POST", "/admin/api/skill-packs", {
-    url: REPO,
-    ref,
-    subset: "all",
-    trustTier: "third-party",
-    config: { skillGlobs: ["qm-ext/skills/*/SKILL.md"] },
-  });
-  console.log(`skills: pack ${pack.id} at ${ref.slice(0, 7)}`);
-  const catalog = await api<unknown>("GET", `/admin/api/skill-packs/${encodeURIComponent(pack.id)}/catalog`);
-  console.log(`skills: catalog ${JSON.stringify(catalog).slice(0, 300)}`);
-  const imported = await api<unknown>("POST", `/admin/api/skill-packs/${encodeURIComponent(pack.id)}/import`, { selected: "all" });
-  console.log(`skills: import ${JSON.stringify(imported).slice(0, 300)}`);
+  // QM matches skillGlobs against each skill's directory, not the SKILL.md path.
+  const spec = { ref, subset: "all", trustTier: "third-party", config: { skillGlobs: ["qm-ext/skills/*"] } };
+  const { packs } = await api<{ packs: Array<{ id: string; url: string }> }>("GET", "/admin/api/skill-packs");
+  const existing = packs.find((p) => p.url === REPO);
+  const id = existing
+    ? (await api<{ pack: { id: string } }>("PATCH", `/admin/api/skill-packs/${encodeURIComponent(existing.id)}`, spec), existing.id)
+    : (await api<{ pack: { id: string } }>("POST", "/admin/api/skill-packs", { url: REPO, ...spec })).pack.id;
+  console.log(`skills: pack ${id} at ${ref.slice(0, 7)}`);
+  const imported = await api<{ counts?: Record<string, number>; imported?: unknown[]; updated?: unknown[] }>(
+    "POST",
+    `/admin/api/skill-packs/${encodeURIComponent(id)}/import`,
+    { selected: "all" },
+  );
+  console.log(`skills: import ${JSON.stringify(imported.counts)} imported=${JSON.stringify(imported.imported)} updated=${JSON.stringify(imported.updated)}`);
+  if (!imported.counts?.eligible) throw new Error("no eligible skills found in the pack");
 }
 
 if (!args.has("--skip-mcp")) await registerMcp();

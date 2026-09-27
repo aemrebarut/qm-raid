@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-M1 checkpoint: its actionable findings are resolved. Six board smoke tests, typecheck, build, health, and isolated interaction checks pass. The lead supplied live browser acceptance in `docs/TEST.md`; reviewer independently verified code and synthetic event/DOM behavior, not GPU pixels. Latest follow-up: Library request race in 9717398 remains open.
+M1 checkpoint findings are resolved. Current open P1: responsive proposal dock in d62bc78 clips veto controls when cards exceed its height; assigned to raid-ui-hud. Library request race is fixed in 0cbfb2c and Forge chimney coordinates in cc4c7b9. Seven smoke tests, typecheck, build, health, and isolated interaction checks pass. Independent headless Chrome now renders the mock test board at 4619; normal HUD screenshots fit 1200x600 and 1512x790. Hardware GPU performance remains unmeasured.
 
 ## Review procedure
 
@@ -115,3 +115,24 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Read all seven changed files. Isolated checks pass for safe markdown text/wikilinks, ready-only Forge Train requests, and expected engine proxy query encoding. No Forge type was created during review.
 - **P2 open, assigned to raid-ui-plan:** `LibraryPanel.openPage` and `search` do not discard superseded responses. Reproduced page A then B, resolving B before A: graph selection remains B while the page shows A. Search alpha then beta, resolving beta before alpha: results mix Beta and Alpha under the beta query. Track separate request generations for page/search and invalidate on empty query/reset; only the latest request may update the UI.
 - Lead reports live brain browser verification (31 pages, 78 links); independent reviewer tests used mocked HTTP responses to exercise reordered completions.
+
+
+## Library request fix: 0cbfb2c
+
+- Page, search, and graph generations discard superseded requests. Repeated page A/B and search alpha/beta with reversed responses: only B and beta remain. Clearing the query also invalidates an in-flight search. P2 resolved.
+- Added regression passes. Board smoke: 7 tests, 40 assertions; typecheck and production build pass.
+
+## Scene controls and effects: 05de415, e11c0d9, 4754060, eb93486, cc4c7b9
+
+- Real Three geometry with mocked rendering passes box selection, shift-add, empty-box clearing, empty shift-box preservation, right/middle/alt/space panning, no command from a pan, and pointer cancellation.
+- Arrow lifecycle matches proposed orders and active orders of selected units. Transforms remain finite and removed orders remove their arrows. Merged buildings still ray-pick; Library orb remains attached and animated.
+- Spawn events start built-in units at Barracks and forged units at Forge, then move toward their authoritative position; new snapshot units start at their destination. No API command was sent in these checks.
+- **P2 found in e11c0d9, resolved by cc4c7b9:** spreading the building view after computed world points overwrote the chimney top with local coordinates. Fixture Forge sparks appeared at [0.8, 2.25, -0.6] instead of [4.3, 2.25, 19.9]. Fix moves computed points after the spread; exact reproduction now matches the expected world position.
+- Read 4754060 walk-speed/resolved/retirement effects, eb93486 invisible pick volumes, and cc4c7b9 title tags/empty-ground ping. Existing unit and target ray-picking checks continue passing with invisible hit volumes.
+
+## Responsive HUD: d62bc78
+
+- Independent isolated headless Chrome loads 4619 with backend mock, live SSE, six units, and a scene canvas. Normal fixture HUD fits 1200x600 and 1512x790: side and bottom panels stay in bounds, minimap scales, cards receive pointer events while dock gaps are click-through. Screenshots are temporary /tmp/raid-ui-review/hud-1200.png and hud-1512.png. Rendering uses software WebGL, not a hardware performance measurement.
+- **P1 open, assigned to raid-ui-hud; lead copied:** dock max-height plus overflow:hidden makes veto controls inaccessible once proposal rows exceed its height. Reproduction at 1200x600 with eight synthetic proposed orders: bottom cards occupy y426..511 but dock ends y464, clipping Cancel/Adjust/Go. There is no scroll access. Give proposals bounded scrolling and prevent flex shrink from pushing the last row outside the dock. Screenshot /tmp/raid-ui-review/hud-many.png.
+- Console collection showed a missing resource (404) and the intentionally aborted fixture SSE request; no JavaScript page error or mount failure.
+- Automated checks now use mock engine 4618 and lead-owned test board 4619. Do not send automated commands to real-QM engine 4610 or demo board 4611. No Forge type was created; any future creation check requires dryRun:true.

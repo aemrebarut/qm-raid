@@ -258,7 +258,12 @@ const edl: Record<string, unknown> = {};
 // --real: skip mock captures (the final take). Loadout always comes from the approved mock close-up.
 const realOnly = process.argv.includes("--real");
 const LOADOUT_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/mock-loadout");
-const dirFor = (id: string) => (id === "loadout" && existsSync(LOADOUT_DIR) ? LOADOUT_DIR : dir);
+// --keep=forge,orders: take those clips from the preserved take1 captures (public/keep) instead of the new take.
+const KEEP_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/keep");
+const keep = new Set((process.argv.find((a) => a.startsWith("--keep="))?.slice(7) ?? "").split(",").filter(Boolean));
+const dirFor = (id: string) =>
+  keep.has(id) ? KEEP_DIR : id === "loadout" && existsSync(LOADOUT_DIR) ? LOADOUT_DIR : dir;
+const publicOf = (d: string) => (d === KEEP_DIR ? "keep/" : d === LOADOUT_DIR ? "mock-loadout/" : "clips/");
 const loadoutCaptured = ["mp4", "webm"].some((x) => existsSync(join(dirFor("loadout"), `loadout.${x}`))) && existsSync(join(dirFor("loadout"), "loadout.markers.json"));
 for (const [id, rule] of Object.entries(RULES)) {
   const d = dirFor(id);
@@ -284,19 +289,22 @@ for (const [id, rule] of Object.entries(RULES)) {
     continue;
   }
   const ic = INTERCUT[id];
-  const qmExt = ic && ["mp4", "webm"].find((x) => existsSync(join(dir, `${id}-qm.${x}`)));
-  if (ic && qmExt && existsSync(join(dir, `${id}-qm.markers.json`))) {
-    const qdoc = JSON.parse(readFileSync(join(dir, `${id}-qm.markers.json`), "utf8"));
+  // the QM tab recording belongs to the same take as its map clip
+  const qmExt = ic && ["mp4", "webm"].find((x) => existsSync(join(d, `${id}-qm.${x}`)));
+  if (ic && qmExt && existsSync(join(d, `${id}-qm.markers.json`)) && !process.argv.includes(`--no-qm-${id}`)) {
+    const qdoc = JSON.parse(readFileSync(join(d, `${id}-qm.markers.json`), "utf8"));
     const q = plan(`${id}-qm`, QM_RULE, qdoc, qmExt, 0, ic.seconds);
     const m = q && plan(id, rule, doc, ext, TITLE, rule.target - q.seconds);
     if (q && m) {
       insertIntercut(m, q, ic.after);
+      m.src = m.src.replace("clips/", publicOf(d));
+      m.segments = m.segments.map((g) => ({ ...g, src: (g.src ?? m.src).replace("clips/", publicOf(d)) }));
       edl[id] = m;
       console.log(`${id} [${doc.backend}] + QM intercut ${q.seconds}s after ${ic.after}: ${m.seconds}s (target ${rule.target})`);
       continue;
     }
   }
-  if (d !== dir) p.src = p.src.replace("clips/", "mock-loadout/");
+  p.src = p.src.replace("clips/", publicOf(d));
   p.segments = p.segments.map((g) => ({ ...g, src: p.src }));
   edl[id] = p;
   console.log(`${id} [${doc.backend}]: ${p.seconds}s (target ${rule.target}), hold ${p.holdRate}x, gaps ${p.gapRate}x, ${p.segments.length} segs, ${p.fx.length} fx, ${p.captions.length} caps, vo ${Object.keys(p.voAnchor).join(",")}`);

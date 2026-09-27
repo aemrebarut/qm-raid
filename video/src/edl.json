@@ -1,7 +1,7 @@
 {
   "orders": {
     "id": "orders",
-    "src": "clips/orders.mp4",
+    "src": "keep/orders.mp4",
     "sfx": [
       {
         "file": "sfx_beam.wav",
@@ -19,79 +19,79 @@
         "from": 1.299,
         "to": 4.699,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 4.699,
         "to": 7.967,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 7.967,
         "to": 10.467,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 10.467,
         "to": 17.715,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 17.715,
         "to": 20.515,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 20.515,
         "to": 28.532,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 28.532,
         "to": 31.332,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 31.332,
         "to": 53.11,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 53.11,
         "to": 55.91,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 55.91,
         "to": 63.129,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 63.129,
         "to": 66.129,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 66.129,
         "to": 69.621,
         "rate": 12,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       },
       {
         "from": 69.621,
         "to": 71.421,
         "rate": 1.08,
-        "src": "clips/orders.mp4"
+        "src": "keep/orders.mp4"
       }
     ],
     "captions": [
@@ -223,7 +223,7 @@
   },
   "forge": {
     "id": "forge",
-    "src": "clips/forge.mp4",
+    "src": "keep/forge.mp4",
     "sfx": [
       {
         "file": "sfx_hammer.wav",
@@ -237,67 +237,67 @@
         "from": 1.119,
         "to": 4.119,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 4.119,
         "to": 40.094,
         "rate": 12,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 40.094,
         "to": 42.294,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 42.294,
         "to": 44.055,
         "rate": 12,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 44.055,
         "to": 47.555,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 47.555,
         "to": 50.547,
         "rate": 12,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 50.547,
         "to": 54.047,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 54.047,
         "to": 55.046,
         "rate": 12,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 55.046,
         "to": 57.346,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 57.346,
         "to": 75.588,
         "rate": 12,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       },
       {
         "from": 75.588,
         "to": 77.388,
         "rate": 1.09,
-        "src": "clips/forge.mp4"
+        "src": "keep/forge.mp4"
       }
     ],
     "captions": [

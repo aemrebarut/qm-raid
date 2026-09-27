@@ -15,6 +15,7 @@ const config = {
   noGbrain: truthy(process.env.MOCK_NO_GBRAIN),                // no gbrain tool calls (engine fallback)
   mcpNames: clamp(process.env.MOCK_MCP_NAMES ?? 0.25, 0, 1, 0.25), // share of runs with mcp__gbrain__* tool names
   script: process.env.MOCK_SCRIPT === "demo" ? "demo" : "default",  // demo: wave 1 learns a rule, wave 2 recalls it
+  review: ["approve", "changes"].includes(process.env.MOCK_REVIEW ?? "") ? process.env.MOCK_REVIEW as "approve" | "changes" : "loop" as "loop" | "approve" | "changes", // workflow reviewer verdicts
 };
 
 // Demo memory: learnings the mock agents remembered, oldest first. Cleared by POST /debug/reset or when the last unit is deleted.
@@ -91,7 +92,7 @@ function play(u: MockUnit, req: SendRequest) {
   const slot = order ? u.timers.order : u.timers.chat;
   if (order) u.orderId = req.orderId ?? null;
   const demo = config.script === "demo";
-  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames, demo, learnings });
+  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames, demo, learnings, review: config.review });
   const speed = config.speed;
   for (const s of steps) {
     const t = setTimeout(() => {
@@ -133,13 +134,14 @@ const server = Bun.serve({
       if (url.pathname === "/debug/config") {
         if (m === "GET") return json({ ok: true, config, learnings: learnings.length });
         if (m === "POST") {
-          const b = await body<{ speed?: number; fail?: number; noGbrain?: boolean; mcpNames?: number; script?: string }>(req);
+          const b = await body<{ speed?: number; fail?: number; noGbrain?: boolean; mcpNames?: number; script?: string; review?: string }>(req);
           if (!b || typeof b !== "object") return fail("json body required");
           if (b.speed !== undefined) config.speed = clamp(b.speed, 0.1, 100, config.speed);
           if (b.fail !== undefined) config.fail = clamp(b.fail, 0, 1, config.fail);
           if (b.noGbrain !== undefined) config.noGbrain = truthy(b.noGbrain);
           if (b.mcpNames !== undefined) config.mcpNames = clamp(b.mcpNames, 0, 1, config.mcpNames);
           if (b.script !== undefined) config.script = b.script === "demo" ? "demo" : "default";
+          if (b.review !== undefined) config.review = b.review === "approve" || b.review === "changes" ? b.review : "loop";
           console.log(`config ${JSON.stringify(config)}`);
           return json({ ok: true, config });
         }

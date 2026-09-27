@@ -11,7 +11,7 @@ MOCK_NO_GBRAIN=1 bun run dev    # no gbrain tool calls (exercises the engine's b
 MOCK_SCRIPT=demo bun run dev    # demo story: wave 1 learns a house rule, wave 2 recalls it
 bun test/smoke.ts               # against the running service (set MOCK_SPEED to match the server)
 ```
-Env (defaults): `PORT` (4615), `MOCK_SPEED` (1), `MOCK_FAIL` (0), `MOCK_NO_GBRAIN` (off), `MOCK_SCRIPT` (default | demo), `MOCK_MCP_NAMES` (0.25 = 1 in 4 runs report gbrain tools with MCP names: `mcp__gbrain__search`, `mcp__gbrain__get_page`, `mcp__gbrain__put_page`, `mcp__gbrain__add_link`).
+Env (defaults): `PORT` (4615), `MOCK_SPEED` (1), `MOCK_FAIL` (0), `MOCK_NO_GBRAIN` (off), `MOCK_SCRIPT` (default | demo), `MOCK_REVIEW` (loop | approve | changes, workflow reviewer verdicts), `MOCK_MCP_NAMES` (0.25 = 1 in 4 runs report gbrain tools with MCP names: `mcp__gbrain__search`, `mcp__gbrain__get_page`, `mcp__gbrain__put_page`, `mcp__gbrain__add_link`).
 
 ## Runtime toggles (debug, not part of the Bridge API)
 Change the shared mock without restarting it; the env vars are only the start values. Settings apply to sends made after the change.
@@ -20,7 +20,8 @@ curl -s 127.0.0.1:4615/debug/config                                   # {ok, con
 curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"noGbrain":true}'
 curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"fail":1}'
 curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"script":"demo"}'
-curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"speed":1,"fail":0,"noGbrain":false,"mcpNames":0.25,"script":"default"}'
+curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"review":"changes"}'   # reviewers never approve (needs_human)
+curl -s -XPOST 127.0.0.1:4615/debug/config -H 'content-type: application/json' -d '{"speed":1,"fail":0,"noGbrain":false,"mcpNames":0.25,"script":"default","review":"loop"}'
 curl -s -XPOST 127.0.0.1:4615/debug/reset                             # clear the demo memory
 curl -s 127.0.0.1:4615/debug/learnings                                # what the demo memory holds
 ```
@@ -30,6 +31,13 @@ Fields: `speed` (0.1 to 100), `fail` (0 to 1), `noGbrain` (bool), `mcpNames` (0 
 - Wave 1, the first order on a component since the memory was cleared: `gbrain.recall` finds only the component, issue and customer pages; the first fix fails (a component-specific symptom); `gbrain.search` finds the house rule; the second fix passes; `gbrain.remember` writes the learning (engine-assigned slug) stating the rule, linked to the component, issue, rule page and unit; `gbrain.add_link` learning -> `rules/<rule>`. About 8.5 to 10 s.
 - Wave 2, a later order on the same component: `gbrain.recall` includes wave 1's exact learning slug, `gbrain.get_page` reads it, the fix passes first time, and the reply quotes the learning slug and text. About 6 to 7 s.
 - The memory holds only learnings from demo-mode orders. It is cleared by `POST /debug/reset` or when the last unit is deleted (engine reset). Failure (`fail`) and `noGbrain` fall back to the default script.
+
+## Team workflows (roles)
+Workflow orders carry the engine's brief after the order prompt: a line `Role: <role>. <instructions>`, then `Previous work:` with `- <role> (<unitId>): <reply>` lines, latest last (game.ts `briefText`). The mock reads the role only from that `Role: <word>.` line before `Previous work:`, never from `VERDICT:` in the text: an implementer on a changes loop gets the reviewer's `VERDICT: CHANGES:` reply in its previous work. No Role line = a plain order.
+- `planner`: recall (component, rule page, issue, customers), `gbrain.get_page` on the rule, then a reply with a 3-step numbered plan (reproduce with a failing test, apply the house rule in the file, run the tests and remember the learning). No edits, no remember. About 4.5 to 6 s.
+- `reviewer`: recall the house rules, read the rule page, read the diff, run the tests. The reply's last line is the verdict the engine parses: `VERDICT: CHANGES: <one concrete change for the component>` on the first review of a run (no verdict line in the previous work yet), `VERDICT: APPROVED` once the previous work holds a verdict. Config `review`: `loop` (default, as above), `approve` (always approve), `changes` (never approve, for needs_human tests). About 4.5 to 6 s.
+- `implementer` and any other role: the normal order script (or the demo script). If the previous work holds a `VERDICT: CHANGES: <what>`, it says "Applying the review change: <what>" and the reply ends with "Applied the review change: <what>."
+- `fail` still applies to every role (terminal error instead of the reply).
 
 ## API
 - `GET /health` -> `{ok, service: "mock-bridge", units, clients}`

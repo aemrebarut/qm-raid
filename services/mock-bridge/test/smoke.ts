@@ -69,6 +69,21 @@ await post(`/units/${D}/send`, { text: prompt("oD1"), orderId: "oD1", componentI
 setTimeout(() => post(`/units/${D}/send`, { text: prompt("oD2"), orderId: "oD2", componentId: "billing" }), 500 / SPEED);
 await post(`/units/${E}/send`, { text: prompt("oE"), orderId: "oE", componentId: "billing" });
 setTimeout(() => post(`/units/${E}/send`, { text: "What is the status of LUM-12? Is the order done?" }), 300 / SPEED); // chat mentioning an issue
+// team workflows (K12): engine prompt + "Role: <role>. <instructions>" + "Previous work:" (latest last), as game.ts briefText
+const K = `smokeK-${run}`, L = `smokeL-${run}`, M = `smokeM-${run}`, N = `smokeN-${run}`, O = `smokeO-${run}`;
+const REVIEW = "Role: reviewer. Recall the house rules. Review the implementation against the plan and the rules. End with VERDICT: APPROVED or VERDICT: CHANGES: <what>.";
+const IMPL = "Role: implementer. Recall first. Implement the plan or apply the review changes; remember what you learned.";
+const flow = (oid: string, role: string, previous: string[]) => `${prompt(oid)}\n\n${role}${previous.length ? `\nPrevious work:\n${previous.join("\n")}` : ""}`;
+const pPlan = `- planner (${K}): ${K}: plan for LUM-12:\n1. Reproduce.\n2. Fix.\n3. Test.`;
+const pImpl = `- implementer (${M}): ${M}: fixed LUM-12.`;
+const pChanges = `- reviewer (${L}): ${L}: reviewed LUM-12.\nVERDICT: CHANGES: add a retry test with the same inv_1 key`;
+await post(`/units/${K}/send`, { text: flow("oK", "Role: planner. Recall first. Write a short numbered plan for the implementer; do not implement.", []), orderId: "oK", targetId: "t12", componentId: "billing" });
+await post(`/units/${L}/send`, { text: flow("oL", REVIEW, [pPlan, pImpl]), orderId: "oL", targetId: "t12", componentId: "billing" });
+await post(`/units/${M}/send`, { text: flow("oM", IMPL, [pPlan, pImpl, pChanges]), orderId: "oM", targetId: "t12", componentId: "billing" });
+await post(`/units/${N}/send`, { text: flow("oN", REVIEW, [pPlan, pImpl, pChanges, pImpl]), orderId: "oN", targetId: "t12", componentId: "billing" });
+await setConfig({ review: "changes" });
+await post(`/units/${O}/send`, { text: flow("oO", REVIEW, [pPlan, pImpl, pChanges, pImpl]), orderId: "oO", targetId: "t12", componentId: "billing" });
+await setConfig({ review: saved.review ?? "loop" });
 // config is read at send time, so each of these orders gets its own mode
 await setConfig({ noGbrain: true });
 await post(`/units/${F}/send`, { text: prompt("oF"), orderId: "oF", componentId: "billing" });
@@ -97,7 +112,7 @@ const deadline = Date.now() + 12000 / SPEED + 1000;
 const done = (id: string) => events.some((e) => e.ev.unitId === id && (e.ev.type === "reply" || e.ev.type === "error"));
 const orderDone = (id: string, oid: string) => events.some((e) => e.ev.unitId === id && e.ev.type === "reply" && (e.ev as any).orderId === oid);
 const deadline2 = deadline + 8000 / SPEED;
-while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J))) {
+while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J) && [K, L, M, N, O].every(done))) {
   if (!jSent && done(I)) await sendJ();
   await Bun.sleep(100);
 }
@@ -139,10 +154,19 @@ const ALIAS: Record<string, string> = { "gbrain.recall": "mcp__gbrain__search", 
 const tool = (evs: BridgeEvent[], name: string) => evs.find((x) => x.type === "activity" && (x.tool === name || x.tool === ALIAS[name])) as any;
 check(iEv.some((x) => x.type === "activity" && /First attempt fails/.test(x.text)) && tool(iEv, "gbrain.remember")?.args?.slug === learnI && !tool(iEv, "gbrain.recall")?.args?.slugs?.some((s: string) => s.startsWith("learnings/")), "demo wave 1: no learning recalled, first attempt fails, remembers the rule");
 check(!!tool(jEv, "gbrain.recall")?.args?.slugs?.includes(learnI) && tool(jEv, "gbrain.get_page")?.args?.slug === learnI && (jEv.at(-1) as any)?.text?.includes(learnI), "demo wave 2: recalls wave 1's exact learning slug and quotes it in the reply");
+const replyOf = (id: string) => (of(id).find((x) => x.type === "reply") as any)?.text as string | undefined;
+const lastLine = (t?: string) => t?.trim().split("\n").at(-1) ?? "";
+const kEv = of(K), kReply = replyOf(K);
+check(!!kReply && /\n1\. .+\n2\. .+\n3\. .+$/.test(kReply) && !kEv.some((x) => x.type === "activity" && ["edit_file", "gbrain.remember"].includes(x.tool ?? "")) && kEv.every((x) => x.type === "usage" || (x as any).orderId === "oK"), "workflow planner: 3-step numbered plan, no edits, no remember");
+check(/^VERDICT: CHANGES: \S.+/.test(lastLine(replyOf(L))) && of(L).some((x) => x.type === "activity" && x.tool === "gbrain.recall"), `workflow reviewer, first review: ${lastLine(replyOf(L))}`);
+check(lastLine(replyOf(N)) === "VERDICT: APPROVED", "workflow reviewer, second review (a verdict in the previous work): VERDICT: APPROVED");
+const mReply = replyOf(M) ?? "";
+check(!/VERDICT:/.test(mReply) && mReply.includes("add a retry test with the same inv_1 key") && of(M).some((x) => x.type === "activity" && x.tool === "gbrain.remember"), "workflow implementer with the reviewer's CHANGES in its previous work is not a reviewer and applies the change");
+check(/^VERDICT: CHANGES: /.test(lastLine(replyOf(O))), "review: changes forces VERDICT: CHANGES (needs_human tests)");
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;
 check(JSON.stringify(restored) === JSON.stringify(saved), "config restored");
 
-for (const id of [A, B, D, E, F, G, H, I, J]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
+for (const id of [A, B, D, E, F, G, H, I, J, K, L, M, N, O]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
 ac.abort();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

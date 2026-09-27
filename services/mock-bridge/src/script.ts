@@ -10,6 +10,23 @@ export interface OrderInfo {
   title: string | null;
   customers: string[];       // slugs, ["companies/acme-robotics"]
   learningSlug: string | null; // engine-assigned "learnings/lum-12-u1-1790546460000"
+  role: "planner" | "implementer" | "reviewer" | string; // workflow role; "implementer" for plain orders
+  reviewChange: string | null; // latest "VERDICT: CHANGES: <what>" in the previous work (implementer on a changes loop)
+  reviews: number;              // verdict lines already in the previous work (earlier reviews of this run)
+}
+
+// Workflow prompts (engine game.ts briefText) are the order prompt, then a line "Role: <role>. <instructions>", then
+// "Previous work:" with "- <role> (<unitId>): <reply>" lines, latest last. The role comes only from the Role line before
+// "Previous work:": an implementer on a changes loop gets the reviewer's "VERDICT: CHANGES:" reply in that block.
+// No Role line = a plain order (implementer).
+export function roleOf(text: string): { role: string; reviewChange: string | null; reviews: number } {
+  const cut = text.search(/^Previous work:/m);
+  const head = cut >= 0 ? text.slice(0, cut) : text;
+  const tail = cut >= 0 ? text.slice(cut) : "";
+  const role = head.match(/^Role: (\w+)\./m)?.[1]?.toLowerCase() ?? "implementer";
+  const changes = [...tail.matchAll(/VERDICT:\s*CHANGES:\s*([^\n]+)/gi)].map((m) => m[1]!.trim()).filter((c) => c && !/^<.*>$/.test(c));
+  const reviews = [...tail.matchAll(/VERDICT:\s*(APPROVED|CHANGES)/gi)].length;
+  return { role, reviewChange: changes.at(-1) ?? null, reviews };
 }
 
 const COMPONENTS = ["billing", "auth", "onboarding", "search"];
@@ -26,16 +43,16 @@ export function parseOrder(text: string, componentId?: string): OrderInfo {
   const slugs = (text.match(/(?:customers|companies)\/[a-z0-9-]+/g) ?? []).map((c) => c.replace(/^customers\//, "companies/"));
   const customers = [...new Set([...ids.map((c) => `companies/${c}`), ...slugs])];
   const learningSlug = text.match(/\blearnings\/[a-z0-9][a-z0-9-]*/)?.[0] ?? null;
-  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers, learningSlug };
+  return { issue, component, title: title && title.length > 0 ? title.slice(0, 120) : null, customers, learningSlug, ...roleOf(text) };
 }
 
 // House rules mirror world/brain (rules/* pages exist for billing, auth, search) so recall beams hit real pages.
-type Flavor = { file: string; rule: string; ruleSlug: string | null; fix: string; test: string; symptom?: string };
+type Flavor = { file: string; rule: string; ruleSlug: string | null; fix: string; test: string; symptom?: string; change?: string };
 const FLAVOR: Record<string, Flavor> = {
-  billing: { file: "src/billing/charge.ts", rule: "retries must reuse the idempotency key inv_<invoiceId>, never add the attempt number", ruleSlug: "rules/billing-idempotency", fix: "made the retry reuse inv_<invoiceId> as the idempotency key", test: "billing/retry.test.ts", symptom: "the retry still creates a second charge" },
-  auth: { file: "src/auth/token.ts", rule: "compare token expiry with a 120 second clock skew allowance", ruleSlug: "rules/auth-clock-skew", fix: "added the 120 second skew allowance to the expiry check", test: "auth/token.test.ts", symptom: "fresh IdP tokens are still rejected as expired" },
-  onboarding: { file: "src/onboarding/invites.ts", rule: "all outbound email goes through the mailer queue, never inline", ruleSlug: null, fix: "moved the invite email onto the mailer queue", test: "onboarding/invites.test.ts", symptom: "the invite request still times out while sending email" },
-  search: { file: "src/search/query.ts", rule: "scope every query by workspace_id in the index query, never post-filter", ruleSlug: "rules/search-tenant-scope", fix: "scoped the index query by workspace_id on the cached path too", test: "search/query.test.ts", symptom: "cached results still show rows from another workspace" },
+  billing: { file: "src/billing/charge.ts", rule: "retries must reuse the idempotency key inv_<invoiceId>, never add the attempt number", ruleSlug: "rules/billing-idempotency", fix: "made the retry reuse inv_<invoiceId> as the idempotency key", test: "billing/retry.test.ts", symptom: "the retry still creates a second charge", change: "add a regression test that retries twice with the same inv_<invoiceId> key and asserts exactly one charge" },
+  auth: { file: "src/auth/token.ts", rule: "compare token expiry with a 120 second clock skew allowance", ruleSlug: "rules/auth-clock-skew", fix: "added the 120 second skew allowance to the expiry check", test: "auth/token.test.ts", symptom: "fresh IdP tokens are still rejected as expired", change: "test the skew boundary at 119 and 121 seconds, not only the happy path" },
+  onboarding: { file: "src/onboarding/invites.ts", rule: "all outbound email goes through the mailer queue, never inline", ruleSlug: null, fix: "moved the invite email onto the mailer queue", test: "onboarding/invites.test.ts", symptom: "the invite request still times out while sending email", change: "assert the invite is enqueued on the mailer queue and never sent inline" },
+  search: { file: "src/search/query.ts", rule: "scope every query by workspace_id in the index query, never post-filter", ruleSlug: "rules/search-tenant-scope", fix: "scoped the index query by workspace_id on the cached path too", test: "search/query.test.ts", symptom: "cached results still show rows from another workspace", change: "apply the workspace_id scope on the cached path too and cover it with a test" },
 };
 
 function flavorFor(component: string | null): Flavor {
@@ -55,6 +72,8 @@ export interface ScriptOpts {
   mcpRate?: number;    // share of runs that use MCP-style tool names (mcp__gbrain__search, ...)
   demo?: boolean;      // MOCK_SCRIPT=demo: first order on a component learns the rule the hard way, later ones recall it
   learnings?: Learning[]; // what earlier mock agents remembered about this order's component (demo mode)
+  review?: "loop" | "approve" | "changes"; // reviewer verdict; loop (default): CHANGES on the first review of a run
+                                           // (no verdict in the previous work yet), APPROVED after that
   now?: number;
 }
 
@@ -85,8 +104,14 @@ export function buildScript(unitId: string, unitName: string, req: SendRequest, 
   const rand = opts.rand ?? Math.random;
   const o = parseOrder(req.text, req.componentId);
   const failed = isOrderSend(req) && rand() < (opts.errorRate ?? 0);
+  const review = opts.review ?? "loop";
+  const verdict = review === "approve" ? "approved" : review === "changes" ? "changes" : o.reviews > 0 ? "approved" : "changes";
   const steps = !isOrderSend(req)
     ? chatScript(unitId, unitName, req.text, o, rand)
+    : o.role === "planner" && !failed
+      ? planScript(unitId, unitName, o, req.orderId!, rand)
+    : o.role === "reviewer" && !failed
+      ? reviewScript(unitId, unitName, o, req.orderId!, verdict, rand)
     : opts.demo && !failed && !opts.noGbrain
       ? demoScript(unitId, unitName, o, req.orderId!, opts.learnings ?? [], opts.now ?? Date.now(), rand)
       : orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
@@ -117,7 +142,7 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
     [0.12, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall",
       { query: `${comp} ${title}`, slugs: recallSlugs })],
     ...(f.ruleSlug ? [[0.18, a("tool", `Reading ${f.ruleSlug}`, "gbrain.get_page", { slug: f.ruleSlug })] as [number, BridgeEvent]] : []),
-    [0.24, a("message", `House rule for ${comp}: ${f.rule}.`)],
+    [0.24, a("message", o.reviewChange ? `Applying the review change: ${o.reviewChange}.` : `House rule for ${comp}: ${f.rule}.`)],
     [0.32, a("tool", `Reading ${f.file}`, "read_file", { path: f.file })],
     [0.42, a("message", `Reproduced ${issue} locally.`)],
     [0.52, a("thinking", `The bug matches the house rule; the code breaks it.`)],
@@ -133,12 +158,65 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
     seq.push([0.88, a("tool", `Remembering the learning from ${issue}`, "gbrain.remember",
       { slug: learnSlug, text: `${title}: ${f.fix}. Rule: ${f.rule}.`, links: [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), `units/${unitId}`] })]);
     if (issueSlug && rand() < 0.5) seq.push([0.93, a("tool", `Linking the learning to ${issue}`, "gbrain.add_link", { from: learnSlug, to: issueSlug, linkType: "mentions" })]);
-    seq.push([1.0, { type: "reply", unitId, ...oid, text: `${unitName}: fixed ${issue} "${title}". I ${f.fix}, added a regression test in ${f.test}, and saved the learning to GBrain as ${learnSlug}.` }]);
+    const applied = o.reviewChange ? ` Applied the review change: ${o.reviewChange}.` : "";
+    seq.push([1.0, { type: "reply", unitId, ...oid, text: `${unitName}: fixed ${issue} "${title}". I ${f.fix}, added a regression test in ${f.test}, and saved the learning to GBrain as ${learnSlug}.${applied}` }]);
   }
 
   const total = 6000 + Math.floor(rand() * 4000);
   const tokens = 2000 + Math.floor(rand() * 6000);
   seq.splice(seq.length - 1, 0, [0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
+}
+
+// Workflow planner: recall, then a 3-step numbered plan; no edits, no remember.
+function planScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, rand: () => number): Step[] {
+  const comp = o.component ?? "core";
+  const f = flavorFor(o.component);
+  const issue = o.issue ?? "the issue";
+  const issueSlug = o.issue ? `issues/${o.issue.toLowerCase()}` : null;
+  const a = (kind: "message" | "tool" | "thinking", text: string, tool?: string, args?: unknown): BridgeEvent =>
+    tool ? { type: "activity", unitId, orderId, kind, text, tool, args } : { type: "activity", unitId, orderId, kind, text };
+  const plan = [
+    `1. Reproduce ${issue} with a failing test in ${f.test}.`,
+    `2. In ${f.file}, apply the house rule${f.ruleSlug ? ` (${f.ruleSlug})` : ""}: ${f.rule}.`,
+    `3. Run ${f.test}, then remember the learning in GBrain linked to components/${comp}${issueSlug ? ` and ${issueSlug}` : ""}.`,
+  ];
+  const seq: Array<[number, BridgeEvent]> = [
+    [0.05, a("thinking", `Planning ${issue} "${o.title ?? comp}" for the implementer.`)],
+    [0.20, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall", { query: `${comp} ${o.title ?? ""}`.trim(), slugs: [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : []), ...(issueSlug ? [issueSlug] : []), ...o.customers] })],
+    ...(f.ruleSlug ? [[0.38, a("tool", `Reading ${f.ruleSlug}`, "gbrain.get_page", { slug: f.ruleSlug })] as [number, BridgeEvent]] : []),
+    [0.60, a("message", `Plan drafted: 3 steps, built around the ${comp} house rule.`)],
+  ];
+  const total = 4500 + Math.floor(rand() * 1500);
+  const tokens = 1200 + Math.floor(rand() * 2000);
+  seq.push([0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  seq.push([1.0, { type: "reply", unitId, orderId, text: `${unitName}: plan for ${issue}:\n${plan.join("\n")}` }]);
+  return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
+}
+
+// Workflow reviewer: recall the rules, read, test, and end the reply with the verdict line.
+function reviewScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, verdict: "approved" | "changes", rand: () => number): Step[] {
+  const comp = o.component ?? "core";
+  const f = flavorFor(o.component);
+  const issue = o.issue ?? "the issue";
+  const change = f.change ?? `add a regression test for the ${comp} edge case in ${f.test}`;
+  const a = (kind: "message" | "tool" | "thinking", text: string, tool?: string, args?: unknown): BridgeEvent =>
+    tool ? { type: "activity", unitId, orderId, kind, text, tool, args } : { type: "activity", unitId, orderId, kind, text };
+  const seq: Array<[number, BridgeEvent]> = [
+    [0.05, a("thinking", `Reviewing the ${issue} change against the plan and the ${comp} house rules.`)],
+    [0.18, a("tool", `Recalling the ${comp} house rules`, "gbrain.recall", { query: `${comp} house rules`, slugs: [`components/${comp}`, ...(f.ruleSlug ? [f.ruleSlug] : [])] })],
+    ...(f.ruleSlug ? [[0.30, a("tool", `Reading ${f.ruleSlug}`, "gbrain.get_page", { slug: f.ruleSlug })] as [number, BridgeEvent]] : []),
+    [0.45, a("tool", `Reading the diff in ${f.file}`, "read_file", { path: f.file })],
+    [0.62, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
+    [0.80, a("message", verdict === "changes" ? `Tests pass, but one gap: ${change}.` : `The change follows the rule (${f.rule}) and the tests cover it.`)],
+  ];
+  const total = 4500 + Math.floor(rand() * 1500);
+  const tokens = 1500 + Math.floor(rand() * 2500);
+  seq.push([0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  const text = verdict === "changes"
+    ? `${unitName}: reviewed ${issue}. The fix applies the ${comp} rule, but it is not proven yet.\nVERDICT: CHANGES: ${change}`
+    : `${unitName}: reviewed ${issue} again. The change follows the ${comp} house rule and the tests cover it.\nVERDICT: APPROVED`;
+  seq.push([1.0, { type: "reply", unitId, orderId, text }]);
   return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
 }
 
@@ -198,6 +276,7 @@ function demoScript(unitId: string, unitName: string, o: OrderInfo, orderId: str
   }
   const tokens = 2000 + Math.floor(rand() * 6000);
   seq.push([0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  if (o.reviewChange) reply += ` Applied the review change: ${o.reviewChange}.`;
   seq.push([1.0, { type: "reply", unitId, orderId, text: reply }]);
   return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
 }

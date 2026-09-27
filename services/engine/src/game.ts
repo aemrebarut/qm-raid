@@ -7,7 +7,7 @@ import { fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
 import { forgeType, pollForge, startForge } from "./forge.ts";
-import { flow, type NodeBrief } from "./flowlink.ts";
+import { flow, linkWorkflows, type NodeBrief } from "./flowlink.ts";
 import { bridgeFor, deleteOnBridge, followBridgeEvents, patchOnBridge, sendToBridge, spawnOnBridge } from "./bridge.ts";
 
 type Result = { ok: true; [k: string]: unknown } | { ok: false; error: string; status?: number };
@@ -525,7 +525,7 @@ function setTargetStatus(targetId: string, status: Target["status"]): void {
   emit("target.updated", { target: t });
 }
 
-flow.initWorkflows({
+linkWorkflows({
   startOrder: startWorkflowOrder,
   cancelOrder: (orderId) => cancelIfOpen(orderById(orderId)),
   setTargetStatus,

@@ -38,3 +38,14 @@ try {
 } catch (err) {
   console.warn(`[engine] team workflows disabled: ${String(err).slice(0, 120)}`);
 }
+
+// game.ts links its hooks once; useFlow swaps the module (tests) and links the same hooks again.
+let linked: FlowHooks | null = null;
+export function linkWorkflows(h: FlowHooks): void {
+  linked = h;
+  flow.initWorkflows(h);
+}
+export function useFlow(m: FlowModule): void {
+  flow = m;
+  if (linked) m.initWorkflows(linked);
+}

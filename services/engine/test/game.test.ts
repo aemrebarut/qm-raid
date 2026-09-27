@@ -280,3 +280,77 @@ for (const action of ["retire", "cancel", "reset"] as const) {
     if (action === "retire") expect(calls.some((c) => c.url.endsWith(`/units/${u.id}`))).toBe(true); // late session deleted
   });
 }
+
+test("F2: workflow wiring with a fake flow (routes, run start, prompt brief, step ends, cancel, autopilot skip)", async () => {
+  const { useFlow } = await import("../src/flowlink.ts");
+  const { handle } = await import("../src/app.ts");
+  let hooks: any;
+  const ended: Order[] = [];
+  const cancelled: string[] = [];
+  const trio = { preset: "trio", entry: "plan", maxLoops: 2, edges: [], nodes: [
+    { id: "plan", role: "planner", unitId: "u1" }, { id: "impl", role: "implementer", unitId: "u2" }, { id: "rev", role: "reviewer", unitId: "u3" }] };
+  const run: any = { id: "r1", teamId: 1, targetId: "t101", status: "running", loops: 0, active: [], steps: [] };
+  useFlow({
+    initWorkflows: (h) => { hooks = h; },
+    presetWorkflow: (preset, members) => (preset === "trio" && members.length >= 3 ? (trio as any) : { error: "trio needs 3 members" }),
+    validateWorkflow: () => null,
+    startRun: (teamId, targetId) => {
+      const id = hooks.startOrder("u1", targetId, { runId: "r1", nodeId: "plan", role: "planner", instructions: "Write a plan.", previous: [] });
+      run.active = [id];
+      return { ok: true, run };
+    },
+    onOrderEnded: (o) => {
+      ended.push({ ...o });
+      if (o.nodeId === "plan" && o.status === "done")
+        run.active = [hooks.startOrder("u2", o.targetId, { runId: "r1", nodeId: "impl", role: "implementer", instructions: "Build it.", previous: [{ nodeId: "plan", role: "planner", unitId: "u1", reply: "1. step" }] })];
+    },
+    cancelRun: (id) => { cancelled.push(id); run.status = "cancelled"; for (const oid of run.active) hooks.cancelOrder(oid); return { ok: true }; },
+    runForOrder: (oid) => (store.state.orders.find((o) => o.id === oid)?.runId === "r1" ? run : undefined),
+  });
+  const put = async (body: unknown) => handle(new Request("http://e/api/teams/1/workflow", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }));
+  expect((await put({ preset: "trio" })).status).toBe(200);
+  expect(store.state.teams[0]!.workflow?.preset).toBe("trio");
+  expect((await put({ preset: "nope" })).status).toBe(400);
+  // Team order on a workflow team starts a run instead of three orders.
+  const res = createOrders({ teamId: 1, targetId: "t101" }) as any;
+  expect(res.run.id).toBe("r1");
+  const first = store.state.orders.at(-1)!;
+  expect(first).toMatchObject({ unitId: "u1", source: "workflow", runId: "r1", nodeId: "plan", status: "active" });
+  expect(store.state.orders.filter((o) => o.status === "active").length).toBe(1);
+  // Arrival sends the normal prompt plus the role brief.
+  for (let i = 0; i < 30 && unit("u1").status === "moving"; i++) game.tick();
+  expect(unit("u1").status).toBe("working");
+  await Bun.sleep(20);
+  // Step done: target stays engaged (next node started), not resolved.
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: first.id, text: "1. step" });
+  expect(ended.at(-1)).toMatchObject({ id: first.id, status: "done", reply: "1. step" });
+  const second = store.state.orders.at(-1)!;
+  expect(second).toMatchObject({ unitId: "u2", nodeId: "impl" });
+  expect(store.state.targets.find((t) => t.id === "t101")!.status).toBe("engaged");
+  // Brief text of the second order reaches the bridge.
+  calls.length = 0;
+  for (let i = 0; i < 30 && unit("u2").status === "moving"; i++) game.tick();
+  await Bun.sleep(20);
+  const sent = calls.find((c) => c.url.endsWith("/units/u2/send"))!.body.text as string;
+  expect(sent).toContain("Order " + second.id);
+  expect(sent).toContain("Role: implementer. Build it.");
+  expect(sent).toContain("Previous work:\n- planner (u1): 1. step");
+  // Cancelling a run order cancels the run.
+  const c = await handle(new Request(`http://e/api/orders/${second.id}/cancel`, { method: "POST" }));
+  expect(c.status).toBe(200);
+  expect(cancelled).toEqual(["r1"]);
+  expect(order(second.id).status).toBe("cancelled");
+  expect(unit("u2").status).toBe("idle");
+  // Autopilot skips workflow teams.
+  patchTeam(1, { autopilot: true });
+  proposeAnswer = { proposals: [{ unitId: "u1", targetId: "t102", reason: "x" }] };
+  await autopilotTick();
+  expect(store.state.orders.some((o) => o.source === "autopilot")).toBe(false);
+  proposeAnswer = { proposals: [] };
+  // DELETE clears; a bound unit leaving the team clears too.
+  expect((await handle(new Request("http://e/api/teams/1/workflow", { method: "DELETE" }))).status).toBe(200);
+  expect(store.state.teams[0]!.workflow).toBeNull();
+  await put({ preset: "trio" });
+  game.assignTeam({ id: 2, members: ["u4", "u5", "u3"] });
+  expect(store.state.teams[0]!.workflow).toBeNull();
+});

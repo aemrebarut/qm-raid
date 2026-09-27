@@ -9,7 +9,10 @@ export default defineConfig({
     port: 4620,
     strictPort: true,
     fs: { allow: ["../.."] }, // three lives in apps/board/node_modules
+    // Never crawl the symlinked board node_modules or the repo (the watcher pinned the CPU otherwise).
+    watch: { ignored: ["**/node_modules/**", "**/.vite-showroom/**", "**/test/**"] },
   },
+  optimizeDeps: { include: ["three", "three/addons/controls/OrbitControls.js"] },
   resolve: { dedupe: ["three"] },
   plugins: [
     {

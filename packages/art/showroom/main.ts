@@ -22,7 +22,7 @@ scene.background = new THREE.Color("#2c3d1e");
 // Board camera: orthographic, 30 deg elevation, 45 deg azimuth, camera at +x +z (same as apps/board).
 const VIEW_H = 9;
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 400);
-const ELEV = THREE.MathUtils.degToRad(30), AZIM = THREE.MathUtils.degToRad(45), DIST = 80;
+const ELEV = THREE.MathUtils.degToRad(30), AZIM = THREE.MathUtils.degToRad(45), DIST = 60; // board DIST (fog is tuned to it)
 const isoOffset = new THREE.Vector3(DIST * Math.cos(ELEV) * Math.sin(AZIM), DIST * Math.sin(ELEV), DIST * Math.cos(ELEV) * Math.cos(AZIM));
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -85,16 +85,34 @@ scene.add(ground);
 const tileMat = new THREE.MeshLambertMaterial({ color: "#5d7f3a" });
 const lineMat = new THREE.LineBasicMaterial({ color: "#48652b", transparent: true, opacity: 0.6 });
 
-/** Row per area, cells left to right; each cell is a tile grid of span x span. */
-const cursor = new Map<string, number>();
-const GAP = 1;
-function cellOrigin(area: string, span: number) {
-  const row = AREAS.indexOf(area as (typeof AREAS)[number]);
-  const x = cursor.get(area) ?? 0;
-  cursor.set(area, x + span + GAP);
-  // rows run along -x +z so they read left to right on the iso screen
-  const rowZ = row * 12;
-  return new THREE.Vector3(x + span / 2, 0, rowZ + span / 2);
+/**
+ * Screen-aligned layout for the iso camera: one row per area running screen right (ground (1, 0, -1)),
+ * rows stacked screen down (ground (1, 0, 1)). Big exhibits (span > 6) get a row of their own.
+ */
+const R = new THREE.Vector3(1, 0, -1).normalize(), D = new THREE.Vector3(1, 0, 1).normalize();
+function layout(exs: Exhibit[]) {
+  const rows: Exhibit[][] = [];
+  for (const a of AREAS) {
+    const small = exs.filter((e) => e.area === a && (e.span ?? 3) <= 6);
+    const big = exs.filter((e) => e.area === a && (e.span ?? 3) > 6);
+    if (small.length) rows.push(small);
+    for (const b of big) rows.push([b]);
+  }
+  const out = new Map<Exhibit, THREE.Vector3>();
+  let v = 0, prevMax = 0;
+  for (const row of rows) {
+    const max = Math.max(...row.map((e) => e.span ?? 3));
+    v += (prevMax + max) * Math.SQRT1_2 + (prevMax ? 1.5 : 0);
+    prevMax = max;
+    let u = 0, prev = 0;
+    for (const e of row) {
+      const sp = e.span ?? 3;
+      u += (prev + sp) * Math.SQRT1_2 + (prev ? 0.6 : 0);
+      prev = sp;
+      out.set(e, R.clone().multiplyScalar(u).addScaledVector(D, v));
+    }
+  }
+  return out;
 }
 
 function cellGround(c: THREE.Vector3, span: number) {
@@ -111,6 +129,18 @@ function cellGround(c: THREE.Vector3, span: number) {
   ground.add(plate, grid);
 }
 
+/** Board budgets agreed with raid-ui-scene (draw calls per instance). */
+const BUDGET: Record<string, number> = { units: 12, monsters: 12, world: 40 };
+function drawCalls(o: THREE.Object3D) {
+  let n = 0;
+  o.traverseVisible((c) => {
+    const m = c as THREE.Mesh;
+    if ((m.isMesh || (c as THREE.Points).isPoints || (c as THREE.Line).isLine || (c as THREE.Sprite).isSprite) && m.material)
+      n += Array.isArray(m.material) ? m.material.length : 1;
+  });
+  return n;
+}
+
 function addRow(ex: Exhibit, err?: string, p?: Placed) {
   const box = groups.get(ex.area) ?? groups.get("fx")!;
   const d = document.createElement("div");
@@ -120,6 +150,15 @@ function addRow(ex: Exhibit, err?: string, p?: Placed) {
   n.textContent = ex.name;
   n.onclick = () => p && lookAt(p.center, 2.2);
   d.appendChild(n);
+  if (p) {
+    const calls = drawCalls(p.inst.object3d);
+    const budget = ex.span && ex.span > 6 ? undefined : BUDGET[ex.area];
+    const c = document.createElement("span");
+    c.className = "calls" + (budget && calls > budget ? " over" : "");
+    c.textContent = ` ${calls} draws${budget ? ` / ${budget}` : ""}`;
+    c.title = "draw calls of this exhibit (board budget per instance)";
+    n.appendChild(c);
+  }
   if (err) {
     const m = document.createElement("div");
     m.className = "msg";
@@ -136,40 +175,44 @@ function addRow(ex: Exhibit, err?: string, p?: Placed) {
 }
 
 async function load() {
+  const all: Exhibit[] = [];
   for (const path of Object.keys(mods).sort()) {
-    let exs: Exhibit[] = [];
-    try { exs = ((await mods[path]()) as { default: Exhibit[] }).default ?? []; }
+    try { all.push(...(((await mods[path]()) as { default: Exhibit[] }).default ?? [])); }
     catch (e) {
       console.error(`[showroom] ${path} failed to load`, e);
       addRow({ name: path.replace("./exhibits/", ""), area: "fx", make: () => ({ object3d: new THREE.Group() }) }, String(e));
-      continue;
     }
-    for (const ex of exs) {
-      if (onlyArea && ex.area !== onlyArea) continue;
-      const span = ex.span ?? 3;
-      const center = cellOrigin(ex.area, span);
-      try {
-        const pivot = new THREE.Group();
-        pivot.position.copy(center);
-        const inst = ex.make({ scene, renderer, origin: center.clone() });
-        pivot.add(inst.object3d);
-        scene.add(pivot);
-        cellGround(center, span);
-        const p = { ex, inst, pivot, center };
-        placed.push(p);
-        addRow(ex, undefined, p);
-      } catch (e) {
-        console.error(`[showroom] ${ex.name} failed`, e);
-        addRow(ex, String(e));
-      }
+  }
+  const exs = all.filter((ex) => !onlyArea || ex.area === onlyArea);
+  const at = layout(exs);
+  for (const ex of exs) {
+    const span = ex.span ?? 3;
+    const center = at.get(ex)!;
+    try {
+      const pivot = new THREE.Group();
+      pivot.position.copy(center);
+      const inst = ex.make({ scene, renderer, origin: center.clone() });
+      pivot.add(inst.object3d);
+      scene.add(pivot);
+      cellGround(center, span);
+      const p = { ex, inst, pivot, center };
+      placed.push(p);
+      addRow(ex, undefined, p);
+    } catch (e) {
+      console.error(`[showroom] ${ex.name} failed`, e);
+      addRow(ex, String(e));
     }
   }
   const f = focusName ? placed.find((p) => p.ex.name.toLowerCase() === focusName.toLowerCase()) : undefined;
   if (f) lookAt(f.center, 2.4);
   else if (placed.length) {
     const box = new THREE.Box3();
-    for (const p of placed) box.expandByPoint(p.center);
-    lookAt(box.getCenter(new THREE.Vector3()), 0.7);
+    for (const p of placed) box.expandByObject(p.pivot);
+    const size = box.getSize(new THREE.Vector3());
+    // iso footprint: ground diagonal across the screen, height adds half
+    const wide = (size.x + size.z) * Math.SQRT1_2 + 2, tall = (size.x + size.z) * 0.36 + size.y + 2;
+    const a = window.innerWidth / window.innerHeight;
+    lookAt(box.getCenter(new THREE.Vector3()).setY(0), Math.min((VIEW_H * a * 0.8) / wide, VIEW_H / tall, 2.4));
   } else lookAt(new THREE.Vector3(), 1);
   (window as any).showroom = { placed, scene, camera, renderer, lookAt };
 }

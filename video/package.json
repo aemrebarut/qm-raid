@@ -1,0 +1,22 @@
+{
+  "name": "qm-raid-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts --port 4630",
+    "render:intro": "remotion render src/index.ts Intro out/intro.mp4",
+    "render": "remotion render src/index.ts Main out/qm-raid-demo.mp4 --codec h264 --audio-codec aac",
+    "still": "remotion still src/index.ts Main out/still.png",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.529"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.8",
+    "typescript": "5.8.3"
+  }
+}

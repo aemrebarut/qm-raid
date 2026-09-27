@@ -46,7 +46,7 @@ const js = (page: Page, code: string) => page.evaluate(code);
 // Each state starts from a clean selection. Steps run in the page through window.raid (see src/main.ts).
 const RESET = `(() => { raid.bus.clear(); raid.bus.selectBuilding(null); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); })()`;
 const firstIds = (n: number) => `raid.store.getState().units.slice(0, ${n}).map(u => u.id)`;
-const states: { name: string; setup: string; settle?: number }[] = [
+const states: { name: string; setup: string; settle?: number; keys?: string[] }[] = [
   { name: "overview", setup: `1` },
   { name: "unit", setup: `raid.bus.select(${firstIds(1)})` },
   { name: "units", setup: `raid.bus.select(${firstIds(4)})` },
@@ -56,6 +56,9 @@ const states: { name: string; setup: string; settle?: number }[] = [
   { name: "barracks", setup: `raid.bus.selectBuilding(raid.store.getState().buildings.find(b => b.kind === 'barracks').id)` },
   { name: "proposals", setup: `(() => { const us = raid.store.getState().units; const ts = raid.store.getState().targets.filter(t => t.status === 'open'); for (let i = 0; i < 3; i++) raid.dev.propose(us[i]?.id, ts[i]?.id); })()` },
   { name: "workflow", setup: `(() => { raid.dev.workflow(1, undefined, 1200); raid.bus.select(raid.store.team(1)?.members ?? []); })()`, settle: 3200 },
+  { name: "spawn", setup: `raid.bus.newIssue()`, settle: 700 },
+  // Emre's formation flow: 2+ units selected, F opens the formation view (makes them a team first if needed).
+  { name: "formation", setup: `raid.bus.select(raid.store.team(2)?.members?.length ? raid.store.team(2).members : ${firstIds(2)})`, keys: ["f"], settle: 1200 },
   { name: "feed", setup: `(() => { const d = raid.dev; d.recall('u1'); d.remember('u2'); d.handoff('u1', 'u2'); d.recall('u3'); d.remember('u1'); raid.bus.select(['u1']); })()`, settle: 1200 },
 ];
 
@@ -77,9 +80,15 @@ try {
       await page.goto(url, { waitUntil: "load" });
       await page.waitForFunction("window.raid && raid.store.getState().units.length > 0", null, { timeout: 15000 }).catch(() => {});
       await wait(2500); // SSE snapshot, scene build, first frames
-      await js(page, RESET);
-      await js(page, st.setup);
+      // A teammate mid-edit can break the module graph (no window.raid): shoot the broken page anyway as evidence.
+      try {
+        await js(page, RESET);
+        await js(page, st.setup);
+      } catch (err) {
+        console.warn(`  [${st.name}] setup failed: ${String((err as Error).message).split("\n")[0]}`);
+      }
       await page.mouse.move(w - 5, Math.round(h / 2)); // park the cursor off the HUD
+      for (const k of st.keys ?? []) await page.keyboard.press(k);
       await wait(st.settle ?? 900);
       const file = join(outDir, `${iteration}-${st.name}${w === 1512 ? "" : `-${w}`}.png`);
       await page.screenshot({ path: file });

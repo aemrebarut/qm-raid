@@ -12,6 +12,8 @@ export interface FeedEntry {
   kind: ActivityKind | "recall" | "remember" | "reply" | "order";
   text: string;
   tool?: string;
+  /** Brain page slugs this line refers to (recall, remember, gbrain.* tool args), for bus.openPage. */
+  slugs?: string[];
 }
 
 export type Connection = "connecting" | "live" | "reconnecting" | "fixture";

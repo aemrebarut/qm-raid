@@ -19,7 +19,7 @@ test("store applies engine events and keeps feeds", () => {
   const evs: EngineEvent[] = [
     { seq: 1, ts: 1, type: "unit.moved", unitId: "u2", pos: { x: 10, y: 10 } },
     { seq: 2, ts: 2, type: "unit.status", unitId: "u2", status: "working" },
-    { seq: 3, ts: 3, type: "unit.activity", unitId: "u2", kind: "tool", text: "recall billing", tool: "gbrain.recall" },
+    { seq: 3, ts: 3, type: "unit.activity", unitId: "u2", kind: "tool", text: "read page", tool: "gbrain.get_page", args: { slug: "components/billing" } },
     { seq: 4, ts: 4, type: "memory.remember", unitId: "u2", slug: "learnings/lum-12-u2-4", summary: "use idempotency keys" },
     { seq: 5, ts: 5, type: "order.updated", order: { id: "o1", unitId: "u1", targetId: "t12", status: "done", source: "user", vetoDeadline: null, reply: "Fixed" } },
     { seq: 6, ts: 6, type: "stats", spentUsd: 1.5, tokens: 99 },
@@ -35,6 +35,7 @@ test("store applies engine events and keeps feeds", () => {
   expect(s.stats.tokens).toBe(99);
   expect(s.unitTypes.find((t) => t.id === "forge-triager")!.status).toBe("ready");
   expect(store.feed("u2").map((f) => f.kind)).toEqual(["tool", "remember"]);
+  expect(store.feed("u2").map((f) => f.slugs)).toEqual([["components/billing"], ["learnings/lum-12-u2-4"]]);
   expect(store.feed("u1").map((f) => f.kind)).toEqual(["order", "reply"]);
   expect(seen.length).toBe(8); // unknown events still reach onEvent listeners
   expect(changes).toBeGreaterThanOrEqual(7);

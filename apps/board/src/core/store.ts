@@ -39,6 +39,16 @@ function normalize(s: State): State {
   };
 }
 
+/** Slugs named in a gbrain tool call's args (slug, slugs, page, from, to), if any. */
+function argSlugs(tool: string | undefined, args: unknown): string[] | undefined {
+  if (!tool || !tool.toLowerCase().includes("gbrain") || !args || typeof args !== "object") return undefined;
+  const a = args as Record<string, unknown>;
+  const out: string[] = [];
+  for (const k of ["slug", "page", "from", "to"]) if (typeof a[k] === "string") out.push(a[k] as string);
+  if (Array.isArray(a.slugs)) for (const x of a.slugs) if (typeof x === "string") out.push(x);
+  return out.length ? [...new Set(out)] : undefined;
+}
+
 export function createStore(initial: State): Store {
   let state = normalize(initial);
   let connection: Connection = "connecting";
@@ -94,7 +104,7 @@ export function createStore(initial: State): Store {
         return;
       }
       case "unit.activity":
-        pushFeed({ ts, unitId: ev.unitId, kind: ev.kind, text: ev.text, tool: ev.tool });
+        pushFeed({ ts, unitId: ev.unitId, kind: ev.kind, text: ev.text, tool: ev.tool, slugs: argSlugs(ev.tool, ev.args) });
         return;
       case "order.proposed":
       case "order.updated": {
@@ -110,12 +120,12 @@ export function createStore(initial: State): Store {
       }
       case "memory.recall":
         state.memory.recent.push({ ts, unitId: ev.unitId, op: "recall", slugs: ev.slugs, summary: ev.summary });
-        pushFeed({ ts, unitId: ev.unitId, kind: "recall", text: ev.summary || ev.slugs.join(", ") });
+        pushFeed({ ts, unitId: ev.unitId, kind: "recall", text: ev.summary || ev.slugs.join(", "), slugs: ev.slugs });
         break;
       case "memory.remember":
         state.memory.recent.push({ ts, unitId: ev.unitId, op: "remember", slugs: [ev.slug], summary: ev.summary });
         state.memory.pages += 1; // approximate until the next snapshot or /api/brain/stats
-        pushFeed({ ts, unitId: ev.unitId, kind: "remember", text: ev.summary || ev.slug });
+        pushFeed({ ts, unitId: ev.unitId, kind: "remember", text: ev.summary || ev.slug, slugs: [ev.slug] });
         break;
       case "memory.link":
         state.memory.recent.push({ ts, unitId: "", op: "link", slugs: [ev.from, ev.to], summary: ev.linkType });

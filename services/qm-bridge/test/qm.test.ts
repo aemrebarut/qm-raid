@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { waitRun } from "../src/qm.ts";
 import { normalizeTool, toolArgs } from "../src/tools.ts";
-import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, soulContent, soulMarker, soulWritten } from "../src/loadout.ts";
+import { NO_EDIT, disallowedSkills, fetchCatalog, lastWebPost, loadoutLines, loadoutSummary, normalizeLoadout, soulAppliedMarker, soulContent, soulMarker, soulWritten } from "../src/loadout.ts";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -58,13 +58,15 @@ test("GET retries once on 5xx", async () => {
   expect(n).toBe(2);
 });
 
-test("loadout: normalize, marker turn and order-header lines", () => {
+test("loadout: normalize, summary, order-header lines, skill allowlist", () => {
   expect(normalizeLoadout("x")).toBeNull();
   expect(normalizeLoadout({ instructions: "x", skills: [], plugins: [] })!.plugins).toEqual(["gbrain"]); // locked on
   const l = normalizeLoadout({ instructions: "  Always write the test first.  ", skills: ["raid-board", "raid-board", 3, ""], plugins: ["gbrain"] })!;
   expect(l).toEqual({ instructions: "Always write the test first.", skills: ["raid-board"], plugins: ["gbrain"] });
-  expect(loadoutMarker(l)).toContain("Loadout changed. Standing orders from now on: Always write the test first.");
-  expect(loadoutMarker(l)).toContain("Plugins: use only gbrain (GBrain always on)");
+  expect(loadoutSummary(l)).toBe('standing orders "Always write the test first." | skills raid-board | plugins gbrain');
+  expect(disallowedSkills(l)).toEqual([]);
+  expect(disallowedSkills({ ...l, skills: ["raid-board", "admin", "send"] })).toEqual(["admin", "send"]);
+  expect(soulAppliedMarker(l)).toContain(NO_EDIT);
   expect(loadoutLines(l)).toEqual(["Standing orders: Always write the test first.", "Loadout: skills raid-board | plugins gbrain"]);
   expect(loadoutLines(undefined)).toEqual([]);
   const long = loadoutLines({ instructions: "x".repeat(900), skills: [], plugins: [] });
@@ -81,6 +83,7 @@ test("catalog: QM skills (by name) plus GBrain when QM lists no MCP servers; fix
             { id: "u1", name: "memory", description: "Search your memory. More text.", status: "published", shadowed: false },
             { id: "u2", name: "raid-board", description: "Work as a unit.", status: "published", shadowed: false },
             { id: "u3", name: "old", description: "Shadowed.", status: "published", shadowed: true },
+            { id: "u4", name: "admin", description: "Act for an org admin.", status: "published", shadowed: false }, // not allowlisted
           ],
         }),
       );

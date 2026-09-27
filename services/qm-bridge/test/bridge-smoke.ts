@@ -1,6 +1,6 @@
 // Bridge API end to end: spawn a unit, send one order, wait for its terminal event on /events; then PATCH a loadout,
-// send a second order and check in the QM transcript that the "Loadout changed" marker turn ran and the order text
-// restates the standing orders; delete.
+// check the "Loadout changed: ..." bridge activity (plan A sends no QM turn for it), send a second order and check in
+// the QM transcript that its text restates the standing orders and carries the no-edit line; delete.
 // Run: bun test/bridge-smoke.ts (env BRIDGE_URL, default http://127.0.0.1:4614; QM_PORTAL_URL, default
 // http://localhost:8129; bridge and QM must be up)
 const BRIDGE = (process.env.BRIDGE_URL ?? "http://127.0.0.1:4614").replace(/\/$/, "");
@@ -69,10 +69,13 @@ try {
   const sid = patched.sessionUrl?.split("/s/")[1] ?? spawned.sessionId;
   const tx = await fetch(`${PORTAL}/api/sessions/${sid}?tailTurns=10`).then((r) => r.json() as Promise<any>);
   const userTexts: string[] = (tx.entries ?? []).filter((e: any) => e.type === "user").map((e: any) => String(e.payload?.text ?? ""));
-  const marker = userTexts.some((t) => t.startsWith("Loadout changed.") && t.includes(standing));
-  const restated = userTexts.some((t) => t.includes(`order ${order2}`) && t.includes(`Standing orders: ${standing}`) && t.includes("Loadout: skills raid-board | plugins gbrain"));
-  console.log(`${ms()} PATCH echo ok=${patched.ok && patched.loadout?.instructions === standing} marker turn=${marker} order restates loadout=${restated}`);
-  ok = t1?.type === "reply" && t2?.type === "reply" && patched.ok && marker && restated;
+  const noMarkerTurn = !userTexts.some((t) => t.includes("Loadout changed"));
+  const changed = seen.some((e) => e.type === "activity" && !e.orderId && String(e.text).startsWith("Loadout changed: "));
+  const restated = userTexts.some(
+    (t) => t.includes(`order ${order2}`) && t.includes(`Standing orders: ${standing}`) && t.includes("Loadout: skills raid-board | plugins gbrain") && t.includes("do not change any QM settings"),
+  );
+  console.log(`${ms()} PATCH echo ok=${patched.ok && patched.loadout?.instructions === standing} change activity=${changed} no QM marker turn=${noMarkerTurn} order restates loadout + no-edit line=${restated}`);
+  ok = t1?.type === "reply" && t2?.type === "reply" && patched.ok && changed && noMarkerTurn && restated;
 } finally {
   clearTimeout(deadline);
   reader.cancel().catch(() => {});

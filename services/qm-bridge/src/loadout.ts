@@ -6,6 +6,14 @@ import { PORTAL_URL } from "./qm.ts";
 
 export const GBRAIN = "gbrain"; // locked on for every unit (Analyst): the Library, the core of the game
 const MAX_INSTRUCTIONS = 4000; // stored
+// Skills a game toggle may offer (planner): QM's other built-ins (admin, browse, send, publish, credentials, ...) act
+// outside the game. Only those QM actually lists appear in /catalog; a loadout naming another skill is refused (400).
+export const CATALOG_SKILLS = (process.env.CATALOG_SKILLS ?? "raid-board,memory,miniapp,taste-skill,popular-web-designs")
+  .split(",")
+  .map((x) => x.trim())
+  .filter(Boolean);
+/** Loadout skills outside the allowlist. */
+export const disallowedSkills = (l: Loadout): string[] => l.skills.filter((x) => !CATALOG_SKILLS.includes(x));
 const HEADER_INSTRUCTIONS = 800; // restated in every order header
 
 const FALLBACK: CatalogItem[] = [
@@ -33,7 +41,17 @@ export function sameLoadout(a: Loadout | undefined | null, b: Loadout | undefine
 
 const pluginsText = (l: Loadout): string => [...new Set([...l.plugins, GBRAIN])].join(", ");
 
-/** The visible marker turn queued in the unit's conversation when its loadout changes. */
+/** In every turn the bridge sends (Analyst): agents must never edit QM guidance; on plan A a guidance edit would land in
+ *  the personal scope, the system prompt of every unit and of Emre's own chats. */
+export const NO_EDIT = "Do not change your guidance, standing instructions or system prompt, and do not change any QM settings; the board manages them.";
+
+/** Short text for the "Loadout changed: ..." bridge activity (plan A sends no QM turn for a loadout change). */
+export function loadoutSummary(l: Loadout): string {
+  const s = l.instructions.length > 80 ? `${l.instructions.slice(0, 80)}...` : l.instructions;
+  return `standing orders ${s ? `"${s}"` : "(none)"} | skills ${l.skills.join(",") || "-"} | plugins ${pluginsText(l)}`;
+}
+
+/** Loadout text of the plan B agent SOUL-write turn (fallback when the admin write fails). */
 export function loadoutMarker(l: Loadout): string {
   return (
     `Loadout changed. Standing orders from now on: ${l.instructions.replace(/[.\s]+$/, "") || "(none)"}. ` +
@@ -63,6 +81,16 @@ export function soulContent(l: Loadout): string {
     `Skills: ${l.skills.length ? l.skills.join(", ") : "(none)"}; load them with the skills tool when relevant.`,
     `Plugins: use only ${pluginsText(l)} (GBrain always on).`,
   ].join("\n");
+}
+
+/** Plan B marker once the bridge has written the SOUL: acknowledge only. Without this the agent "applies" the change
+ *  itself with QM's guidance tool and overwrites the scope SOUL with its whole effective prompt. */
+export function soulAppliedMarker(l: Loadout): string {
+  return (
+    `Loadout changed. Your new standing orders are already applied as your system prompt (this project's SOUL): ` +
+    `${l.instructions.replace(/[.\s]+$/, "") || "(none)"}. Skills: ${l.skills.length ? l.skills.join(", ") : "(none)"}. ` +
+    `Plugins: use only ${pluginsText(l)} (GBrain always on). ${NO_EDIT} Reply with one short line to acknowledge.`
+  );
 }
 
 /** Marker turn that makes the agent write its scope SOUL with its own capability token (env names only; the
@@ -104,14 +132,14 @@ async function getJson(path: string): Promise<any> {
   return res.json();
 }
 
-/** Skills from the portal (published, not shadowed; id = skill name, which the QM skills tool loads by) and MCP
+/** Allowlisted skills from the portal (published, not shadowed; id = skill name, which the QM skills tool loads by) and MCP
  *  servers when QM lists them (it has no HTTP list today), GBrain always included. Fixed fallback when QM is down. */
 export async function fetchCatalog(): Promise<CatalogItem[]> {
   let skills: CatalogItem[];
   try {
     const d = await getJson("/api/skills");
     skills = (Array.isArray(d?.skills) ? d.skills : [])
-      .filter((s: any) => typeof s?.name === "string" && !s.shadowed && (s.status ?? "published") === "published")
+      .filter((s: any) => typeof s?.name === "string" && CATALOG_SKILLS.includes(s.name) && !s.shadowed && (s.status ?? "published") === "published")
       .map((s: any): CatalogItem => ({ id: s.name, name: s.name, description: String(s.description ?? "").split(/(?<=\.)\s/)[0].slice(0, 160), kind: "skill" }));
   } catch {
     return FALLBACK;

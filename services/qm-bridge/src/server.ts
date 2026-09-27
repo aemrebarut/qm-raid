@@ -2,7 +2,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BridgeEvent, CatalogItem, Loadout, SendRequest, SpawnRequest } from "../../../contract/types.ts";
-import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout, soulContent, soulMarker, soulWritten } from "./loadout.ts";
+import { disallowedSkills, fetchCatalog, lastWebPost, loadoutLines, loadoutSummary, NO_EDIT, normalizeLoadout, sameLoadout, soulAppliedMarker, soulContent, soulMarker, soulWritten } from "./loadout.ts";
 import {
   PORTAL_URL,
   createProject,
@@ -171,7 +171,7 @@ function header(u: Unit, s: Send): string {
     u.team != null && `team ${u.team}`,
   ].filter(Boolean);
   // Standing orders and loadout are restated on every order, so they hold whatever QM keeps as its session prompt.
-  return [...(s.round ? [s.round] : []), `[${tags.join(" | ")}]`, ...loadoutLines(u.loadout), s.text].join("\n");
+  return [...(s.round ? [s.round] : []), `[${tags.join(" | ")}]`, ...loadoutLines(u.loadout), NO_EDIT, s.text].join("\n");
 }
 
 const warned = new Set<string>();
@@ -220,7 +220,7 @@ async function begin(u: Unit, s: Send): Promise<void> {
 }
 
 function pump(u: Unit): void {
-  if (!booted || u.active || u.queue.length === 0 || !alive(u)) return;
+  if (!booted || u.active || u.queue.length === 0 || !alive(u) || soulChecks.has(u.id)) return;
   const s = u.queue.shift()!;
   if (s.soul && !soulFor(u.id)) {
     // Restored agent SOUL write for a unit the flag no longer covers: dropped (plan A only).
@@ -248,7 +248,15 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
   }
   saveUnits();
   if (s.t) logTiming(u, s);
-  pump(u);
+  // SOUL check after every turn; the unit's next turn waits for it. Plan B: re-write the loadout SOUL if it drifted.
+  // Plan A: restore the personal scope's baseline if it changed.
+  const check = u.scopeId ? (u.loadout && soulFor(u.id) ? keepSoul(u) : null) : guardPersonal();
+  if (!check) return pump(u);
+  soulChecks.add(u.id);
+  void check.finally(() => {
+    soulChecks.delete(u.id);
+    pump(u);
+  });
 }
 
 // Per-order timing: send = POST /send received, queued = QM accepted the turn, first = first activity, terminal = reply/error.
@@ -422,34 +430,79 @@ function introText(u: Unit): string {
     `You will get orders to work product issues; each order starts with a [unit | order | target | component | team] header. ` +
     `Use the gbrain tools, when you have them, to recall before you work and to remember what you learn. ` +
     (u.loadout ? `${loadoutLines(u.loadout).join(" ")} ` : "") +
-    `Reply to this message with one short line saying you are ready.`
+    `${NO_EDIT} Reply to this message with one short line saying you are ready.`
   );
 }
 
-// Loadout change: one visible marker turn, queued behind any active order (never interrupts); no terminal event.
-// Plan B units first get their scope SOUL replaced, so the new standing orders are in the system prompt of every turn.
+// Loadout change. Plan A (Analyst): no QM turn, only a bridge activity event; the next order's header carries the
+// standing orders. Plan B units first get their scope SOUL replaced, then one acknowledgement turn (or, when the admin
+// write failed, the agent's own SOUL write turn), queued behind any active order; never a terminal event.
 async function applyLoadout(u: Unit, next: Loadout | null): Promise<boolean> {
   if (!next || sameLoadout(u.loadout, next)) return false;
   u.loadout = next;
-  if (u.scopeId && soulFor(u.id)) await writeSoul(u, next);
-  enqueue(u, { text: loadoutMarker(next), intro: true });
+  if (u.scopeId && soulFor(u.id)) {
+    if (await writeSoul(u, next)) enqueue(u, { text: soulAppliedMarker(next), intro: true });
+    return true;
+  }
+  activity(u, { text: "" }, "message", `Loadout changed: ${loadoutSummary(next)}`);
   return true;
 }
 
 // Plan B: SOUL through the admin relay (deterministic, no agent turn), applied only when a read-back matches; if
 // that fails, the agent writes it itself.
-async function writeSoul(u: Unit, l: Loadout): Promise<void> {
-  if (!u.scopeId || !soulFor(u.id)) return;
+async function writeSoul(u: Unit, l: Loadout): Promise<boolean> {
+  if (!u.scopeId || !soulFor(u.id)) return false;
   const content = soulContent(l);
   try {
     await putScopeSoul(u.scopeId!, content);
     const back = await getScopeSoul(u.scopeId!);
     if (back?.trim() !== content.trim()) throw new Error("read-back does not match");
     activity(u, { text: "" }, "message", "Loadout applied: standing orders are now this unit's QM scope SOUL");
+    return true;
   } catch (err) {
     console.warn(`[qm-bridge] ${u.id} SOUL via admin failed, asking the agent: ${String((err as Error)?.message ?? err)}`);
     enqueue(u, { text: soulMarker(l), intro: true, soul: true });
+    return false;
   }
+}
+
+// Plan B: the bridge's SOUL is the source of truth. After every turn of a plan B unit the scope SOUL is read back and
+// restored if the agent changed it (QM's guidance tool can rewrite it); the unit's next turn waits for this check.
+const soulChecks = new Set<string>();
+async function keepSoul(u: Unit): Promise<void> {
+  const content = soulContent(u.loadout!);
+  try {
+    if ((await getScopeSoul(u.scopeId!))?.trim() === content.trim()) return;
+    console.warn(`[qm-bridge] BRIDGE WARN soul restored: ${u.id} scope ${u.scopeId} SOUL drifted (agent edit), re-writing the loadout SOUL`);
+    await putScopeSoul(u.scopeId!, content);
+    if ((await getScopeSoul(u.scopeId!))?.trim() !== content.trim()) throw new Error("read-back does not match after repair");
+  } catch (err) {
+    const why = String((err as Error)?.message ?? err);
+    console.warn(`[qm-bridge] BRIDGE WARN ${u.id} SOUL check failed: ${why}`);
+    activity(u, { text: "" }, "error", `Loadout SOUL not verified: ${why}`);
+  }
+}
+
+// Soul guard (Analyst) for plan A: every plan A turn runs in the personal scope, whose SOUL is the system prompt of every
+// unit and of Emre's own chats. Its SOUL is read once at startup as the baseline; after every plan A turn it is read
+// again and the baseline restored if it changed. A baseline (not per-turn snapshots), so parallel turns never capture
+// each other's change.
+let personalScope = "";
+let personalBase: { soul: string | null } | null = null;
+let guardChain: Promise<void> = Promise.resolve();
+function guardPersonal(): Promise<void> {
+  const run = async (): Promise<void> => {
+    if (!personalBase) return;
+    try {
+      const now = await getScopeSoul(personalScope);
+      if ((now ?? "") === (personalBase.soul ?? "")) return;
+      console.warn(`[qm-bridge] BRIDGE WARN soul restored: ${personalScope} SOUL changed during a turn (${now?.length ?? 0} chars), restoring the startup baseline`);
+      await putScopeSoul(personalScope, personalBase.soul ?? ""); // a null baseline is restored as an empty SOUL
+    } catch (err) {
+      console.warn(`[qm-bridge] BRIDGE WARN soul guard check failed: ${String((err as Error)?.message ?? err)}`);
+    }
+  };
+  return (guardChain = guardChain.then(run, run)); // one check at a time
 }
 
 let catalogCache: { at: number; items: CatalogItem[] } | null = null;
@@ -490,6 +543,7 @@ async function spawn(req: Request): Promise<Response> {
   if (!b.id) return json({ ok: false, error: "id required" }, 400);
   const loadout = normalizeLoadout(rawLoadout); // optional, so the engine's 404 re-spawn keeps it
   if (rawLoadout != null && !loadout) return json({ ok: false, error: LOADOUT_SHAPE }, 400); // before anything is created
+  if (loadout && disallowedSkills(loadout).length) return json({ ok: false, error: `skills not allowed: ${disallowedSkills(loadout).join(", ")}` }, 400);
   const existing = units.get(b.id);
   if (existing) {
     // Same unit again (engine restart, re-spawn without delete): keep the conversation, refresh settings, no extra
@@ -594,6 +648,13 @@ async function loadCatalog(): Promise<void> {
       const cfg = await runtimeConfig();
       codexModels = cfg.modelsByHarness?.codex ?? [];
       spendBase ??= await orgSpend().catch(() => null);
+      personalScope = `personal:${p}`;
+      try {
+        personalBase ??= { soul: await getScopeSoul(personalScope) };
+        console.log(`[qm-bridge] soul guard on: ${personalScope} baseline SOUL ${personalBase.soul === null ? "null" : `${personalBase.soul.length} chars`}`);
+      } catch (err) {
+        console.warn(`[qm-bridge] BRIDGE WARN soul guard off: cannot read ${personalScope} SOUL: ${String((err as Error)?.message ?? err)}`);
+      }
       console.log(`[qm-bridge] QM principal ${p}; harnesses ${cfg.approvedHarnesses?.join(",")}; codex models ${codexModels.join(",")}`);
       return;
     } catch (err) {
@@ -669,7 +730,8 @@ const server = Bun.serve({
           ("team" in b && b.team !== null && !Number.isFinite(b.team) && "team must be a number or null") ||
           ("model" in b && typeof b.model !== "string" && "model must be a string") ||
           ("effort" in b && typeof b.effort !== "string" && "effort must be a string") ||
-          ("loadout" in b && !next && LOADOUT_SHAPE);
+          ("loadout" in b && !next && LOADOUT_SHAPE) ||
+          (next && disallowedSkills(next).length && `skills not allowed: ${disallowedSkills(next).join(", ")}`);
         if (bad) return json({ ok: false, error: bad }, 400);
         if ("team" in b) u.team = (b.team as number | null) ?? null;
         if (typeof b.model === "string" && b.model) u.model = b.model;

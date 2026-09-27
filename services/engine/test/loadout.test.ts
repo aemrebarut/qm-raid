@@ -35,13 +35,15 @@ const fakeFetch = (async (url: string, init?: RequestInit) => {
 beforeAll(() => { globalThis.fetch = fakeFetch; });
 afterAll(() => { globalThis.fetch = realFetch; });
 
-const { store, recentEvents } = await import("../src/store.ts");
+const { store, recentEvents, currentSeq } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
 const { BRIDGE_URL, FORGE_URL } = await import("../src/config.ts");
 const { getCatalog, patchLoadout, reapplyLoadout } = await import("../src/loadout.ts");
 
 const unit = (i = 0) => store.state.units[i]!;
-const updates = (id: string) => recentEvents().filter((e: any) => e.type === "unit.updated" && e.unit?.id === id);
+// unit.updated events for a unit after a seq mark: counting the whole ring buffer is wrong in a full bun test run,
+// where the 200-event buffer is already full and every new event evicts an old one.
+const updates = (id: string, mark: number) => recentEvents().filter((e: any) => e.seq > mark && e.type === "unit.updated" && e.unit?.id === id);
 
 beforeEach(() => {
   globalThis.fetch = fakeFetch;
@@ -115,7 +117,7 @@ test("catalog: bridge down -> 503", async () => {
 
 test("patch: merges over the current loadout, sends the full loadout plus model and effort, stores and emits", async () => {
   const u = unit();
-  const before = updates(u.id).length;
+  const mark = currentSeq();
   const r = await patchLoadout(u.id, { skills: ["debug"], model: "gpt-6-sol", effort: "low" });
   expect(r.ok).toBe(true);
   expect(calls[0]!.method).toBe("PATCH");
@@ -124,7 +126,7 @@ test("patch: merges over the current loadout, sends the full loadout plus model 
   expect(u.loadout).toEqual({ instructions: "", skills: ["debug"], plugins: ["gbrain"] });
   expect(u.model).toBe("gpt-6-sol");
   expect(u.effort).toBe("low");
-  expect(updates(u.id).length).toBe(before + 1);
+  expect(updates(u.id, mark).length).toBe(1);
   // a second patch keeps the skills and changes only the instructions
   await patchLoadout(u.id, { instructions: "Write the test first." });
   expect(calls[1]!.body).toEqual({ loadout: { instructions: "Write the test first.", skills: ["debug"], plugins: ["gbrain"] } });
@@ -170,11 +172,11 @@ test("patch: bridge down or 5xx -> 503, nothing stored", async () => {
   const u = unit();
   for (const m of ["down", "500"] as const) {
     mode = m;
-    const before = updates(u.id).length;
+    const mark = currentSeq();
     const r = await patchLoadout(u.id, { skills: ["debug"] });
     expect((r as any).status).toBe(503);
     expect(u.loadout?.skills).toEqual([]);
-    expect(updates(u.id).length).toBe(before);
+    expect(updates(u.id, mark).length).toBe(0);
   }
 });
 

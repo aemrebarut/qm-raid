@@ -1,5 +1,6 @@
 // Small shared helpers for scene/: seeded random, material cache, sprite labels, tile coordinates.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 /** Tile (x, y) to world position of the tile centre; y is up in world space. */
 export const tileToWorld = (x: number, y: number, h = 0) => new THREE.Vector3(x + 0.5, h, y + 0.5);
@@ -181,4 +182,41 @@ export function disposeTree(obj: THREE.Object3D) {
       o.material.dispose();
     }
   });
+}
+
+/**
+ * Merge static opaque meshes under root into one mesh per material (fewer draw calls).
+ * Skips sprites, instanced meshes, textured or transparent materials, and anything with userData.keep.
+ */
+export function mergeStatic(root: THREE.Object3D) {
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const buckets = new Map<string, { mat: THREE.Material; cast: boolean; geos: THREE.BufferGeometry[]; meshes: THREE.Mesh[] }>();
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh || o.userData.keep) return;
+    for (let p = o.parent; p && p !== root; p = p.parent) if (p.userData.keep) return;
+    const m = o.material as THREE.Material;
+    if (Array.isArray(o.material) || (m as THREE.MeshLambertMaterial).map || m.transparent) return;
+    const key = m.uuid + (o.castShadow ? ":c" : ":n");
+    let b = buckets.get(key);
+    if (!b) buckets.set(key, (b = { mat: m, cast: o.castShadow, geos: [], meshes: [] }));
+    const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== "position" && name !== "normal") g.deleteAttribute(name);
+    g.morphAttributes = {};
+    g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+    b.geos.push(g);
+    b.meshes.push(o);
+  });
+  for (const b of buckets.values()) {
+    if (b.meshes.length < 2) { b.geos.forEach((g) => g.dispose()); continue; }
+    const merged = mergeGeometries(b.geos, false);
+    b.geos.forEach((g) => g.dispose());
+    if (!merged) continue;
+    for (const m of b.meshes) m.parent?.remove(m);
+    const mm = new THREE.Mesh(merged, b.mat);
+    mm.castShadow = b.cast;
+    mm.receiveShadow = true;
+    root.add(mm);
+  }
+  return root;
 }

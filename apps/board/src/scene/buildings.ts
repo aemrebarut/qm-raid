@@ -2,7 +2,7 @@
 // Each is built around its tile centre and covers a 3 x 3 footprint.
 import * as THREE from "three";
 import type { Building } from "../core";
-import { gableRoof, makeLabel, mat, mesh, tileToWorld } from "./util";
+import { gableRoof, makeLabel, mat, mergeStatic, mesh, tileToWorld } from "./util";
 
 export interface BuildingView {
   id: string;
@@ -38,6 +38,7 @@ export function buildBuilding(b: Building): BuildingView {
   if (b.kind === "gbrain") view = library(group);
   else if (b.kind === "river") view = forge(group);
   else view = barracks(group);
+  mergeStatic(group);
 
   let selected = false, hovered = false;
   const syncRing = () => {
@@ -87,6 +88,7 @@ function library(group: THREE.Group) {
   // Orb of knowledge above the spire: recall beams start here.
   const orb = mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshLambertMaterial({ color: "#3a78c0", emissive: "#1a59cc" }), 0.85, 3.4, -0.55, false);
   orb.name = "libraryOrb";
+  orb.userData.keep = true;
   group.add(orb);
   const light = new THREE.PointLight("#5aa9ff", 3, 4, 1.5);
   light.position.set(0.85, 3.2, -0.55);
@@ -131,6 +133,7 @@ function barracks(group: THREE.Group) {
   // Flag
   group.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 5), beam, -1.25, 0.9, 1.0));
   const flag = mesh(new THREE.BoxGeometry(0.5, 0.32, 0.02), mat("#c23b30"), -1.0, 1.52, 1.0);
+  flag.userData.keep = true;
   group.add(flag);
   // Weapon rack and training dummy
   for (let i = 0; i < 4; i++) {

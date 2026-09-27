@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import type { Building, Component } from "../core";
 import { zoneGate } from "./terrain";
-import { cobbleTexture, makeLabel, mat, mesh } from "./util";
+import { cobbleTexture, makeLabel, mat, mergeStatic, mesh } from "./util";
 
 export const ZONE_COLORS = ["#b8433a", "#3f73b8", "#c9a227", "#7b4fa3", "#2f8f7a", "#c8662c", "#5f7f3a", "#8a5a44"];
 const WALL = "#9d968a", WALL_TOP = "#b9b2a4";
@@ -96,7 +96,7 @@ export function buildZones(components: Component[], buildings: Building[]) {
 
     group.add(zg);
   });
-  return group;
+  return mergeStatic(group);
 }
 
 function addGateTowers(g: THREE.Group, x0: number, z0: number, x1: number, z1: number, color: string) {

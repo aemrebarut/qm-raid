@@ -9,6 +9,7 @@ import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView } from "./units";
 import { TargetView } from "./targets";
 import { Fx } from "./fx";
+import { ArrowLayer } from "./arrows";
 import { disposeTree, tileToWorld } from "./util";
 
 export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
@@ -43,7 +44,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const targetsG = new THREE.Group();
   const buildingsG = new THREE.Group();
   const fx = new Fx();
-  scene.add(world, buildingsG, targetsG, unitsG, fx.group);
+  const arrows = new ArrowLayer();
+  scene.add(world, buildingsG, targetsG, unitsG, arrows.group, fx.group);
 
   const units = new Map<string, UnitView>();
   const targets = new Map<string, TargetView>();
@@ -100,6 +102,11 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     syncSelection();
   }
 
+  function syncArrows() {
+    const s = store.getState();
+    arrows.sync(s, new Set(bus.selection.units), (team) => teamColor(s, team));
+  }
+
   function syncSelection() {
     const sel = bus.selection;
     const hov = bus.hovered;
@@ -120,8 +127,9 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
 
   reconcile(store.getState());
   const offs: (() => void)[] = [];
-  offs.push(store.subscribe((s) => reconcile(s)));
-  offs.push(bus.on("selection", () => syncSelection()));
+  syncArrows();
+  offs.push(store.subscribe((s) => { reconcile(s); syncArrows(); }));
+  offs.push(bus.on("selection", () => { syncSelection(); syncArrows(); }));
   offs.push(bus.on("hover", () => syncSelection()));
   offs.push(bus.on("focusTile", ({ x, y }) => iso.focus(x + 0.5, y + 0.5)));
   offs.push(store.onEvent((ev) => {
@@ -198,14 +206,43 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     return best;
   }
 
-  // ---- input: click select, right-click command, drag pan, wheel zoom ----
+  // ---- input: click select, left-drag box select, right/middle (or space/alt + left) drag pans, wheel zooms ----
   const canvas = renderer.domElement;
-  let down: { x: number; y: number; button: number; dragging: boolean } | null = null;
+  let down: { x: number; y: number; button: number; dragging: boolean; mode: "box" | "pan" } | null = null;
   const DRAG_PX = 5;
+  let spaceHeld = false;
+  const box = document.createElement("div");
+  box.style.cssText = "position:absolute;display:none;pointer-events:none;border:1px solid #f4f0c0;" +
+    "background:rgba(220,255,160,0.12);box-shadow:0 0 0 1px rgba(0,0,0,0.35);z-index:1";
+  el.appendChild(box);
+
+  function drawBox(x0: number, y0: number, x1: number, y1: number) {
+    const r = el.getBoundingClientRect();
+    box.style.display = "block";
+    box.style.left = `${Math.min(x0, x1) - r.left}px`;
+    box.style.top = `${Math.min(y0, y1) - r.top}px`;
+    box.style.width = `${Math.abs(x1 - x0)}px`;
+    box.style.height = `${Math.abs(y1 - y0)}px`;
+  }
+
+  /** Units whose body projects inside the client-space rectangle. */
+  function unitsInBox(x0: number, y0: number, x1: number, y1: number) {
+    const r = canvas.getBoundingClientRect();
+    const minX = Math.min(x0, x1), maxX = Math.max(x0, x1), minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+    const v = new THREE.Vector3();
+    const ids: string[] = [];
+    for (const [id, u] of units) {
+      v.copy(u.group.position).setY(0.45).project(iso.camera);
+      const sx = ((v.x + 1) / 2) * r.width + r.left, sy = ((1 - v.y) / 2) * r.height + r.top;
+      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) ids.push(id);
+    }
+    return ids;
+  }
 
   canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   canvas.addEventListener("pointerdown", (e) => {
-    down = { x: e.clientX, y: e.clientY, button: e.button, dragging: false };
+    const pan = e.button !== 0 || spaceHeld || e.altKey;
+    down = { x: e.clientX, y: e.clientY, button: e.button, dragging: false, mode: pan ? "pan" : "box" };
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -213,18 +250,30 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       const dx = e.clientX - down.x, dy = e.clientY - down.y;
       if (!down.dragging && Math.hypot(dx, dy) > DRAG_PX) down.dragging = true;
       if (down.dragging) {
-        iso.panPixels(e.movementX, e.movementY);
-        canvas.style.cursor = "grabbing";
+        if (down.mode === "pan") {
+          iso.panPixels(e.movementX, e.movementY);
+          canvas.style.cursor = "grabbing";
+        } else {
+          drawBox(down.x, down.y, e.clientX, e.clientY);
+        }
       }
       return;
     }
     pendingHover = { clientX: e.clientX, clientY: e.clientY };
   });
+  canvas.addEventListener("pointercancel", () => { down = null; box.style.display = "none"; canvas.style.cursor = ""; });
   canvas.addEventListener("pointerup", (e) => {
     const d = down;
     down = null;
     try { canvas.releasePointerCapture(e.pointerId); } catch { /* already released */ }
     canvas.style.cursor = "";
+    box.style.display = "none";
+    if (d?.dragging && d.mode === "box") {
+      const ids = unitsInBox(d.x, d.y, e.clientX, e.clientY);
+      if (ids.length) bus.select(ids, { add: e.shiftKey });
+      else if (!e.shiftKey && !bus.command) bus.clear();
+      return;
+    }
     if (!d || d.dragging) return;
     const hit = pick(e);
     if (d.button === 2) {
@@ -279,6 +328,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   };
   const onKeyDown = (e: KeyboardEvent) => {
     if (typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === "Space") spaceHeld = true;
     const k = e.key.toLowerCase();
     if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(k)) {
       keys.add(k);
@@ -288,9 +338,12 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       if (lib) iso.focus(lib.x + 0.5, lib.y + 0.5);
     }
   };
-  const onKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
-  const onBlur = () => keys.clear();
-  const onFocusIn = (e: FocusEvent) => { if (typing(e.target)) keys.clear(); };
+  const onKeyUp = (e: KeyboardEvent) => {
+    keys.delete(e.key.toLowerCase());
+    if (e.code === "Space") spaceHeld = false;
+  };
+  const onBlur = () => { keys.clear(); spaceHeld = false; };
+  const onFocusIn = (e: FocusEvent) => { if (typing(e.target)) { keys.clear(); spaceHeld = false; } };
   window.addEventListener("keydown", onKeyDown);
   window.addEventListener("keyup", onKeyUp, true); // capture: HUD inputs may stop propagation
   window.addEventListener("blur", onBlur);
@@ -324,6 +377,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const v of units.values()) v.tick(t, dt);
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);
+    arrows.tick(t, units, targets);
     fx.tick(dt);
     renderer.render(scene, iso.camera);
   }
@@ -344,5 +398,6 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     for (const v of targets.values()) v.dispose();
     renderer.dispose();
     canvas.remove();
+    box.remove();
   };
 }

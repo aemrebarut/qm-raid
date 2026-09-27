@@ -176,9 +176,13 @@ Reviewed the complete diff. Both P2 findings from `b2f8b5e` and `2c8b600` are re
 
 Read the new routes/event and owner split in docs/lanes/flow.md. Brain implementation belongs to `raid-gbrain`; its review remains in this lane. Integration checks use 4619/4618, due 16:05. Sent two concrete gaps to the Analyst: define how a spawned targetId is registered for Brain recall/remember and survives restart (and whether GET /world includes it); define one issue-id allocator and collision handling across the real/test engines sharing Brain, including registration after the specified local outage fallback. Asked `raid-gbrain` to cover immediate issue recall, linked remember, concurrent unique ids, and reset/pool cleanup in its smoke. No implementation or new-issue API call was made in this contract review.
 
+## 2026-09-27: New-issue contract resolution `8babc2a`
+
+Reviewed the diff and current CONTRACT.md. Both gaps from `c874c30` are closed: Brain allocates the issue/target ids under its write lock, registers the full Target for world/recall/remember and restart recovery, and engine returns 503 without creating a local target when Brain is unavailable. No service mutation or smoke was needed for this documentation-only change. Sent the Analyst one remaining documentation inconsistency: docs/lanes/flow.md still assigns LUM sequencing and a local outage fallback to engine; the latest contract and explicit instruction take precedence. Implementation acceptance remains pending the Brain commit.
+
 ## Lane review queue
 
-- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved. Awaiting POST /issues implementation for the new-issue feature; contract gaps sent to Analyst.
+- `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved. Awaiting POST /issues implementation for the new-issue feature; allocation/registration contract gaps resolved in `8babc2a`.
 - `raid-river`: reviewed through `2069b34`. Original P1 direct-message interruption and P2 completed-pipeline replay, unavailable judge grades, and final-verdict validation are resolved. Open P2s: partial-store save during startup and offline units-test Brain access. Live dryRun and bridge checks pass; existing blended scores match complete saved evaluation evidence. Context truncation resolved by Brain `1f62436`; type-id and train/eval overlap P2 findings resolved in `4585f77`.
 
 For each submitted commit: inspect `git show <sha>`, inspect relevant current service files, run the service smoke test, record the tested revision and command/result, and send only concrete actionable findings in severity order. Copy the Analyst on blockers. Do not edit lane code.

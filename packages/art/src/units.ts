@@ -44,16 +44,37 @@ function hashStr(s: string) {
 }
 
 const matCache = new Map<string, THREE.MeshLambertMaterial>();
-/** Shared flat material per colour; never mutate or dispose the result. */
+const _hsl = { h: 0, s: 0, l: 0 };
+/** Readability lift under ACES at board zoom: brighter and a little more saturated. */
+function lift(color: THREE.ColorRepresentation) {
+  const c = new THREE.Color(color);
+  c.getHSL(_hsl);
+  return c.setHSL(_hsl.h, Math.min(1, _hsl.s * 1.15), Math.min(0.9, _hsl.l * 1.22 + 0.04));
+}
+/** Shared flat material per colour (lifted); never mutate or dispose the result. */
 function mat(color: THREE.ColorRepresentation) {
   const key = new THREE.Color(color).getHexString();
   let m = matCache.get(key);
-  if (!m) matCache.set(key, (m = new THREE.MeshLambertMaterial({ color, flatShading: true })));
+  if (!m) matCache.set(key, (m = new THREE.MeshLambertMaterial({ color: lift(color), flatShading: true })));
   return m;
 }
 
 function geo<T extends THREE.BufferGeometry>(g: T) {
   g.userData.shared = true; // callers' dispose helpers skip shared geometry
+  return g;
+}
+
+/** Staff pennant: a swallow-tail flag, hoist along the staff (+y), flying toward +x. */
+function pennantGeo() {
+  const s = new THREE.Shape();
+  s.moveTo(0, 0);
+  s.lineTo(0, 0.11);
+  s.lineTo(0.17, 0.1);
+  s.lineTo(0.11, 0.055);
+  s.lineTo(0.17, 0.0);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 0.008, bevelEnabled: false });
+  g.translate(0, 0, -0.004);
   return g;
 }
 
@@ -79,7 +100,8 @@ const G = {
   robe: geo(new THREE.CylinderGeometry(0.13, 0.2, 0.3, 8).translate(0, -0.08, 0)),
   belt: geo(new THREE.CylinderGeometry(0.14, 0.14, 0.035, 8)),
   buckle: geo(new THREE.BoxGeometry(0.04, 0.035, 0.02)),
-  tabard: geo(new THREE.BoxGeometry(0.15, 0.3, 0.02).translate(0, -0.02, 0)),
+  tabard: geo(new THREE.BoxGeometry(0.17, 0.31, 0.02).translate(0, -0.02, 0)),
+  pennant: geo(pennantGeo()),
   tabardTrim: geo(new THREE.BoxGeometry(0.16, 0.025, 0.024)),
   upperArm: geo(new THREE.BoxGeometry(0.06, 0.13, 0.065).translate(0, -0.06, 0)),
   foreArm: geo(new THREE.BoxGeometry(0.055, 0.1, 0.06).translate(0, -0.05, 0)),
@@ -112,7 +134,7 @@ const G = {
   capelet: geo(new THREE.ConeGeometry(0.2, 0.16, 8, 1, true)),
   satchel: geo(new THREE.BoxGeometry(0.08, 0.08, 0.04)),
   // oracle and forged
-  wizardHat: geo(new THREE.ConeGeometry(0.11, 0.28, 8)),
+  wizardHat: geo(new THREE.ConeGeometry(0.11, 0.23, 8)),
   hatBrim: geo(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 10)),
   rune: geo(new THREE.BoxGeometry(0.028, 0.06, 0.012)),
   runeBar: geo(new THREE.BoxGeometry(0.06, 0.014, 0.012)),
@@ -162,7 +184,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   const seed = opts.seed ?? hashStr(cls);
   const rnd = mulberry(seed);
 
-  const teamMat = new THREE.MeshLambertMaterial({ color: opts.teamColor ?? NEUTRAL, flatShading: true });
+  const teamMat = new THREE.MeshLambertMaterial({ color: lift(opts.teamColor ?? NEUTRAL), flatShading: true });
   const rc = forged ? new THREE.Color(opts.typeColor ?? typeColor(cls)) : cls === "oracle" ? new THREE.Color("#b58cff") : new THREE.Color(GEM_IDLE);
   const gemBase = rc.clone();
   const gemMat = new THREE.MeshLambertMaterial({ color: rc.clone().lerp(new THREE.Color("#ffffff"), 0.35), emissive: rc.clone(), emissiveIntensity: 0.9, flatShading: true });
@@ -265,7 +287,8 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
 
   // Head
   const head = new THREE.Bone();
-  head.position.y = 0.345;
+  head.position.y = 0.36;
+  head.scale.setScalar(1.22); // chibi: head about a third of the height
   torso.add(head);
   torso.add(part(G.neck, skin, 0, 0.27, 0, false));
   const face = part(G.head, skin, 0, 0, 0);
@@ -293,7 +316,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     head.add(part(G.visor, dark, 0, 0.02, 0.1, false));
     const vslit = part(new THREE.BoxGeometry(0.012, 0.06, 0.03), dark, 0, -0.02, 0.105, false);
     head.add(vslit);
-    const crest = part(G.crest, teamMat, 0, 0.19, -0.01);
+    const crest = part(G.crest, teamMat, 0, 0.15, -0.01);
     head.add(crest);
     // Kite shield on the left forearm, facing outward
     const shield = new THREE.Group();
@@ -313,7 +336,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     const hood = part(G.hood, green, 0, 0.1, -0.015);
     hood.rotation.x = -0.18;
     head.add(hood, part(G.hoodBack, green, 0, 0.0, -0.02));
-    cape = capeBone(part(G.cloak, green, 0, 0.06, -0.01));
+    cape = capeBone(part(G.cloak, teamMat, 0, 0.06, -0.01)); // team cloak under the green hood
     const quiver = part(G.quiver, leather, 0.06, 0.16, -0.15);
     quiver.rotation.z = -0.45;
     torso.add(quiver);
@@ -329,8 +352,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     const feather = part(G.feather, teamMat, 0.08, 0.1, -0.03);
     feather.rotation.set(-0.5, 0, -0.7);
     head.add(feather);
-    const c = part(G.capelet, mat("#6a5a3a"), 0, 0.2, -0.005);
-    c.material = mat("#6a5a3a");
+    const c = part(G.capelet, teamMat, 0, 0.2, -0.005);
     torso.add(c); // shoulder capelet sits still
     const sat = part(G.satchel, leather, -0.15, -0.02, 0.02);
     sat.rotation.y = 0.3;
@@ -342,7 +364,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   } else {
     // oracle and forged: wide-brim pointed hat, beard for the oracle, rune halo for forged types
     const hatMat = cls === "oracle" ? mat("#3a2c6e") : mat(new THREE.Color("#23212c").lerp(rc, 0.3));
-    head.add(part(G.hatBrim, hatMat, 0, 0.07, 0), part(G.wizardHat, hatMat, 0, 0.2, -0.01).rotateX(-0.12));
+    head.add(part(G.hatBrim, hatMat, 0, 0.07, 0), part(G.wizardHat, hatMat, 0, 0.18, -0.01).rotateX(-0.12));
     const band = part(new THREE.CylinderGeometry(0.108, 0.11, 0.025, 8), forged ? runeMat : gold, 0, 0.095, 0, false);
     head.add(band);
     if (cls === "oracle") {
@@ -399,6 +421,9 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     gem = part(G.gem, gemMat, 0, tipY - 0.04, 0, false);
     staff.add(gem, part(G.gemCage, metal, 0, tipY - 0.04, 0, false));
   }
+  // Team pennant just under the head of the staff: reads red vs blue at whole-map zoom.
+  const pen = part(G.pennant, teamMat, 0.012, tipY - 0.25, 0, false);
+  if (cls !== "ranger") staff.add(pen); // the ranger's bow limb sits there; its cloak carries the colour
   staff.scale.setScalar(cls === "scout" ? 0.9 : 1);
 
   const scale = cls === "scout" ? 0.9 : cls === "knight" ? 1.07 : robed ? 1.02 : 1;
@@ -636,7 +661,7 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
       speed = o?.speed ?? 1;
     },
     tick,
-    setTeamColor(col) { c.baked.recolor("team", col ?? NEUTRAL); },
+    setTeamColor(col) { c.baked.recolor("team", lift(col ?? NEUTRAL)); },
     setGlow(kind) { glow = kind; },
     staffTip(out = new THREE.Vector3()) { return rig.gem.getWorldPosition(out); },
     onStrike: null,

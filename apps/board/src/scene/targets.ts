@@ -209,7 +209,10 @@ export class TargetView {
       this.titleTag = null;
     }
     this.ring.visible = this.selected || this.hovered;
-    this.baseRing.visible = this.target.status !== "resolved";
+    const open = this.target.status !== "resolved"; // resolved camps keep a muted footprint
+    const bm = this.baseRing.material as THREE.MeshBasicMaterial;
+    bm.color.set(open ? SEV_PIP[this.target.severity] ?? SEV_PIP[2] : "#d9d3bf");
+    bm.opacity = open ? 0.95 : 0.55;
     const m = this.ring.material as THREE.MeshBasicMaterial;
     m.color.set(this.selected ? "#f2e27a" : "#ffffff");
     m.opacity = this.selected ? 0.95 : 0.45;

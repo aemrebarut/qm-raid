@@ -44,6 +44,12 @@ export function buildBuilding(b: Building): BuildingView {
   ring.position.y = 0.03;
   ring.visible = false;
   group.add(ring);
+  // Always-on footprint (Emre 16:22): dark contact disc plus a ring in the building's colour, like units and camps.
+  const foot = new THREE.Mesh(new THREE.CircleGeometry(1.95, 48), new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.22, depthWrite: false }));
+  foot.rotation.x = -Math.PI / 2; foot.position.y = 0.02; foot.renderOrder = 1;
+  const footRing = new THREE.Mesh(new THREE.RingGeometry(1.8, 1.95, 48), new THREE.MeshBasicMaterial({ color: b.kind === "gbrain" ? "#8fc8ff" : b.kind === "river" ? "#ffb454" : "#ff8a6a", transparent: true, opacity: 0.85, depthWrite: false }));
+  footRing.rotation.x = -Math.PI / 2; footRing.position.y = 0.025; footRing.renderOrder = 2;
+  group.add(foot, footRing);
 
   let view: Omit<BuildingView, "setSelected" | "setHovered" | "group" | "id" | "kind" | "door" | "top" | "setWork" | "dispose"> & { setWork?: BuildingView["setWork"]; dispose?: () => void; top?: THREE.Vector3; door?: THREE.Vector3; glow?: (on: boolean) => void };
   if (artOn("buildings")) view = artBuilding(group, b.kind);

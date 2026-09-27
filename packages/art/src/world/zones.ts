@@ -109,6 +109,10 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
   const white = own(new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.8, flatShading: true }));
   const vcol = own(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }));
   const bannerMat = own(new THREE.MeshStandardMaterial({ map: bannerTex(), side: THREE.DoubleSide, roughness: 0.85, transparent: false, alphaTest: 0.5 }));
+  // Banners hang on shaded tower faces; a self glow in the instance colour keeps the zone identity saturated.
+  bannerMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * 0.38;");
+  };
 
   // Piece kinds (geometry in local space, instanced across zones)
   const wallGeo = own(worldUV(xf(B(1, WALL_H, WALL_T), [0, WALL_H / 2, 0]), 1));

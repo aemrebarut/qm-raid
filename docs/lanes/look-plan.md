@@ -82,3 +82,22 @@ Verdict: big step. The slate HUD, SVG icons, 3D portraits, hint strip, preset ca
 
 ### raid-ui-plan (newIssue.ts, loadout.ts)
 1. Spawn dialog and Loadout: shots next iteration (Loadout tab not mounted yet at 15:38). Keep to the tokens at the top; buttons one word, no helper sentences.
+
+## Iteration 3 (shots i3-*, ?art=on, 15:52)
+Verdict: it reads as one game now: world, slate HUD, 3D portraits, preset cards, spawn dialog, Library and Forge. What is left is density and the last raw strings. (i3 formation and workflow shots suffered from shared mock team drift; shoot.ts now builds teams locally and checks each state, 28fc9b7.)
+
+### raid-look-hud
+28. Unit side panel (i3-unit): tabs `ACTIVITY | LOADOUT` and then a second `ACTIVITY` header over an empty 100 px well. Drop the inner header; when there is no activity collapse the well (show only the message box).
+29. Loadout skins (i3-loadout): native checkboxes on the left; make them the right-aligned switches from hud 18 (classes on hud.css if raid-ui-plan's markup allows, else send them the class names). Empty instructions area needs a placeholder `Standing orders`.
+30. Feed line `Smoke Ranger 7 Recall: LUM-101 in billing for acme-...` (i3-proposals-1280): verb not label (`recalled`), no customer slug fragments.
+31. At 1280 the team chips show only `1 2 3`: keep the name when it fits (short names), at least the colour bar + number + formation icon.
+
+### raid-ui-hud (ordersBar.ts)
+3. Proposal rows truncate the issue id (`Ada > LUM-10...`, i3-proposals-1280): reserve a non-shrinking `Unit > LUM-102` span, drop the issue prose from the row (tooltip), Cancel and Adjust as icon buttons with hotkey marks, Go as the one gold text button. Run cards: `Needs you` pip, loops as pips, no `loops used up · loop 3/2`.
+
+### raid-ui-plan (newIssue.ts, loadout.ts)
+2. Spawn dialog (i3-spawn) is right. One nit: title placeholder `Leave empty for a random issue` -> `Title (optional)`.
+3. Loadout: switches on the right instead of left checkboxes (or expose the class hooks so raid-look-hud can skin them), placeholder `Standing orders`, model and effort as segmented pickers under the skills, Apply sticky at the bottom of the panel.
+
+### raid-ui-scene
+8. Forge progress plate over the smithy (`Smoke Ranger: reading the...`, i3-presets and i3-loadout) is still the old parchment tag with serif text: engrave it like the other labels (condensed caps name + a 3 px River-blue bar, no box), or hide it when the Forge overlay can show the same.

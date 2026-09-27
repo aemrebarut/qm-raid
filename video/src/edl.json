@@ -1,1 +1,1267 @@
-{}
+{
+  "orders": {
+    "id": "orders",
+    "src": "clips/orders.mp4",
+    "sfx": [
+      {
+        "file": "sfx_beam.wav",
+        "at": 9.59
+      },
+      {
+        "file": "sfx_orb.wav",
+        "at": 11.43
+      }
+    ],
+    "voSwap": {},
+    "segments": [
+      {
+        "from": 1.408,
+        "to": 4.808,
+        "rate": 1,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 4.808,
+        "to": 8.232,
+        "rate": 1,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 8.232,
+        "to": 16.408,
+        "rate": 1,
+        "src": "clips/orders.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 7.13,
+        "dur": 2.6,
+        "text": "Right-click a camp: the knight marches"
+      },
+      {
+        "at": 9.93,
+        "dur": 2.6,
+        "text": "Blue beam: recall from the Library (GBrain)"
+      },
+      {
+        "at": 12.73,
+        "dur": 2.6,
+        "text": "Gold orb: remembered for the whole army"
+      }
+    ],
+    "fx": [
+      {
+        "at": 2.2,
+        "kind": "callout",
+        "text": "KNIGHT|a real QM agent",
+        "x": 1051,
+        "y": 206
+      },
+      {
+        "at": 9.59,
+        "kind": "punchIn",
+        "x": 740,
+        "y": 464
+      },
+      {
+        "at": 9.59,
+        "kind": "calloutRecall",
+        "text": "RECALL|from GBrain, the Library",
+        "x": 740,
+        "y": 464
+      },
+      {
+        "at": 11.43,
+        "kind": "pagePop",
+        "text": "+1 page"
+      },
+      {
+        "at": 12.23,
+        "kind": "mascotCheer",
+        "text": "One more page!"
+      },
+      {
+        "at": 11.75,
+        "kind": "callout",
+        "text": "REAL QM REPLY|the issue, worked"
+      }
+    ],
+    "events": [
+      {
+        "name": "verdict_approved",
+        "at": 0
+      },
+      {
+        "name": "camp_resolved",
+        "at": 0
+      },
+      {
+        "name": "run_done",
+        "at": 0
+      },
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "select",
+        "at": 2.2
+      },
+      {
+        "name": "order_active",
+        "at": 6.87
+      },
+      {
+        "name": "order",
+        "at": 7.13
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 9.59
+      },
+      {
+        "name": "recall_beam",
+        "at": 9.59
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 9.77
+      },
+      {
+        "name": "recall_beam",
+        "at": 9.79
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.43
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.43
+      },
+      {
+        "name": "reply",
+        "at": 11.75
+      },
+      {
+        "name": "camp_resolved",
+        "at": 11.76
+      },
+      {
+        "name": "script_error",
+        "at": 15
+      },
+      {
+        "name": "end",
+        "at": 15
+      }
+    ],
+    "voAnchor": {
+      "vo_orders_1": 2.2,
+      "vo_orders_2": 9.59,
+      "vo_orders_3": 11.43
+    },
+    "seconds": 15,
+    "holdRate": 1,
+    "gapRate": 1
+  },
+  "teams": {
+    "id": "teams",
+    "src": "clips/teams.mp4",
+    "sfx": [
+      {
+        "file": "sfx_scroll.wav",
+        "at": 7.73
+      },
+      {
+        "file": "sfx_chime.wav",
+        "at": 11.88
+      }
+    ],
+    "voSwap": {},
+    "segments": [
+      {
+        "from": 6.917,
+        "to": 11.535,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 11.535,
+        "to": 13.502,
+        "rate": 12,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 13.502,
+        "to": 15.602,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 15.602,
+        "to": 16.232,
+        "rate": 12,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 16.232,
+        "to": 18.032,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 18.032,
+        "to": 19.189,
+        "rate": 12,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 19.189,
+        "to": 21.189,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 21.189,
+        "to": 23.039,
+        "rate": 12,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 23.039,
+        "to": 25.04,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 25.04,
+        "to": 31.846,
+        "rate": 12,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 31.846,
+        "to": 34.946,
+        "rate": 1.2,
+        "src": "clips/teams.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 4.25,
+        "dur": 2.6,
+        "text": "Form team: the Trio workflow"
+      },
+      {
+        "at": 7.73,
+        "dur": 2.6,
+        "text": "Scrolls fly: plan, fix, review"
+      },
+      {
+        "at": 11.88,
+        "dur": 2.6,
+        "text": "The reviewer gives the verdict"
+      }
+    ],
+    "fx": [
+      {
+        "at": 4.25,
+        "kind": "callout",
+        "text": "TRIO|planner, implementer, reviewer",
+        "x": 1679,
+        "y": 435
+      },
+      {
+        "at": 7.73,
+        "kind": "callout",
+        "text": "HANDOFF|the scroll flies",
+        "x": 635,
+        "y": 451
+      },
+      {
+        "at": 11.88,
+        "kind": "punchIn",
+        "x": 514,
+        "y": 429
+      },
+      {
+        "at": 11.88,
+        "kind": "approvedStamp"
+      },
+      {
+        "at": 13.08,
+        "kind": "mascotCheer",
+        "text": "Approved!",
+        "x": 514,
+        "y": 429
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "warden_trained",
+        "at": 0
+      },
+      {
+        "name": "select3",
+        "at": 1.67
+      },
+      {
+        "name": "form_team",
+        "at": 2.85
+      },
+      {
+        "name": "trio",
+        "at": 4.25
+      },
+      {
+        "name": "order",
+        "at": 6.05
+      },
+      {
+        "name": "order_active",
+        "at": 6.13
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 7.33
+      },
+      {
+        "name": "recall_beam",
+        "at": 7.33
+      },
+      {
+        "name": "reply",
+        "at": 7.73
+      },
+      {
+        "name": "order_active",
+        "at": 7.73
+      },
+      {
+        "name": "handoff",
+        "at": 7.73
+      },
+      {
+        "name": "handoff_1",
+        "at": 7.73
+      },
+      {
+        "name": "remember_orb",
+        "at": 8.06
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 9.11
+      },
+      {
+        "name": "recall_beam",
+        "at": 9.11
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 9.44
+      },
+      {
+        "name": "remember_orb",
+        "at": 9.44
+      },
+      {
+        "name": "reply",
+        "at": 9.57
+      },
+      {
+        "name": "order_active",
+        "at": 9.57
+      },
+      {
+        "name": "handoff",
+        "at": 9.57
+      },
+      {
+        "name": "handoff_2",
+        "at": 9.57
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 10.99
+      },
+      {
+        "name": "recall_beam",
+        "at": 10.99
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.88
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.88
+      },
+      {
+        "name": "verdict_approved",
+        "at": 11.88
+      },
+      {
+        "name": "camp_resolved",
+        "at": 11.88
+      },
+      {
+        "name": "run_done",
+        "at": 11.88
+      },
+      {
+        "name": "end",
+        "at": 14.03
+      }
+    ],
+    "voAnchor": {
+      "vo_teams_1": 1.67,
+      "vo_teams_2": 7.73,
+      "vo_teams_2b": 7.73,
+      "vo_teams_3": 11.88
+    },
+    "seconds": 14.03,
+    "holdRate": 1.2,
+    "gapRate": 12
+  },
+  "forge": {
+    "id": "forge",
+    "src": "clips/forge.mp4",
+    "sfx": [
+      {
+        "file": "sfx_hammer.wav",
+        "at": 13.28
+      }
+    ],
+    "voSwap": {},
+    "segments": [
+      {
+        "from": 0,
+        "to": 2.86,
+        "rate": 1.12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 2.86,
+        "to": 6.422,
+        "rate": 12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 6.422,
+        "to": 8.222,
+        "rate": 1.12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 8.222,
+        "to": 9.651,
+        "rate": 12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 9.651,
+        "to": 11.851,
+        "rate": 1.12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 11.851,
+        "to": 13.52,
+        "rate": 12,
+        "src": "clips/forge.mp4"
+      },
+      {
+        "from": 13.52,
+        "to": 22.889,
+        "rate": 1.12,
+        "src": "clips/forge.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 1.48,
+        "dur": 2.6,
+        "text": "The Forge: describe a new unit type"
+      },
+      {
+        "at": 6.97,
+        "dur": 2.6,
+        "text": "River-trained vs base model, held-out test orders"
+      },
+      {
+        "at": 13.28,
+        "dur": 2.6,
+        "text": "River-trained unit, straight to work"
+      }
+    ],
+    "fx": [
+      {
+        "at": 1.48,
+        "kind": "calloutRiver",
+        "text": "THE FORGE|River AI",
+        "x": 291,
+        "y": 483
+      },
+      {
+        "at": 7.27,
+        "kind": "scoreRace",
+        "text": "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders"
+      },
+      {
+        "at": 8.47,
+        "kind": "mascotCheer",
+        "text": "Trained beats base!",
+        "x": 1630,
+        "y": 496
+      },
+      {
+        "at": 13.28,
+        "kind": "punchIn",
+        "x": 1199,
+        "y": 216
+      },
+      {
+        "at": 13.28,
+        "kind": "forgedBurst",
+        "text": "Refund Ranger 8",
+        "x": 1199,
+        "y": 216
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 1.07
+      },
+      {
+        "name": "forge_open",
+        "at": 1.48
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 3.13
+      },
+      {
+        "name": "recall_beam",
+        "at": 3.13
+      },
+      {
+        "name": "described",
+        "at": 5.67
+      },
+      {
+        "name": "card",
+        "at": 6.97
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 8.41
+      },
+      {
+        "name": "remember_orb",
+        "at": 8.41
+      },
+      {
+        "name": "reply",
+        "at": 8.41
+      },
+      {
+        "name": "camp_resolved",
+        "at": 8.41
+      },
+      {
+        "name": "card",
+        "at": 10.58
+      },
+      {
+        "name": "unit_spawned",
+        "at": 13.27
+      },
+      {
+        "name": "train",
+        "at": 13.28
+      },
+      {
+        "name": "spawned",
+        "at": 13.28
+      },
+      {
+        "name": "script_error",
+        "at": 15.07
+      },
+      {
+        "name": "end",
+        "at": 15.07
+      }
+    ],
+    "voAnchor": {
+      "vo_forge_1": 1.48,
+      "vo_forge_2": 6.97,
+      "vo_forge_3": 13.28
+    },
+    "seconds": 15.07,
+    "holdRate": 1.12,
+    "gapRate": 12
+  },
+  "autopilot": {
+    "id": "autopilot",
+    "src": "clips/autopilot.mp4",
+    "sfx": [],
+    "voSwap": {},
+    "segments": [
+      {
+        "from": 2.032,
+        "to": 4.232,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 4.232,
+        "to": 5.126,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 5.126,
+        "to": 7.026,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 7.026,
+        "to": 9.409,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 9.409,
+        "to": 12.843,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 12.843,
+        "to": 25.898,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 25.898,
+        "to": 27.798,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 2.6,
+        "dur": 2.6,
+        "text": "New issue: a camp appears"
+      },
+      {
+        "at": 6.07,
+        "dur": 2.6,
+        "text": "Autopilot proposes, 15 s veto ring"
+      }
+    ],
+    "fx": [
+      {
+        "at": 2.6,
+        "kind": "callout",
+        "text": "NEW ISSUE|a new camp",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 3,
+        "kind": "mascotShock",
+        "text": "More monsters!",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 6.07,
+        "kind": "callout",
+        "text": "AUTOPILOT|15 s veto ring",
+        "x": 1729,
+        "y": 18
+      },
+      {
+        "at": 9.43,
+        "kind": "callout",
+        "text": "LET IT RIDE|order goes",
+        "x": 1729,
+        "y": 18
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "new_issue",
+        "at": 1.6
+      },
+      {
+        "name": "camp_spawned",
+        "at": 2.6
+      },
+      {
+        "name": "autopilot_on",
+        "at": 4.73
+      },
+      {
+        "name": "proposal",
+        "at": 6.07
+      },
+      {
+        "name": "proposal",
+        "at": 6.07
+      },
+      {
+        "name": "proposed",
+        "at": 6.07
+      },
+      {
+        "name": "veto_missing",
+        "at": 8.32
+      },
+      {
+        "name": "order_active",
+        "at": 9.43
+      },
+      {
+        "name": "order_active",
+        "at": 9.43
+      },
+      {
+        "name": "autopilot_go",
+        "at": 9.43
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.03
+      },
+      {
+        "name": "reply",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "reply",
+        "at": 11.03
+      },
+      {
+        "name": "autopilot_off",
+        "at": 11.03
+      },
+      {
+        "name": "end",
+        "at": 11.03
+      }
+    ],
+    "voAnchor": {
+      "vo_auto_1": 1.6,
+      "vo_auto_2": 6.07
+    },
+    "seconds": 11.03,
+    "holdRate": 1,
+    "gapRate": 10.4
+  },
+  "loadout": {
+    "id": "loadout",
+    "src": "mock-loadout/loadout.mp4",
+    "sfx": [],
+    "voSwap": {},
+    "segments": [
+      {
+        "from": 3.152,
+        "to": 4.652,
+        "rate": 1.06,
+        "src": "mock-loadout/loadout.mp4"
+      },
+      {
+        "from": 4.652,
+        "to": 8.959,
+        "rate": 12,
+        "src": "mock-loadout/loadout.mp4"
+      },
+      {
+        "from": 8.959,
+        "to": 10.259,
+        "rate": 1.06,
+        "src": "mock-loadout/loadout.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 0.28,
+        "dur": 2.6,
+        "text": "Loadout: the unit's standing orders"
+      }
+    ],
+    "fx": [],
+    "events": [
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "select",
+        "at": 0
+      },
+      {
+        "name": "loadout_open",
+        "at": 0.28
+      },
+      {
+        "name": "orders_chips",
+        "at": 1.56
+      },
+      {
+        "name": "skill",
+        "at": 1.66
+      },
+      {
+        "name": "save",
+        "at": 2.05
+      },
+      {
+        "name": "applied",
+        "at": 2.05
+      },
+      {
+        "name": "order",
+        "at": 3
+      },
+      {
+        "name": "order_active",
+        "at": 3
+      },
+      {
+        "name": "first_message",
+        "at": 3
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 3
+      },
+      {
+        "name": "recall_beam",
+        "at": 3
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 3
+      },
+      {
+        "name": "recall_beam",
+        "at": 3
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 3
+      },
+      {
+        "name": "remember_orb",
+        "at": 3
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 3
+      },
+      {
+        "name": "reply",
+        "at": 3
+      },
+      {
+        "name": "camp_resolved",
+        "at": 3
+      },
+      {
+        "name": "end",
+        "at": 3
+      }
+    ],
+    "voAnchor": {
+      "vo_loadout_1": 0.28
+    },
+    "seconds": 3,
+    "holdRate": 1.06,
+    "gapRate": 12
+  },
+  "command": {
+    "id": "command",
+    "src": "clips/autopilot.mp4",
+    "segments": [
+      {
+        "from": 2.032,
+        "to": 4.232,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 4.232,
+        "to": 5.126,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 5.126,
+        "to": 7.026,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 7.026,
+        "to": 9.409,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 9.409,
+        "to": 12.843,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 12.843,
+        "to": 25.898,
+        "rate": 10.4,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 25.898,
+        "to": 27.798,
+        "rate": 1,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 3.152,
+        "to": 4.652,
+        "rate": 1.06,
+        "src": "mock-loadout/loadout.mp4"
+      },
+      {
+        "from": 4.652,
+        "to": 8.959,
+        "rate": 12,
+        "src": "mock-loadout/loadout.mp4"
+      },
+      {
+        "from": 8.959,
+        "to": 10.259,
+        "rate": 1.06,
+        "src": "mock-loadout/loadout.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 2.6,
+        "dur": 2.6,
+        "text": "New issue: a camp appears"
+      },
+      {
+        "at": 6.07,
+        "dur": 2.6,
+        "text": "Autopilot proposes, 15 s veto ring"
+      },
+      {
+        "at": 11.31,
+        "dur": 2.6,
+        "text": "Loadout: the unit's standing orders"
+      }
+    ],
+    "fx": [
+      {
+        "at": 2.6,
+        "kind": "callout",
+        "text": "NEW ISSUE|a new camp",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 3,
+        "kind": "mascotShock",
+        "text": "More monsters!",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 6.07,
+        "kind": "callout",
+        "text": "AUTOPILOT|15 s veto ring",
+        "x": 1729,
+        "y": 18
+      },
+      {
+        "at": 9.43,
+        "kind": "callout",
+        "text": "LET IT RIDE|order goes",
+        "x": 1729,
+        "y": 18
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "new_issue",
+        "at": 1.6
+      },
+      {
+        "name": "camp_spawned",
+        "at": 2.6
+      },
+      {
+        "name": "autopilot_on",
+        "at": 4.73
+      },
+      {
+        "name": "proposal",
+        "at": 6.07
+      },
+      {
+        "name": "proposal",
+        "at": 6.07
+      },
+      {
+        "name": "proposed",
+        "at": 6.07
+      },
+      {
+        "name": "veto_missing",
+        "at": 8.32
+      },
+      {
+        "name": "order_active",
+        "at": 9.43
+      },
+      {
+        "name": "order_active",
+        "at": 9.43
+      },
+      {
+        "name": "autopilot_go",
+        "at": 9.43
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.03
+      },
+      {
+        "name": "reply",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "remember_orb",
+        "at": 11.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 11.03
+      },
+      {
+        "name": "reply",
+        "at": 11.03
+      },
+      {
+        "name": "autopilot_off",
+        "at": 11.03
+      },
+      {
+        "name": "end",
+        "at": 11.03
+      },
+      {
+        "name": "ready",
+        "at": 11.03
+      },
+      {
+        "name": "select",
+        "at": 11.03
+      },
+      {
+        "name": "loadout_open",
+        "at": 11.31
+      },
+      {
+        "name": "orders_chips",
+        "at": 12.59
+      },
+      {
+        "name": "skill",
+        "at": 12.69
+      },
+      {
+        "name": "save",
+        "at": 13.08
+      },
+      {
+        "name": "applied",
+        "at": 13.08
+      },
+      {
+        "name": "order",
+        "at": 14.03
+      },
+      {
+        "name": "order_active",
+        "at": 14.03
+      },
+      {
+        "name": "first_message",
+        "at": 14.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 14.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 14.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 14.03
+      },
+      {
+        "name": "recall_beam",
+        "at": 14.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 14.03
+      },
+      {
+        "name": "remember_orb",
+        "at": 14.03
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 14.03
+      },
+      {
+        "name": "reply",
+        "at": 14.03
+      },
+      {
+        "name": "camp_resolved",
+        "at": 14.03
+      },
+      {
+        "name": "end",
+        "at": 14.03
+      }
+    ],
+    "sfx": [],
+    "voSwap": {},
+    "voAnchor": {
+      "vo_auto_1": 1.6,
+      "vo_auto_2": 6.07,
+      "vo_loadout_1": 11.31
+    },
+    "seconds": 14.03
+  },
+  "hero": {
+    "src": "clips/hero.mp4",
+    "from": 0.5
+  }
+}

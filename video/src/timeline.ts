@@ -15,7 +15,8 @@ export const END_SECONDS = 4;
 export const TRANSITION_FRAMES = 8;
 
 // src overrides the clip src (the command montage cuts two captures together).
-export type Segment = { from: number; to: number; rate: number; src?: string };
+// zoom holds a scale around a fixed point (1920x1080 px) for the whole segment, e.g. the loadout panel.
+export type Segment = { from: number; to: number; rate: number; src?: string; zoom?: { s: number; x: number; y: number } };
 export type Caption = { at: number; dur: number; text: string };
 // Fx cues placed at capture markers, output seconds relative to the clip start.
 export type FxCue = { at: number; kind: string; text?: string; x?: number; y?: number };
@@ -42,6 +43,8 @@ export type Planned = {
   fx: FxCue[];
   events: { name: string; at: number }[];
   voAnchor: Record<string, number>;
+  sfx?: { file: string; at: number }[];
+  voSwap?: Record<string, string>;
 };
 export const planned = edl as unknown as Record<string, Planned>;
 
@@ -52,7 +55,9 @@ const base: ClipDef[] = [
   { id: "command", title: "Command", subtitle: "New issues, autopilot, loadout", src: null, segments: [], fallbackSeconds: 14, captions: [], fx: [] },
 ];
 
-export const clips: ClipDef[] = base.map((c) => {
+// With any planned capture, unplanned clips drop out (a failed capture is cut, the rest breathe).
+const anyPlanned = base.some((c) => planned[c.id]);
+export const clips: ClipDef[] = base.filter((c) => !anyPlanned || planned[c.id]).map((c) => {
   const p = planned[c.id];
   return p ? { ...c, src: p.src, segments: p.segments, captions: p.captions, fx: p.fx } : c;
 });

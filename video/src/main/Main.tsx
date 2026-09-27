@@ -23,13 +23,23 @@ export const sectionStarts = (): Record<string, number> => {
 
 // VO line start (seconds from its section start): the capture event it is anchored to (edl voAnchor), else the
 // manifest offset; pushed later so lines in a section never overlap.
-const placeVo = (tracks: VoTrack[]): { t: VoTrack; at: number }[] => {
+const placeVo = (tracks: VoTrack[], alts: VoTrack[]): { t: VoTrack; at: number }[] => {
+  const starts = sectionStarts();
+  const order = ["hero", "intro", ...clips.map((c) => c.id), "end"];
+  const len = (sec: string): number => {
+    const i = order.indexOf(sec);
+    const next = order[i + 1];
+    return next ? (starts[next] - starts[sec]) / FPS : END_FRAMES / FPS;
+  };
   const lastEnd: Record<string, number> = {};
-  return tracks.map((t) => {
-    const id = t.file.replace(/\.[a-z0-9]+$/, "");
-    const anchor = planned[t.section]?.voAnchor?.[id];
-    const want = anchor !== undefined ? Math.max(1.2, anchor - 0.2) : t.offset;
-    const at = Math.max(want, lastEnd[t.section] ?? 0);
+  const idOf = (t: VoTrack) => t.id ?? t.file.replace(/\.[a-z0-9]+$/, "");
+  return tracks.map((t0) => {
+    const swap = planned[t0.section]?.voSwap?.[idOf(t0)];
+    const t = (swap && alts.find((a) => idOf(a) === swap)) || t0;
+    const anchor = planned[t.section]?.voAnchor?.[idOf(t)];
+    const want = anchor !== undefined ? Math.max(1.1, anchor - 0.2) : t.offset;
+    // never overlap the previous line, never run past the section end
+    const at = Math.min(Math.max(want, lastEnd[t.section] ?? 0), Math.max(0, len(t.section) - t.duration - 0.1));
     lastEnd[t.section] = at + t.duration + 0.15;
     return { t, at };
   });
@@ -44,12 +54,19 @@ const AudioBed: React.FC = () => {
   return (
     <>
       {m.music ? <Audio src={staticFile(`audio/${m.music.file}`)} volume={m.music.volume ?? 0.25} /> : null}
-      {placeVo(m.tracks ?? []).map(({ t, at }, i) =>
+      {placeVo(m.tracks ?? [], m.alts ?? []).map(({ t, at }, i) =>
         starts[t.section] === undefined ? null : (
           <Sequence key={`vo${i}`} from={starts[t.section] + Math.round(at * FPS)} layout="none">
             <Audio src={staticFile(`audio/${t.file}`)} volume={t.volume ?? 1} />
           </Sequence>
         ),
+      )}
+      {clips.flatMap((c) =>
+        (planned[c.id]?.sfx ?? []).map((x, i) => (
+          <Sequence key={`csfx-${c.id}-${i}`} from={starts[c.id] + Math.round(x.at * FPS)} layout="none">
+            <Audio src={staticFile(`audio/${x.file}`)} volume={0.7} />
+          </Sequence>
+        )),
       )}
       {(m.sfx ?? []).map((x, i) => (
         <Sequence key={`sfx${i}`} from={Math.round(x.at * FPS)} layout="none">

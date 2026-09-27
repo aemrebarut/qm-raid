@@ -52,7 +52,9 @@ export const Clip: React.FC<{ c: ClipDef; index: number }> = ({ c, index }) => {
           at += len;
           return (
             <Sequence key={i} from={from} durationInFrames={len}>
-              <OffthreadVideo src={staticFile(g.src ?? c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
+              <AbsoluteFill style={g.zoom ? { transform: `scale(${g.zoom.s})`, transformOrigin: `${g.zoom.x}px ${g.zoom.y}px` } : undefined}>
+                <OffthreadVideo src={staticFile(g.src ?? c.src!)} startFrom={Math.round(g.from * FPS)} playbackRate={g.rate} muted />
+              </AbsoluteFill>
               {g.rate > 2 && len > 12 ? <FastForward rate={Math.round(g.rate)} /> : null}
             </Sequence>
           );

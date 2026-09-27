@@ -17,6 +17,8 @@ type Rule = {
   caps: Record<string, string>;
   // VO line id -> event it starts on
   vo: Record<string, string>;
+  // event -> sfx file under audio/
+  sfx?: Record<string, string>;
 };
 
 const TITLE = 1.0; // title card at the head of every clip
@@ -34,7 +36,8 @@ const RULES: Record<string, Rule> = {
       remember_orb: [{ kind: "pagePop", text: "+1 page" }, { kind: "mascotCheer", text: "One more page!", lead: 0.8 }],
     },
     caps: { order: "Right-click a camp: the knight marches", recall_beam: "Blue beam: recall from the Library (GBrain)", remember_orb: "Gold orb: remembered for the whole army" },
-    vo: { vo_orders_1: "select", vo_orders_2: "recall_beam", vo_orders_3: "reply", vo_orders_4: "remember_orb" },
+    vo: { vo_orders_1: "select", vo_orders_2: "recall_beam", vo_orders_3: "remember_orb" },
+    sfx: { recall_beam: "sfx_beam.wav", remember_orb: "sfx_orb.wav" },
   },
   teams: {
     target: 14,
@@ -46,18 +49,20 @@ const RULES: Record<string, Rule> = {
       verdict_changes: { kind: "mascotShock", text: "Changes!" },
     },
     caps: { trio: "Form team: the Trio workflow", "handoff*": "Scrolls fly: plan, fix, review", verdict_approved: "The reviewer gives the verdict" },
-    vo: { vo_teams_1: "select3", vo_teams_2: "order", vo_teams_3: "handoff*", vo_teams_4: "verdict_approved" },
+    vo: { vo_teams_1: "select3", vo_teams_2: "handoff*", vo_teams_2b: "handoff*", vo_teams_3: "verdict_approved", vo_teams_3b: "verdict_changes" },
+    sfx: { "handoff*": "sfx_scroll.wav", verdict_approved: "sfx_chime.wav" },
   },
   forge: {
     target: 15,
     hold: { forge_open: [0.8, 1.2], described: [1.2, 1], forge_submit: [0.3, 1], card: [0.3, 3.2], train: [0.3, 1], spawned: [0.3, 2], unit_spawned: [0.3, 2], order_active: [0.3, 1.5], recall_beam: [0.3, 1.5] },
     fx: {
       forge_open: { kind: "calloutRiver", text: "THE FORGE|River AI" },
-      card: [{ kind: "scoreRace", noXY: true, lead: 0.3 }, { kind: "mascotThink", text: "Trained beats base!", lead: 1.5 }],
+      card: [{ kind: "scoreRace", noXY: true, lead: 0.3, text: "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders" }, { kind: "mascotCheer", text: "Trained beats base!", lead: 1.5 }],
       spawned: [{ kind: "punchIn" }, { kind: "forgedBurst", text: "$name" }],
     },
     caps: { forge_open: "The Forge: describe a new unit type", card: "River-trained vs base model, held-out test orders", spawned: "River-trained unit, straight to work" },
-    vo: { vo_forge_1: "forge_open", vo_forge_2: "described", vo_forge_3: "card", vo_forge_4: "train" },
+    vo: { vo_forge_1: "forge_open", vo_forge_2: "card", vo_forge_3: "train" },
+    sfx: { train: "sfx_hammer.wav" },
   },
   autopilot: {
     target: 11, // command montage part 1 (14 s without a loadout capture)
@@ -69,14 +74,14 @@ const RULES: Record<string, Rule> = {
       autopilot_go: { kind: "callout", text: "LET IT RIDE|order goes" },
     },
     caps: { camp_spawned: "New issue: a camp appears", proposed: "Autopilot proposes, 15 s veto ring", veto: "Cancel one, let one go" },
-    vo: { vo_auto_1: "new_issue", vo_auto_2: "proposed", vo_auto_3: "veto" },
+    vo: { vo_auto_1: "new_issue", vo_auto_2: "proposed" },
   },
   loadout: {
     target: 3, // command montage part 2
     hold: { "loadout*": [0.3, 1.2], save: [0.3, 1.0] },
     fx: {},
     caps: { "loadout*": "Loadout: the unit's standing orders" },
-    vo: { vo_loadout_1: "loadout*", vo_loadout_2: "save" },
+    vo: { vo_loadout_1: "loadout*" },
   },
 };
 
@@ -114,6 +119,9 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
     gapRate = 1;
     const spare = T - H - G;
     wins[wins.length - 1][1] = Math.min(D, wins[wins.length - 1][1] + spare);
+    // Source too short to fill the slot: slow the holds a little (not below 0.7x) so sections keep their times.
+    const have = wins.reduce((a, w) => a + w[1] - w[0], 0) + G;
+    if (have < T - 0.1) holdRate = Math.max(0.7, (have - G) / (T - G));
   } else if (gapRate > MAX_FF) {
     // Holds alone overrun the slot: gaps at max fast-forward, holds sped up to fit (warns above 1.6x).
     gapRate = G > 0 ? MAX_FF : 1;
@@ -143,6 +151,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   const captions: { at: number; dur: number; text: string }[] = [];
   const events: { name: string; at: number }[] = [];
   const voAnchor: Record<string, number> = {};
+  const sfx: { file: string; at: number }[] = [];
   const seenFx = new Set<string>();
   let capEnd = title + 0.1;
   for (const e of doc.events) {
@@ -165,6 +174,8 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
         capEnd = s + CAP_DUR + 0.2;
       }
     }
+    const sk = rule.sfx && match(rule.sfx, e.name);
+    if (sk && !sfx.some((x) => x.file === rule.sfx![sk])) sfx.push({ file: rule.sfx![sk], at });
     for (const [vo, name] of Object.entries(rule.vo)) {
       if (voAnchor[vo] !== undefined) continue;
       if (name.endsWith("*") ? e.name.startsWith(name.slice(0, -1)) : e.name === name) voAnchor[vo] = at;
@@ -172,22 +183,37 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   }
   const total = segs.reduce((s, g) => s + Math.round(((g.to - g.from) / g.rate) * 30) / 30, 0);
   const src = `clips/${id}.${ext}`;
-  return { id, src, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
+  // Final verdict CHANGES (no approval in the take): the alt line replaces the approval line.
+  const voSwap: Record<string, string> = {};
+  if (voAnchor.vo_teams_3b !== undefined && voAnchor.vo_teams_3 === undefined) voSwap.vo_teams_3 = "vo_teams_3b";
+  // --warden: the take shows the Rule Warden reviewing (checked on the frames), so the line may name it.
+  if (id === "teams" && process.argv.includes("--warden")) voSwap.vo_teams_2 = "vo_teams_2b";
+  return { id, src, sfx, voSwap, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
 const dir = process.argv[2] ?? join(import.meta.dir, "../public/clips");
 const edlPath = join(import.meta.dir, "../src/edl.json");
-const prev = existsSync(edlPath) ? JSON.parse(readFileSync(edlPath, "utf8")) : {};
-const edl: Record<string, unknown> = { ...prev };
-const loadoutCaptured = ["mp4", "webm"].some((x) => existsSync(join(dir, `loadout.${x}`))) && existsSync(join(dir, "loadout.markers.json"));
+const edl: Record<string, unknown> = {};
+// --real: skip mock captures (the final take). Loadout always comes from the approved mock close-up.
+const realOnly = process.argv.includes("--real");
+const LOADOUT_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/mock-loadout");
+const dirFor = (id: string) => (id === "loadout" && existsSync(LOADOUT_DIR) ? LOADOUT_DIR : dir);
+const loadoutCaptured = ["mp4", "webm"].some((x) => existsSync(join(dirFor("loadout"), `loadout.${x}`))) && existsSync(join(dirFor("loadout"), "loadout.markers.json"));
 for (const [id, rule] of Object.entries(RULES)) {
-  const f = join(dir, `${id}.markers.json`);
-  const ext = ["mp4", "webm"].find((x) => existsSync(join(dir, `${id}.${x}`)));
+  const d = dirFor(id);
+  const f = join(d, `${id}.markers.json`);
+  const ext = ["mp4", "webm"].find((x) => existsSync(join(d, `${id}.${x}`)));
   if (!existsSync(f) || !ext) {
     console.log(`${id}: no capture`);
+    delete edl[id];
     continue;
   }
   const doc = JSON.parse(readFileSync(f, "utf8"));
+  if (realOnly && doc.backend === "mock" && id !== "loadout") {
+    console.log(`${id}: mock capture skipped (--real)`);
+    delete edl[id];
+    continue;
+  }
   const p =
     id === "loadout"
       ? plan(id, rule, doc, ext, 0)
@@ -196,13 +222,16 @@ for (const [id, rule] of Object.entries(RULES)) {
     console.log(`${id}: no usable events`);
     continue;
   }
+  if (d !== dir) p.src = p.src.replace("clips/", "mock-loadout/");
+  p.segments = p.segments.map((g) => ({ ...g, src: p.src }));
   edl[id] = p;
-  console.log(`${id}: ${p.seconds}s (target ${rule.target}), hold ${p.holdRate}x, gaps ${p.gapRate}x, ${p.segments.length} segs, ${p.fx.length} fx, ${p.captions.length} caps, vo ${Object.keys(p.voAnchor).join(",")}`);
+  console.log(`${id} [${doc.backend}]: ${p.seconds}s (target ${rule.target}), hold ${p.holdRate}x, gaps ${p.gapRate}x, ${p.segments.length} segs, ${p.fx.length} fx, ${p.captions.length} caps, vo ${Object.keys(p.voAnchor).join(",")}`);
 }
 // Command montage: autopilot, then the short loadout edit.
 type P = NonNullable<ReturnType<typeof plan>>;
 const ap = edl.autopilot as P | undefined;
 const lo = edl.loadout as P | undefined;
+if (!ap) delete edl.command;
 if (ap) {
   const off = ap.seconds;
   edl.command = {
@@ -212,6 +241,8 @@ if (ap) {
     captions: [...ap.captions, ...(lo?.captions ?? []).map((c) => ({ ...c, at: round(c.at + off, 2) }))],
     fx: [...ap.fx, ...(lo?.fx ?? []).map((x) => ({ ...x, at: round(x.at + off, 2) }))],
     events: [...ap.events, ...(lo?.events ?? []).map((e) => ({ ...e, at: round(e.at + off, 2) }))],
+    sfx: [...ap.sfx, ...(lo?.sfx ?? []).map((x) => ({ ...x, at: round(x.at + off, 2) }))],
+    voSwap: {},
     voAnchor: { ...ap.voAnchor, ...Object.fromEntries(Object.entries(lo?.voAnchor ?? {}).map(([k, v]) => [k, round(v + off, 2)])) },
     seconds: round(off + (lo?.seconds ?? 0), 2),
   };

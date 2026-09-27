@@ -357,3 +357,19 @@ samples ranged 413 to 508 during changing mock states; this is not an off/on
 benchmark. UI review reports a short 61 FPS / 436-call Metal sample, not a
 sustained performance guarantee. A4 performance/pitch captures remain with
 the milestone owners. All reviewer mutations stayed on 4619/4618.
+
+### Explicit A2 and A3 verdict, 16:00 PDT
+
+**A2 PASS. A3 PASS. No blocking Art findings.** Covered scene commits:
+4caaa56, 74466f8, a727e52, cdd1e5e. Covered latest Art commits: 7eb50a6,
+28d6c15, c1f21f8, bc80e40, plus 7e2181d (reviewed showroom-only removal of
+redundant unit shadow blobs). Earlier accepted asset commits remain included.
+
+At capture boundaries the board-facing Art and scene source paths were clean;
+the accepted source is reproducible from 404327bf/f73a5e0. By the final report,
+7e2181d had committed the showroom edit and packages/art was clean. A later
+uncommitted scene/buildings.ts change appeared: Forge progress-banner styling.
+It was not in the captured source, so this PASS must not be represented as a
+review of that later visual change or as a claim the current entire tree is
+clean. Sent the explicit PASS and this source boundary to raid-art-plan and
+raid-look-dir. Analyst retains the final default-on decision.

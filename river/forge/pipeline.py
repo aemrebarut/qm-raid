@@ -16,6 +16,7 @@ import json
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from forge import datagen, env
@@ -39,23 +40,45 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
     n_eval = max(12, args.examples // 5)
     train_p, eval_p = datagen.build_split(spec, world, args.examples - n_eval, n_eval, seed=args.seed)
     prompts = train_p + eval_p
-    rows: list[dict] = []
+    contexts = {} if dry else datagen.load_contexts(args.brain_url, world)
     teacher = None if dry else datagen.RiverTeacher.from_env(args.teacher_model)
+    users = [datagen.user_message(p["order"], contexts.get(p["meta"]["targetId"], "")) for p in prompts]
+    responses: list[str | None] = [None] * len(prompts)
+    fallbacks = 0
+    if teacher is not None:
+        emit(status="generating", progress=0.06, stage=f"teacher {args.teacher_model} writing {len(prompts)} examples")
+        done = 0
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            futs = {pool.submit(teacher.respond, spec, u): i for i, u in enumerate(users)}
+            for f in as_completed(futs):
+                i = futs[f]
+                try:
+                    responses[i] = f.result()
+                except Exception as e:
+                    log(f"teacher failed on example {i}: {type(e).__name__}: {str(e)[:120]}")
+                done += 1
+                if done % 8 == 0 or done == len(prompts):
+                    emit(status="generating", progress=0.06 + 0.24 * done / len(prompts),
+                         stage=f"teacher wrote {done}/{len(prompts)} examples", examples=done)
+    rows: list[dict] = []
     for i, p in enumerate(prompts):
-        if teacher is not None:
-            response = teacher.respond(spec, p)
-        else:
+        response = responses[i]
+        if response is None:
+            if teacher is not None:
+                fallbacks += 1
             response = datagen.template_response(spec, p, world)
             if dry:
                 time.sleep(args.dry_seconds * 0.25 / max(1, len(prompts)))
+                if i % 5 == 0 or i == len(prompts) - 1:
+                    emit(status="generating", progress=0.05 + 0.25 * (i + 1) / len(prompts),
+                         stage="writing examples (template)", examples=i + 1)
         rows.append({"messages": [
             {"role": "system", "content": datagen.system_prompt(spec)},
-            {"role": "user", "content": p["order"]},
+            {"role": "user", "content": users[i]},
             {"role": "assistant", "content": response},
         ], "meta": p["meta"]})
-        if i % 5 == 0 or i == len(prompts) - 1:
-            emit(status="generating", progress=0.05 + 0.25 * (i + 1) / len(prompts),
-                 stage=f"writing examples ({'template' if teacher is None else 'teacher'})", examples=i + 1)
+    if fallbacks:
+        log(f"{fallbacks} examples fell back to the template generator")
     train, evalset = rows[:len(train_p)], rows[len(train_p):]
     out.mkdir(parents=True, exist_ok=True)
     for name, data in (("train.jsonl", train), ("eval.jsonl", evalset)):
@@ -94,7 +117,7 @@ def main() -> int:
     ap.add_argument("--examples", type=int, default=160)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--brain-url", default=os.environ.get("BRAIN_URL", "http://127.0.0.1:4616"))
-    ap.add_argument("--teacher-model", default=os.environ.get("FORGE_TEACHER_MODEL", ""))
+    ap.add_argument("--teacher-model", default=os.environ.get("FORGE_TEACHER_MODEL", "Qwen/Qwen3.5-122B-A10B-FP8"))
     ap.add_argument("--base-model", default=os.environ.get("FORGE_BASE_MODEL", "Qwen/Qwen3.5-9B"))
     args = ap.parse_args()
     out = Path(args.out)

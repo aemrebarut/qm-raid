@@ -70,6 +70,26 @@ def load_world(brain_url: str) -> dict:
     return FALLBACK_WORLD
 
 
+def load_contexts(brain_url: str, world: dict) -> dict:
+    """Brain recall context per target (read-only POST /recall), so training prompts look like serve-time prompts."""
+    out = {}
+    for t in world["targets"]:
+        try:
+            req = urllib.request.Request(f"{brain_url}/recall", method="POST", headers={"content-type": "application/json"},
+                                         data=json.dumps({"componentId": t["component"], "targetId": t["id"], "unitId": "forge-datagen"}).encode())
+            with urllib.request.urlopen(req, timeout=5) as r:
+                ctx = json.load(r).get("context", "")
+            out[t["id"]] = ctx if isinstance(ctx, str) else json.dumps(ctx)
+        except Exception:
+            out[t["id"]] = ""
+    return out
+
+
+def user_message(order: str, context: str) -> str:
+    """The user turn for training, eval and serving (river/forge/serve.py uses this too)."""
+    return order + ("\n\nWhat the team brain knows:\n" + context[:1500] if context else "")
+
+
 def _customers(t: dict, world: dict) -> str:
     names = {c.get("id"): c.get("name") for c in world.get("customers", [])}
     out = [names.get(c) or c.split("/")[-1].replace("-", " ").title() for c in t.get("customers", [])]
@@ -150,10 +170,11 @@ class RiverTeacher:
         import river_client as river
         return cls(river.Client(api_key=key), model)
 
-    def respond(self, spec: TypeSpec, p: dict) -> str:
+    def respond(self, spec: TypeSpec, user: str) -> str:
         res = self.client.chat_complete(
-            [{"role": "system", "content": system_prompt(spec)}, {"role": "user", "content": p["order"]}],
-            base_model=self.model, max_tokens=400, temperature=0.7,
+            [{"role": "system", "content": system_prompt(spec)}, {"role": "user", "content": user}],
+            base_model=self.model, max_tokens=450, temperature=0.7,
+            chat_template_kwargs={"enable_thinking": False}, timeout=120,
         )
         body = json.loads(res.response_json)
         return body["choices"][0]["message"]["content"].strip()

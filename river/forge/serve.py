@@ -37,10 +37,8 @@ def world() -> dict:
 
 def messages(req: dict) -> list[dict]:
     spec = datagen.TypeSpec(req["typeId"], req["name"], req["description"])
-    user = req["order"]
-    if req.get("context"):
-        user += "\n\nWhat the team brain knows:\n" + req["context"][:2500]
-    return [{"role": "system", "content": datagen.system_prompt(spec)}, {"role": "user", "content": user}]
+    return [{"role": "system", "content": datagen.system_prompt(spec)},
+            {"role": "user", "content": datagen.user_message(req["order"], req.get("context") or "")}]
 
 
 def dry_answer(req: dict) -> str:

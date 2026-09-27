@@ -242,7 +242,7 @@ export class UnitView {
       pos.copy(this.dest); // teleport (reset, respawn)
       this.moving = false;
     } else if (dist > 0.01) {
-      const speed = Math.max(2.4, dist * 1.6); // catch up if the engine moved us far
+      const speed = Math.max(3.0, dist * 2.2); // engine steps 3 tiles/s (diagonals too); catch up without stutter
       const step = Math.min(dist, speed * dt);
       pos.addScaledVector(to.normalize(), step);
       this.facing = turn(this.facing, Math.atan2(to.x, to.z), dt * 10);

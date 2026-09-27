@@ -78,7 +78,16 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       seenT.add(t.id);
       let v = targets.get(t.id);
       if (!v) { v = new TargetView(t); targets.set(t.id, v); targetsG.add(v.group); }
-      else v.update(t);
+      else {
+        const was = v.target.status;
+        v.update(t);
+        if (was !== "resolved" && t.status === "resolved") {
+          const p = v.group.position.clone().setY(0.3);
+          fx.burst(p, "#9dff7a", 2.0, 1.0);
+          fx.after(0.25, () => fx.burst(p, "#ffd45a", 1.4, 0.8));
+          fx.text(p.clone().setY(1.2), `Resolved ${t.issue}`, { height: 0.3, dur: 3 });
+        }
+      }
     }
     for (const [id, v] of targets) if (!seenT.has(id)) { targetsG.remove(v.group); v.dispose(); targets.delete(id); }
 
@@ -110,7 +119,13 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       const tgt = order ? s.targets.find((t) => t.id === order.targetId) : undefined;
       v.faceTo = tgt ? tileToWorld(tgt.pos.x, tgt.pos.y) : null;
     }
-    for (const [id, v] of units) if (!seenU.has(id)) { unitsG.remove(v.group); v.dispose(); units.delete(id); }
+    for (const [id, v] of units) {
+      if (seenU.has(id)) continue;
+      fx.burst(v.group.position.clone().setY(0.2), "#cfc8b8", 0.9, 0.6); // retired
+      unitsG.remove(v.group);
+      v.dispose();
+      units.delete(id);
+    }
 
     // Forge at work while a forged type is generating, training or evaluating
     const busy = s.unitTypes.filter((t) => t.source === "forge" && (t.status === "generating" || t.status === "training" || t.status === "evaluating"));

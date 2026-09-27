@@ -115,7 +115,7 @@ render acceptance. A1 visual signoff is pending this fix and the hero assets.
 
 code/art was not yet published when queried at 15:16; lead owns that page.
 
-## 2026-09-27 15:31 PDT: asset reviews and fixes
+## 2026-09-27 15:30 PDT: asset reviews and fixes
 
 Read the diffs for `017bf0c`, `fd42123`, `727f7da`, `b6a2573`,
 `c7e4c30`, `9b0cac8`, `65f5f87` and `8d7e511`. Tests run in the shared
@@ -202,3 +202,52 @@ the inspected console, no repeated lighting-update exception. Foreground
 stats varied from about 87 to 103 fps during brief observation; this is not a
 sustained board performance measurement. Focused animation and beam visual
 checks remain in progress. No second showroom was started.
+
+## 2026-09-27 15:35 PDT: A1 PASS, hero showroom
+
+Reviewed additional commits `bebe165`, `6993797`, `43a6ddc`, `92e2b75`,
+`8e4a644`, `74d62a9`, `7b3217f`, `aaed54f`, `1736c4a`, `c8b8fcd` and
+`923edce`; checked the zones fixes in `cc42278`. A1 first-hero acceptance
+passes: animated Knight, Library, monster and blue recall beam render at the
+board camera angle. This is not A2 board-integration signoff.
+
+- Knight idle/walk/work/cast/celebrate captures show different poses, readable
+  team tabard/pennant and intact rigid skinning. The albedo/head pass keeps
+  the 2 to 3 mesh budget. setTeamColor(green) produces the same vertex-colour
+  arrays as a freshly built green unit for all four classes and a forged type.
+- Library shows intact slate roof slopes, stone courses, rose window and
+  leaded glass. Blue recall grows from its orb toward the raised staff with
+  glyphs/rune circle; gold remember travels back toward the Library. FX
+  lifecycle/arrival tests remain green. The 1.8x workflow scroll change adds
+  no signature or lifetime regression.
+- **Closed target budget P1:** aaed54f uses 2/6/6/6 meshes for bug severity
+  1/2/3/4 and two for every feature severity. Sibling-disposal and finite
+  state smoke pass. Ogre is visually distinct from the red tents.
+- **Closed two target P2s:** hit then defeat left skin emissive at .7, and
+  reopening called resetPose/tick before assigning the new state, retaining
+  grey skin and collapsed crystal rings. c8b8fcd clears flash on resolved
+  entry and assigns state first. Five package tests now pass, including
+  round trips for all eight camps. Headless engaged/defeat/open captures
+  confirm the ogre collapses, greys, and restores its standing olive form.
+- **Closed zones P2s:** 923edce allocated a Set every tick and its gate
+  furniture intruded below the scaled unit head. cc42278 caches the waving
+  instances and raises the gate/portcullis. A centreline ray through the
+  raised south gate is clear at y=.8, 1.0 and 1.2. Instance matrices remain
+  finite after 120 ticks; disposing A affects zero B resources. Sample zone
+  has 20 meshes; four-zone terrain exhibit reports 37, below the combined
+  150 budget. World composition/props changes are being reviewed separately.
+- Showroom rig guard and watcher/export changes reviewed. Existing 4620
+  service and package typecheck pass. A transient missing ./props import
+  occurred while world.ts was being authored; it is resolved in current tree.
+
+Visual evidence is in temporary local screenshots under /tmp/art-review-*,
+using the lead-supplied Playwright/SwiftShader tool, then a readiness-aware
+variant. Fixed-delay captures initially returned blank with no console errors;
+waiting for window.showroom.placed produced actual renders. Captured unit,
+monster and FX action sequences reported no console errors. Software-rendered
+FPS is not laptop GPU performance evidence.
+
+Two showroom P2s were sent to the lead: ?focus=Knight did not match the actual
+Unit: knight name, and fixed zoom cropped the Library steeple. 25df8c4 is the
+proposed fix and is under visual recheck. A1 verdict sent to raid-art-plan;
+code/art-review updated. Board 4619 with ?art=on is the next acceptance gate.

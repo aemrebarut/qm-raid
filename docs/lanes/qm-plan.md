@@ -61,5 +61,15 @@ Status 15:33: 438d9c9 (model-drop warning, gpt-* pass-through before the catalog
 ### M5 (16:25): hardening
 14. Reconnect run streams, retry transient 5xx once, restart-safe unit map, demo path twice in a row. Accept: kill and restart the bridge mid-demo, engine keeps running, next order works.
 
+### Loadout (Emre 15:40, due 16:15; spec docs/CONTRACT.md "Loadout", owners docs/lanes/flow.md)
+What QM can change per unit without core changes (source read by raid-qm-plan and raid-qm-rev, 15:36):
+- Model and effort: per turn (portal /api/turn model, thinkingLevel).
+- System prompt: org SOUL plus the conversation scope's SOUL (resolution-service.ts:60). A scope SOUL is written by an agent turn in that scope with its capability (core POST /v1/soul, surface.ts:1345). The portal turn accepts scopeId group:<project> (web-ui server index.ts:351), and POST /api/projects creates one. The portal does not relay core gatewayContext.instructions.
+- Skills: company skills are visible to every unit; per-unit extras only as project-scoped skills (POST /api/skills {scopeId}).
+- Plugins: MCP servers and connectors are org-wide with a global enabled flag; no per-scope, session or turn selection (mcp-tool-service.ts:106,141; connector-client-store.ts:130). Plugin toggles are standing-order preferences, never claimed as enforced; GBrain is always on.
+Probe B (15:37, /tmp/probe-b.ts): a fresh project, a turn that set its SOUL (HTTP 200, version 1), and the next turn obeyed it (reply began HALBERD); a personal-scope control did not. Group-scope turns end with result.status silent, and the reply is the last web post tool call.
+15. A (approved, due 16:15): GET /catalog (QM skills plus enabled MCP servers, 30 s cache, fixed fallback); PATCH /units/:id {team?, loadout?, model?, effort?} persisted; POST /units takes an optional loadout; a loadout change queues one 'Loadout changed' marker turn in the unit's stable conversation (no orderId, no terminal); every order restates standing orders and the loadout after the header. Accept: fake-QM tests, and bridge-smoke PATCHes a loadout and sees it in the next order text.
+16. B (approved stretch, flag LOADOUT_SOUL=1): each unit gets its own QM project scope (created once, reused on respawn); turns pass scopeId; the reply comes from the last web post; a loadout change writes the scope SOUL through the marker turn (content base64, HTTP 200 required). Accept: qmtest units on the test path pass raid-qm-rev by 16:25, then it rides the QM_THREAD_NS bump before the demo; else ship A only.
+
 ## Reviewer checklist (raid-qm-rev)
 Contract v3 shapes (orderId on activity, reply, error; exactly one terminal event per order), bind 127.0.0.1, `/health`, no secrets in code, logs or commits (`git show <sha> | grep -iE "secret|token|key"`), no imports from `qm/`, degrade on QM down, smoke command passes.

@@ -3,6 +3,7 @@
 // facing +z, inside a radius of about 0.35 + 0.1 * severity.
 import * as THREE from "three";
 import type { TargetArt, TargetOpts, TargetState } from "./types";
+import { bakeRigid } from "./rigid";
 
 // ---------- shared resources ----------
 
@@ -107,13 +108,13 @@ interface Actor {
   arm?: THREE.Object3D;
   head?: THREE.Object3D;
   legs?: THREE.Object3D[];
-  flames?: THREE.Mesh[];
+  flames?: THREE.Object3D[];
   /** Direction the actor falls on defeat (radians around y). */
   fall: number;
 }
 
 interface Build {
-  root: THREE.Group;
+  root: THREE.Bone;
   actors: Actor[];
   /** Materials that flash white on hit and turn grey on defeat. */
   skins: THREE.MeshLambertMaterial[];
@@ -125,7 +126,43 @@ interface Build {
 }
 
 function newBuild(): Build {
-  return { root: new THREE.Group(), actors: [], skins: [], glows: [], radius: 0.4, height: 0.5, owned: [] };
+  return { root: new THREE.Bone(), actors: [], skins: [], glows: [], radius: 0.4, height: 0.5, owned: [] };
+}
+
+const skinCache = new Map<string, THREE.MeshLambertMaterial>();
+/** Creature skin: merged into the vertex-coloured "skin" bucket, which flashes on hit and greys on defeat. */
+function skinMat(color: THREE.ColorRepresentation) {
+  const key = new THREE.Color(color).getHexString();
+  let m = skinCache.get(key);
+  if (!m) {
+    m = new THREE.MeshLambertMaterial({ color, flatShading: true });
+    m.userData.bucket = "skin";
+    skinCache.set(key, m);
+  }
+  return m;
+}
+const clothCache = new Map<string, THREE.MeshLambertMaterial>();
+/** Tent hides and banners: double-sided "cloth" bucket. */
+function clothMat(color: THREE.ColorRepresentation) {
+  const key = new THREE.Color(color).getHexString();
+  let m = clothCache.get(key);
+  if (!m) {
+    m = new THREE.MeshLambertMaterial({ color, flatShading: true, side: THREE.DoubleSide });
+    m.userData.bucket = "cloth";
+    clothCache.set(key, m);
+  }
+  return m;
+}
+/** Emissive glow (eyes, fire, crystals): one material per colour per camp, kept as its own draw. */
+function glowMat(b: Build, color: THREE.ColorRepresentation, emissive: THREE.ColorRepresentation, crystal = false) {
+  const key = `${new THREE.Color(color).getHexString()}|${new THREE.Color(emissive).getHexString()}`;
+  const hit = b.glows.find((m) => m.userData.key === key);
+  if (hit) return hit;
+  const m = ownedMat(b, color, emissive, b.glows);
+  m.userData.key = key;
+  m.userData.bake = "own";
+  if (crystal) b.skins.push(m);
+  return m;
 }
 
 function ownedMat(b: Build, color: THREE.ColorRepresentation, emissive?: THREE.ColorRepresentation, list?: THREE.MeshLambertMaterial[]) {
@@ -139,8 +176,8 @@ function ownedMat(b: Build, color: THREE.ColorRepresentation, emissive?: THREE.C
 }
 
 function slime(b: Build, size: number, x: number, z: number, color: string, phase: number) {
-  const skin = ownedMat(b, color, new THREE.Color(color).multiplyScalar(0.25), b.skins);
-  const g = new THREE.Group();
+  const skin = skinMat(color);
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   const body = part(G.blob, skin, 0, 0.16, 0);
   body.scale.set(1, 0.8, 1);
@@ -162,10 +199,10 @@ function slime(b: Build, size: number, x: number, z: number, color: string, phas
 }
 
 function goblin(b: Build, x: number, z: number, rot: number, skinColor: string, opts: { chief?: boolean; weapon: "spear" | "club"; war: string; phase: number; size?: number }) {
-  const skin = ownedMat(b, skinColor, undefined, b.skins);
+  const skin = skinMat(skinColor);
   const leather = mat("#5a3a22"), wood = mat("#6b4a2b"), bone = mat("#e8dcc0"), metal = mat("#8d949c");
-  const eyeM = ownedMat(b, "#ffe14a", "#ffb000", b.glows);
-  const g = new THREE.Group();
+  const eyeM = glowMat(b, "#ffe14a", "#ffb000");
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   g.rotation.y = rot;
   const hips = new THREE.Group();
@@ -173,14 +210,14 @@ function goblin(b: Build, x: number, z: number, rot: number, skinColor: string, 
   g.add(hips);
   const legs: THREE.Object3D[] = [];
   for (const s of [-1, 1]) {
-    const l = new THREE.Group();
+    const l = new THREE.Bone();
     l.position.x = s * 0.035;
     l.add(part(G.gLeg, skin));
     hips.add(l);
     legs.push(l);
   }
   hips.add(part(G.gBody, leather, 0, 0, 0), part(G.gLoin, mat(opts.war), 0, 0.01, 0));
-  const head = new THREE.Group();
+  const head = new THREE.Bone();
   head.position.y = 0.2;
   hips.add(head);
   const h = part(G.gHead, skin);
@@ -204,7 +241,7 @@ function goblin(b: Build, x: number, z: number, rot: number, skinColor: string, 
   const armL = part(G.gArm, skin, -0.085, 0.12, 0);
   armL.rotation.z = -0.25;
   hips.add(armL);
-  const arm = new THREE.Group();
+  const arm = new THREE.Bone();
   arm.position.set(0.085, 0.12, 0);
   arm.add(part(G.gArm, skin));
   const hand = new THREE.Group();
@@ -226,10 +263,10 @@ function goblin(b: Build, x: number, z: number, rot: number, skinColor: string, 
 }
 
 function ogre(b: Build, x: number, z: number, rot: number, war: string) {
-  const skin = ownedMat(b, "#a8563a", undefined, b.skins);
+  const skin = skinMat("#c2603e");
   const leather = mat("#4a2e1a"), wood = mat("#5e4027"), bone = mat("#efe4c8");
-  const eyeM = ownedMat(b, "#ff5a2a", "#ff2a00", b.glows);
-  const g = new THREE.Group();
+  const eyeM = glowMat(b, "#ffe14a", "#ffb000");
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   g.rotation.y = rot;
   const hips = new THREE.Group();
@@ -237,7 +274,7 @@ function ogre(b: Build, x: number, z: number, rot: number, war: string) {
   g.add(hips);
   const legs: THREE.Object3D[] = [];
   for (const s of [-1, 1]) {
-    const l = new THREE.Group();
+    const l = new THREE.Bone();
     l.position.x = s * 0.09;
     l.add(part(G.oLeg, skin));
     hips.add(l);
@@ -250,7 +287,7 @@ function ogre(b: Build, x: number, z: number, rot: number, war: string) {
   loin.scale.set(2, 1.4, 2);
   hips.add(loin);
   for (const s of [-1, 1]) hips.add(part(G.fur, mat("#6a5540"), s * 0.19, 0.4, -0.01));
-  const head = new THREE.Group();
+  const head = new THREE.Bone();
   head.position.set(0, 0.46, 0.05);
   hips.add(head);
   const hd = part(G.oHead, skin);
@@ -266,7 +303,7 @@ function ogre(b: Build, x: number, z: number, rot: number, war: string) {
   armL.rotation.z = -0.3;
   hips.add(armL);
   armL.add(part(G.oFist, skin, 0, -0.28, 0));
-  const arm = new THREE.Group();
+  const arm = new THREE.Bone();
   arm.position.set(0.25, 0.38, 0);
   arm.add(part(G.oArm, skin));
   arm.add(part(G.oFist, skin, 0, -0.28, 0));
@@ -288,11 +325,10 @@ function ogre(b: Build, x: number, z: number, rot: number, war: string) {
 }
 
 function tent(b: Build, x: number, z: number, rot: number, hide: string, size = 1) {
-  const g = new THREE.Group();
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   g.rotation.y = rot;
-  const cloth = ownedMat(b, hide);
-  cloth.side = THREE.DoubleSide;
+  const cloth = clothMat(hide);
   g.add(part(G.tent, cloth), part(G.tentPole, mat("#5a3d22"), 0, 0, 0, false));
   for (let i = 0; i < 3; i++) {
     const p = part(G.tentPole, mat("#5a3d22"), 0, 0.27, 0, false);
@@ -306,7 +342,7 @@ function tent(b: Build, x: number, z: number, rot: number, hide: string, size = 
 }
 
 function fire(b: Build, x: number, z: number, size = 1) {
-  const g = new THREE.Group();
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   const stone = mat("#7d7a74");
   for (let i = 0; i < 7; i++) {
@@ -320,14 +356,18 @@ function fire(b: Build, x: number, z: number, size = 1) {
     l.rotation.y = (i / 3) * Math.PI;
     g.add(l);
   }
-  const outer = ownedMat(b, "#ff8a1e", "#ff5a00", b.glows);
-  const inner = ownedMat(b, "#ffe27a", "#ffc02a", b.glows);
-  const f1 = part(G.flame, outer, 0, 0.03, 0, false);
-  const f2 = part(G.flame, inner, 0.01, 0.03, 0.01, false);
-  f2.scale.setScalar(0.6);
-  const f3 = part(G.flame, outer, -0.03, 0.03, 0.02, false);
-  f3.scale.setScalar(0.55);
-  g.add(f1, f2, f3);
+  const outer = glowMat(b, "#ff8a1e", "#ff5a00");
+  const inner = glowMat(b, "#ffe27a", "#ffc02a");
+  const flame = (m: THREE.Material, x: number, z: number) => {
+    const bone = new THREE.Bone();
+    bone.position.set(x, 0.03, z);
+    bone.add(part(G.flame, m, 0, 0, 0, false));
+    g.add(bone);
+    return bone;
+  };
+  const f1 = flame(outer, 0, 0);
+  const f2 = flame(inner, 0.01, 0.01);
+  const f3 = flame(outer, -0.03, 0.02);
   g.scale.setScalar(size);
   b.root.add(g);
   b.actors.push({ obj: g, base: g.position.clone(), kind: "fire", phase: x * 3 + z, flames: [f1, f2, f3], fall: 0 });
@@ -347,12 +387,12 @@ function stakes(b: Build, r: number, count: number, from: number, to: number) {
 }
 
 function banner(b: Build, x: number, z: number, color: string, h = 1) {
-  const g = new THREE.Group();
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   g.add(part(G.bannerPole, mat("#4a3020")));
-  const clothM = ownedMat(b, color);
-  clothM.side = THREE.DoubleSide;
-  const cloth = part(G.bannerCloth, clothM, 0, 0.58, 0);
+  const cloth = new THREE.Bone();
+  cloth.position.y = 0.58;
+  cloth.add(part(G.bannerCloth, clothMat(color), 0, 0, 0));
   g.add(cloth);
   // a skull-ish mark (two eye holes) on the banner, stylised and bloodless
   const dark = mat("#1a1210");
@@ -363,13 +403,13 @@ function banner(b: Build, x: number, z: number, color: string, h = 1) {
 }
 
 function totem(b: Build, x: number, z: number, war: string) {
-  const g = new THREE.Group();
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   g.add(part(G.totem, mat("#5e4027")));
   const face = part(G.mask, mat(war), 0, 0.42, 0.03);
   const face2 = part(G.mask, mat("#e8dcc0"), 0, 0.28, 0.03);
   face2.scale.set(0.8, 0.8, 1);
-  const eyeM = ownedMat(b, "#ffcf4a", "#ff9a00", b.glows);
+  const eyeM = glowMat(b, "#ffe14a", "#ffb000");
   g.add(face, face2);
   for (const s of [-1, 1]) g.add(part(G.gEye, eyeM, s * 0.025, 0.44, 0.052, false));
   for (const s of [-1, 1]) {
@@ -391,55 +431,47 @@ function campGround(b: Build, r: number, color: string) {
 // ---------- bug camps ----------
 
 function buildBug(b: Build, sev: number, rnd: () => number) {
+  // One big readable monster standing up, a saturated tent or two, a campfire as the warm focal point.
   const war = BUG_WAR[sev];
   if (sev <= 1) {
     b.radius = 0.45;
-    b.height = 0.45;
-    campGround(b, 0.42, "#4f6a2a");
-    slime(b, 1.25, 0, 0.02, BUG_SKIN[1], 0);
-    slime(b, 0.5, -0.24, 0.14, "#9ad45a", 1.7);
-    slime(b, 0.42, 0.22, -0.16, "#9ad45a", 3.1);
+    b.height = 0.5;
+    campGround(b, 0.42, "#8a9a52");
+    slime(b, 1.45, 0, 0.02, BUG_SKIN[1], 0);
+    slime(b, 0.55, -0.26, 0.16, "#a6e05a", 1.7);
+    slime(b, 0.45, 0.24, -0.18, "#a6e05a", 3.1);
     return;
   }
   if (sev === 2) {
     b.radius = 0.55;
-    b.height = 0.5;
-    campGround(b, 0.52, "#6a5236");
-    tent(b, -0.18, -0.22, 0.4, "#8a6a44");
-    fire(b, 0.14, -0.02, 0.9);
-    goblin(b, -0.12, 0.2, 0.3, BUG_SKIN[2], { weapon: "spear", war, phase: 0 });
-    goblin(b, 0.3, 0.2, -0.4, BUG_SKIN[2], { weapon: "club", war, phase: 1.3 });
-    banner(b, 0.34, -0.3, war, 0.8);
+    b.height = 0.7;
+    campGround(b, 0.52, "#a08560");
+    tent(b, -0.24, -0.24, 0.5, "#e0892e", 1.05);
+    fire(b, 0.22, -0.12, 1.1);
+    goblin(b, 0.0, 0.14, 0.2, "#86c043", { weapon: "club", war, phase: 0, size: 1.9 });
     return;
   }
   if (sev === 3) {
     b.radius = 0.65;
-    b.height = 0.7;
-    campGround(b, 0.62, "#5e4630");
-    stakes(b, 0.6, 7, Math.PI * 0.95, Math.PI * 2.05);
-    tent(b, -0.28, -0.2, 0.5, "#7a5a3a", 1.1);
-    tent(b, 0.26, -0.3, -0.3, "#6e4e30", 0.9);
-    fire(b, 0.02, 0.02, 1.05);
-    totem(b, -0.05, -0.42, war);
-    goblin(b, 0.0, 0.3, 0, BUG_SKIN[3], { chief: true, weapon: "club", war, phase: 0.4 });
-    goblin(b, -0.34, 0.18, 0.6, BUG_SKIN[3], { weapon: "spear", war, phase: 2.2 });
-    goblin(b, 0.36, 0.14, -0.6, BUG_SKIN[3], { weapon: "spear", war, phase: 3.5 });
-    banner(b, 0.5, -0.1, war, 1);
+    b.height = 0.85;
+    campGround(b, 0.62, "#9a7e5a");
+    tent(b, -0.3, -0.26, 0.5, "#d0402e", 1.2);
+    tent(b, 0.3, -0.34, -0.3, "#b8352a", 0.95);
+    fire(b, 0.3, 0.08, 1.2);
+    totem(b, -0.44, 0.12, war);
+    goblin(b, -0.04, 0.12, 0.15, "#7cb03c", { chief: true, weapon: "club", war, phase: 0.4, size: 2.2 });
     return;
   }
   // 4: ogre warcamp
   b.radius = 0.75;
-  b.height = 1.0;
-  campGround(b, 0.72, "#4e3a2a");
-  stakes(b, 0.7, 9, Math.PI * 0.9, Math.PI * 2.1);
-  tent(b, -0.34, -0.3, 0.5, "#5a3e28", 1.25);
-  fire(b, 0.3, -0.15, 1.3);
-  totem(b, 0.05, -0.5, war);
-  banner(b, -0.55, 0.05, war, 1.2);
-  banner(b, 0.58, -0.35, war, 1.2);
-  ogre(b, -0.02, 0.12, 0, war);
-  goblin(b, -0.38, 0.3, 0.5, BUG_SKIN[3], { weapon: "spear", war, phase: 1.1 });
-  goblin(b, 0.4, 0.28, -0.5, BUG_SKIN[3], { weapon: "club", war, phase: 2.6 });
+  b.height = 1.05;
+  campGround(b, 0.72, "#8e7458");
+  stakes(b, 0.7, 4, Math.PI * 1.15, Math.PI * 1.85);
+  tent(b, -0.38, -0.3, 0.5, "#8e1c1c", 1.35);
+  tent(b, 0.38, -0.38, -0.4, "#a8281f", 1.05);
+  fire(b, 0.4, 0.12, 1.45);
+  banner(b, -0.58, 0.1, war, 1.3);
+  ogre(b, -0.04, 0.1, 0.1, war);
   void rnd;
 }
 
@@ -447,9 +479,8 @@ function buildBug(b: Build, sev: number, rnd: () => number) {
 
 function crystalCluster(b: Build, x: number, z: number, size: number, sev: number, rnd: () => number, count = 4) {
   const [c, e] = CRYSTAL[sev] ?? CRYSTAL[1];
-  const m = ownedMat(b, c, e, b.glows);
-  b.skins.push(m);
-  const g = new THREE.Group();
+  const m = glowMat(b, c, e, true);
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   const rock = part(G.rock, mat("#77746e"), 0, 0.03, 0);
   rock.scale.set(1.2, 0.5, 1.1);
@@ -470,7 +501,7 @@ function crystalCluster(b: Build, x: number, z: number, size: number, sev: numbe
 
 function column(b: Build, x: number, z: number, h: number, broken: boolean) {
   const stone = mat("#b9b2a2"), moss = mat("#6b7d45");
-  const g = new THREE.Group();
+  const g = new THREE.Bone();
   g.position.set(x, 0, z);
   const c = part(G.column, stone);
   c.scale.y = h;
@@ -489,14 +520,13 @@ function column(b: Build, x: number, z: number, h: number, broken: boolean) {
 
 function floating(b: Build, y: number, size: number, sev: number) {
   const [c, e] = CRYSTAL[sev] ?? CRYSTAL[1];
-  const m = ownedMat(b, c, e, b.glows);
-  b.skins.push(m);
-  const g = new THREE.Group();
+  const m = glowMat(b, c, e, true);
+  const g = new THREE.Bone();
   g.position.set(0, y, 0);
   const big = part(G.crystal, m, 0, -0.22, 0);
   big.scale.setScalar(size);
   g.add(big);
-  const ring = new THREE.Group();
+  const ring = new THREE.Bone();
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * Math.PI * 2;
     ring.add(part(G.shard, m, Math.cos(a) * 0.2 * size, 0.05, Math.sin(a) * 0.2 * size, false));
@@ -518,7 +548,7 @@ function buildFeature(b: Build, sev: number, rnd: () => number) {
   if (sev === 2) {
     b.radius = 0.55;
     b.height = 0.6;
-    campGround(b, 0.5, "#7b766a");
+    campGround(b, 0.5, "#a8a292");
     crystalCluster(b, 0.02, 0.04, 1.2, 2, rnd, 5);
     column(b, -0.32, -0.18, 0.35, true);
     column(b, 0.3, -0.28, 0.22, true);
@@ -574,6 +604,9 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
   const object3d = new THREE.Group();
   object3d.name = `art-target:${opts.kind}:${sev}`;
   object3d.add(b.root);
+  const baked = bakeRigid(object3d);
+  const skinMatB = baked.material("skin");
+  let greyK = 0; // last desaturation written to the skin bucket
 
   let state: TargetState = "open";
   let flash = 0;        // hit flash, seconds left
@@ -582,8 +615,13 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
   const DEFEAT_LEN = 1.2;
   const bugs = opts.kind === "bug";
   let lastT = 0;
+  let flashed = false;
 
   function applyResolvedMaterials(k: number) {
+    if (Math.abs(k - greyK) > 0.004 || (k === 0) !== (greyK === 0) || (k === 1 && greyK !== 1)) {
+      baked.desaturate("skin", k);
+      greyK = k;
+    }
     for (const m of b.skins) {
       m.color.copy(m.userData.color).lerp(GREY, k);
       m.emissive.copy(m.userData.emissive).multiplyScalar(1 - k * 0.9);
@@ -697,12 +735,11 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
 
     // Materials: hit flash to white, resolved fades to grey
     if (dead) applyResolvedMaterials(dk);
-    else if (flash > 0 || b.skins.some((m) => m.userData.flashed)) {
+    else if (flash > 0 || flashed) {
       const f = flash > 0 ? Math.min(1, flash / 0.12) : 0;
-      for (const m of b.skins) {
-        m.emissive.copy(m.userData.emissive).lerp(WHITE, f * 0.85);
-        m.userData.flashed = f > 0;
-      }
+      skinMatB?.emissive.setScalar(f * 0.7);
+      for (const m of b.skins) m.emissive.copy(m.userData.emissive).lerp(WHITE, f * 0.85);
+      flashed = f > 0;
     }
     // Crystal and eye glow pulse
     if (!dead) {
@@ -739,6 +776,7 @@ export function makeTarget(opts: TargetOpts): TargetArt & { readonly radius: num
       defeatT = 0;
     },
     dispose() {
+      baked.dispose();
       for (const m of b.owned) m.dispose();
       object3d.traverse((o) => {
         const g = (o as THREE.Mesh).geometry;

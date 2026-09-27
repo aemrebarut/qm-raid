@@ -192,6 +192,7 @@ async function autopilot(m: string[]): Promise<void> {
   check(put.d?.ok === true, "autopilot: PUT trio preset", put.d);
   const entry = put.d?.team?.workflow?.nodes?.find((n: any) => n.id === put.d.team.workflow.entry)?.unitId;
   const from = events.length;
+  const vetoFrom = Bun.file(VETO_LOG).size; // only rows appended by this case count
   const on = await call(`${E}/api/teams/1`, "PATCH", { autopilot: true });
   check(on.d?.team?.autopilot === true, "autopilot: on for team 1", on.d);
   let p: any;
@@ -219,9 +220,11 @@ async function autopilot(m: string[]): Promise<void> {
   check(!st.orders.some((o: any) => o.id !== p.id && o.targetId === p.targetId && o.status === "cancelled" && o.unitId === p.unitId), "autopilot: go cancelled nothing");
   check(st.targets.find((t: any) => t.id === p.targetId)?.status === "resolved", "autopilot: target resolved");
   await Bun.sleep(300); // veto rows are appended asynchronously
-  const rows = (await Bun.file(VETO_LOG).text().catch(() => "")).trim().split("\n").map((l) => { try { return JSON.parse(l); } catch { return null; } });
-  const row = rows.filter((r) => r?.proposal?.teamId === 1 && r?.runId === run.id).pop();
-  check(row?.action === "go" && row.proposal.unitId === p.unitId && row.proposal.targetId === p.targetId, `autopilot: veto log row with proposal.teamId and runId (${VETO_LOG})`, rows.slice(-2));
+  const f = Bun.file(VETO_LOG);
+  const added = (await f.slice(f.size >= vetoFrom ? vetoFrom : 0).text().catch(() => "")).split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } });
+  const mine = added.filter((r) => r?.proposal?.teamId === 1 || r?.runId === run.id);
+  check(mine.length === 1 && mine[0].action === "go" && mine[0].runId === run.id && mine[0].proposal.unitId === p.unitId && mine[0].proposal.targetId === p.targetId,
+    `autopilot: exactly one new veto row: go, proposal.teamId 1, runId ${run.id} (${VETO_LOG})`, added);
 }
 
 try {

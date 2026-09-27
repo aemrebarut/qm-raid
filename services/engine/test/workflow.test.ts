@@ -8,7 +8,6 @@ import { cancelRun, initWorkflows, loadRuns, onOrderEnded, parseVerdict, presetW
 // Fake game.ts: startOrder cancels the unit's previous open order (re-entering onOrderEnded), cancelOrder re-enters too.
 // W3: a unit's proposed team order (autopilot, teamId set) for the same target becomes the entry step instead.
 let nextOrder = 1;
-type TeamOrder = Order & { teamId?: number }; // W3: Order.teamId (contract pending)
 const briefs = new Map<string, NodeBrief>();
 function endOrder(o: Order, status: "done" | "failed" | "cancelled", reply: string | null = null): void {
   o.status = status;
@@ -21,7 +20,7 @@ initWorkflows({
   startOrder(unitId, targetId, brief) {
     const u = store.state.units.find((x) => x.id === unitId);
     if (!u || !store.state.targets.some((t) => t.id === targetId)) return null;
-    const proposal = store.state.orders.find((o) => o.id === u.orderId && o.status === "proposed" && (o as TeamOrder).teamId !== undefined && o.targetId === targetId);
+    const proposal = store.state.orders.find((o) => o.id === u.orderId && o.status === "proposed" && o.teamId !== undefined && o.targetId === targetId);
     if (proposal) {
       Object.assign(proposal, { status: "active", source: "workflow", runId: brief.runId, nodeId: brief.nodeId, vetoDeadline: null });
       briefs.set(proposal.id, brief);
@@ -454,13 +453,13 @@ test("E18: without saved data a running run fails; a step the restore closed end
 });
 
 // W3: autopilot proposes a whole-team run; the proposal order (entry unit, teamId) becomes the entry step on go.
-function propose(teamId: number, unitId: string, targetId: string): TeamOrder {
-  const o: TeamOrder = { id: `o${nextOrder++}`, unitId, targetId, status: "proposed", source: "autopilot", teamId, vetoDeadline: Date.now() + 15000, reply: null };
+function propose(teamId: number, unitId: string, targetId: string): Order {
+  const o: Order = { id: `o${nextOrder++}`, unitId, targetId, status: "proposed", source: "autopilot", teamId, vetoDeadline: Date.now() + 15000, reply: null };
   store.state.orders.push(o);
   store.state.units.find((u) => u.id === unitId)!.orderId = o.id;
   return o;
 }
-function go(o: TeamOrder) { // what game.ts does on go / expiry / adjust {targetId}
+function go(o: Order) { // what game.ts does on go / expiry / adjust {targetId}
   const r = startRun(o.teamId!, o.targetId);
   if (!r.ok) { o.status = "failed"; o.reply = r.error; }
   return r;

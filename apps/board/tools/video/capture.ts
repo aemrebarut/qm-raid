@@ -14,7 +14,7 @@ import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readdirSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir, tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 const argv = process.argv.slice(2);
 const flag = (name: string, def: string) => {
@@ -288,7 +288,7 @@ async function posOf(c: Clip, kind: "unit" | "target" | "building", id: string, 
 async function clickHud(c: Clip, selector: string, text?: string): Promise<boolean> {
   const box = await js(c.page, `(() => {
     const want = ${JSON.stringify((text ?? "").toLowerCase())};
-    const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find(e => e.offsetParent && !e.disabled &&
+    const el = [...document.querySelectorAll(${JSON.stringify(selector)})].find(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden' && !e.disabled &&
       (!want || (e.textContent || '').trim().toLowerCase().startsWith(want) || (e.getAttribute('title') || '').toLowerCase().startsWith(want)));
     if (!el) return null;
     el.scrollIntoView({ block: 'nearest' });
@@ -370,7 +370,7 @@ const clips: Record<string, Script> = {
     if (!tid) return;
     const mine = (e: Ev) => (e.unitId ?? e.order?.unitId) === u.id;
     c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.log("recall", { slugs: e.slugs }));
-    const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === u.id && ["done", "failed", "cancelled"].includes(e.order?.status), 240000, "order end");
+    const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === u.id && ["done", "failed", "cancelled"].includes(e.order?.status), Number(flag("order-wait", "110000")), "order end");
     if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
     const rem = await c.waitFor((e) => e.type === "memory.remember" && mine(e), 15000, "remember");
     if (rem) c.log("remember", { slug: rem.slug });
@@ -432,7 +432,7 @@ const clips: Record<string, Script> = {
     let n = 0;
     const handoffs = (e: Ev): boolean => { if (e.type === "workflow.handoff") { n++; c.mark(`handoff-${n}`, { from: e.fromUnitId, to: e.toUnitId, nodeId: e.nodeId }); } return false; };
     c.waitFor(handoffs, 600000);
-    const end = await c.waitFor((e) => e.type === "workflow.updated" && e.run?.targetId === tid && ["done", "failed", "cancelled", "needs_human"].includes(e.run?.status), 420000, "run end");
+    const end = await c.waitFor((e) => e.type === "workflow.updated" && e.run?.targetId === tid && ["done", "failed", "cancelled", "needs_human"].includes(e.run?.status), Number(flag("run-wait", "300000")), "run end");
     if (end) c.log(`run-${end.run.status}`);
     await wait(4000);
   },
@@ -502,7 +502,7 @@ const clips: Record<string, Script> = {
     if (!tid) return;
     const mine = (e: Ev) => (e.unitId ?? e.order?.unitId) === uid;
     c.waitFor((e) => e.type === "memory.recall" && mine(e), 120000).then((e) => e && c.log("recall", { slugs: e.slugs }));
-    const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === uid && ["done", "failed", "cancelled"].includes(e.order?.status), 150000, "order end");
+    const end = await c.waitFor((e) => e.type === "order.updated" && e.order?.unitId === uid && ["done", "failed", "cancelled"].includes(e.order?.status), Number(flag("forge-wait", "60000")), "order end");
     if (end) c.log(`order-${end.order.status}`, { reply: String(end.order.reply ?? "").slice(0, 300) });
     await wait(4000);
   },
@@ -559,20 +559,25 @@ const clips: Record<string, Script> = {
   // Clip 5: edit a unit's standing orders and skills in game (Loadout tab, Apply).
   async loadout(c) {
     const s = await state(c.page);
+    // Analyst HOLD 16:04: no loadout PATCH on real QM units until raid-qm-impl's fix; mock only unless --loadout-real.
+    if (s.backend !== "mock" && !has("loadout-real")) { c.note_(`loadout skipped: backend ${s.backend} (HOLD, pass --loadout-real after the all clear)`); return c.mark("loadout-skipped"); }
     const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s)[0] ?? s.units[0];
     claimed.add(u.id); c.focus.add(u.id);
     await selectUnit(c, u);
     c.mark("select", { unitId: u.id, unitName: u.name });
     await wait(1200);
     await clickHud(c, "#hud button.hud-tab", "Loadout");
-    c.mark("loadout-open");
+    await wait(300);
+    // The side panel's box, so the editor can punch in on the 3 s edit.
+    const panel = await js(c.page, `(() => { const el = document.querySelector('.ldo')?.closest('section, aside, .hud-side, [class*=side]') ?? document.querySelector('.ldo'); if (!el) return null; const r = el.getBoundingClientRect(); return { px: Math.round(r.left), py: Math.round(r.top), pw: Math.round(r.width), ph: Math.round(r.height) }; })()`);
+    c.mark("loadout-open", panel ?? {});
     await wait(1800);
     await clickHud(c, "button.ldo-chip", "House rules");
     await wait(700);
     await clickHud(c, "button.ldo-chip", "Recall first");
     c.mark("orders-chips");
     await wait(900);
-    const box = await js(c.page, `(() => { const i = [...document.querySelectorAll('.ldo-item input[type=checkbox]')].find(x => !x.checked && x.offsetParent); if (!i) return null; i.scrollIntoView({ block: 'nearest' }); const r = i.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+    const box = await js(c.page, `(() => { const i = [...document.querySelectorAll('.ldo-item input[type=checkbox]')].find(x => !x.checked && x.getClientRects().length); if (!i) return null; i.scrollIntoView({ block: 'nearest' }); const r = i.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
     if (box) { await clickAt(c, box); c.mark("skill"); }
     await wait(1000);
     const upd = c.waitFor((e) => e.type === "unit.updated" && e.unit?.id === u.id, 30000, "unit.updated");
@@ -621,6 +626,7 @@ clips.hero = async (c) => {
   await wait(5000);
 };
 
+const pending: Promise<void>[] = [];
 async function run(name: string, script: Script) {
   const c = new Clip(name);
   const frameDir = join(tmpdir(), `raid-cap-${take}-${name}-${process.pid}`);
@@ -648,7 +654,7 @@ async function run(name: string, script: Script) {
   });
   c.t0 = Date.now();
   void c.listen();
-  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 86, maxWidth: W, maxHeight: H, everyNthFrame: 1 });
+  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 86, maxWidth: W, maxHeight: H, everyNthFrame: Number(flag("nth", "2")) }); // about 30 fps at a 60 Hz swap
   await wait(1200);
   c.mark("ready", { backend });
   try {
@@ -672,10 +678,15 @@ async function run(name: string, script: Script) {
   if (frames.length) lines.push(`file '${frames.at(-1)!.file}'`);
   writeFileSync(list, lines.join("\n"));
   const mp4 = join(outDir, `${name}.mp4`);
-  const ff = spawnSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-fps_mode", "cfr", "-r", "30",
-    "-vf", `scale=${W}:${H}:flags=lanczos,format=yuv420p`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-movflags", "+faststart", mp4]);
-  if (ff.status !== 0) c.note_(`ffmpeg failed: ${String(ff.stderr).slice(0, 300)}`);
-  if (!has("keep-frames")) rmSync(frameDir, { recursive: true, force: true });
+  // Encode in the background (niced) so the next clip starts at once; markers are written when the mp4 is done.
+  const encoded = new Promise<void>((res) => {
+    const ff = spawn("nice", ["-n", "10", "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", list, "-fps_mode", "cfr", "-r", "30",
+      "-vf", `scale=${W}:${H}:flags=lanczos,format=yuv420p`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-movflags", "+faststart", mp4]);
+    say(`[${name}] encoding pid ${ff.pid}`);
+    let err = "";
+    ff.stderr?.on("data", (d) => { err += String(d); });
+    ff.on("close", (code) => { if (code !== 0) c.note_(`ffmpeg failed: ${err.slice(0, 300)}`); if (!has("keep-frames")) rmSync(frameDir, { recursive: true, force: true }); res(); });
+  });
   for (const m of c.marks) m.t -= shift;
   for (const e of c.named) e.t = Math.round((e.t - shift / 1000) * 1000) / 1000;
   const duration = frames.length ? (frames.at(-1)!.ts - first) / 1000 : 0;
@@ -684,10 +695,19 @@ async function run(name: string, script: Script) {
     note: "t is seconds from the first video frame (source time in this file); x, y are screen px (x2, y2 = receiver of a handoff); raw has every scripted mark and engine SSE event (t in ms); failures lists timeouts, API fallbacks and errors",
     failures: c.failures, events: c.named.sort((a, b) => a.t - b.t), raw: c.marks };
   const mfile = join(outDir, `${name}.markers.json`);
-  writeFileSync(mfile, JSON.stringify(doc, null, 2));
-  if (existsSync(mp4)) copyFileSync(mp4, join(archiveDir, `${name}.mp4`));
-  copyFileSync(mfile, join(archiveDir, `${name}.markers.json`));
-  say(`[${name}] saved ${mp4} (${duration.toFixed(1)} s, ${frames.length} frames, ${doc.events.length} events, ${c.failures.length} failure notes)`);
+  pending.push(encoded.then(() => {
+    doc.failures = c.failures;
+    writeFileSync(mfile, JSON.stringify(doc, null, 2));
+    if (existsSync(mp4)) copyFileSync(mp4, join(archiveDir, `${name}.mp4`));
+    copyFileSync(mfile, join(archiveDir, `${name}.markers.json`));
+    say(`[${name}] saved ${mp4} (${duration.toFixed(1)} s, ${frames.length} frames, ${doc.events.length} events, ${c.failures.length} failure notes)`);
+    const to = flag("notify", "");
+    if (to) {
+      const key = doc.events.filter((e) => !["gbrain_tool", "order_active"].includes(e.name)).map((e) => `${e.name}@${e.t.toFixed(1)}`).slice(0, 18).join(" ");
+      const fails = c.failures.map((f) => f.text).join("; ");
+      for (const who of to.split(",")) spawn("herdr", ["agent", "prompt", who, `raid-video-cap: ${take} clip ${name} ready (${backend}): ${mp4} ${duration.toFixed(1)} s + ${name}.markers.json. ${key}${fails ? `. FAILURES: ${fails}` : ""}`], { stdio: "ignore" });
+    }
+  }));
   return doc;
 }
 
@@ -705,6 +725,7 @@ try {
 } finally {
   await browser.close();
 }
+await Promise.all(pending);
 const index = join(outDir, "markers.json");
 writeFileSync(index, JSON.stringify({ take, url, createdAt: new Date().toISOString(), clips: results.map((r) => ({ clip: r.clip, file: r.file, duration: r.duration, markers: join(outDir, `${r.clip}.markers.json`) })) }, null, 2));
 copyFileSync(index, join(archiveDir, "markers.json"));

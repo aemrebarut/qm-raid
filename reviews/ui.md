@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current checkpoint: two open P2s, run-card hidden-button CSS (raid-ui-hud) and spawn-dialog late-response draft loss (raid-ui-plan). Both Formation P2s are verified fixed in dad9896. Scene workflow, handoff, door-row visibility, and issue spawn animation checks pass. Board smoke: 14 tests / 80 assertions; typecheck and production build pass. Automated checks use isolated fixtures or the mock board only; full W1/W2 engine acceptance belongs to the lead.
+Current checkpoint: prior Formation, hidden run-button, spawn-draft, and initial resolved-art P2s are verified fixed. Live Form team -> Trio -> role assignment -> right-click workflow start passes on 4619 art on, with no page errors. Latest completed board suite: 17 tests / 103 assertions. Final A3 art gate checks remain in progress; no default-art flip is approved by this checkpoint.
 
 ## Review procedure
 
@@ -195,3 +195,21 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Random and explicit form requests, N/typing/Escape handling, focus/toast result, and target upsert before subscribers pass board tests.
 - **P2 open, assigned to raid-ui-plan:** newIssue.ts clears and closes a newer draft when an older spawn request succeeds. Reproduced with delayed mocked fetch: submit First issue, close and reopen, type Next issue draft, then complete the first request. The newer dialog becomes hidden and the draft becomes empty. Preserve the opening/submission generation and changed fields, or prevent editing/reopening during a request. Same-opening edits while pending also need preserving.
 - Checkpoint: 14 tests pass / 80 assertions, typecheck and production build pass (66 modules). No reviewer orders, messages, or issue creations sent to the real-QM services. New issue HTTP integration remains the lead's mock-engine milestone check.
+
+## Follow-up checkpoint: Formation, art flags, Loadout, demo snapshot
+
+- 2dbbd58 closes the spawn-dialog draft P2: exact close/reopen reproduction leaves the newer dialog and title intact; same-opening edits and unchanged-success behavior pass its regression.
+- 4056fc2 closes the hidden run-button P2. Independent Chrome with .hud-orders ancestry now computes hidden Dismiss as display:none and zero width. Revised Formation checks pass mixed-selection team creation, eight preset member guards, duel parallel entry columns, armed role and bench swap, stable slot DOM on status updates, visibility arbitration, and repeated name-prefix trimming.
+- 4caaa56 art isolation accepted. Unset/off uses placeholder models and lights; the new resolved-order staff celebration is intentionally shared. Isolated scene checks pass with art off and on, including real art-unit and art-light assertions, picking, workflow roles/links, handoff, door placement and portal lifecycle. A frozen archived build rendered in independent Chrome with no page errors; temporary art-on.png was visually inspected. This early image predates the final A3 world/FX changes.
+- 5f922e8 label checks pass zoom threshold, selected/hovered title replacement, and readable learning/component slug labels. cd4c8ba later shortens handoff text to one clause/eight words and increases name sizes; reviewed source, final A3 visual check pending.
+- 74466f8 had a P2: an already-resolved snapshot target stayed in art state open. Reported to scene and lead. a727e52 verifies fixed: both snapshot and live resolution now end in art state resolved; snapshot does not call live defeat. Also reviewed building disposal hooks and optional art-only richer FX fallbacks.
+- cdd1e5e world wiring reviewed: shared gate positions, blocked camps/unit tiles/Library plaza/door rows, label retention and layout disposal. Full A3 live acceptance is still in progress, not declared by this checkpoint.
+- 2bfea57 Loadout accepted in isolation: changed-fields PATCH, catalog toggles, applying/applied state, stale-unit response guards and three-way dirty merging pass. Additional checks pass same-view edits during Apply, failed Apply retaining draft/error, Revert to accepted state, and removal of the store listener on disposal. Latest completed suite: 17 tests / 103 assertions. a194cfc locks GBrain on per the Analyst decision; source and new regression reviewed, next suite run pending.
+- 6731d73 demo-snapshot.sh: reviewed archive/build-before-stop, loopback preview, engine proxy config, and exact PID/command stop guard. Shell syntax and an isolated archived board build pass. Did not start/stop or replace the shared 4621 preview. Concurrent invocations and occupied-port failure behavior were not exercised.
+- Working-tree typecheck briefly failed only at the in-progress look HUD bottomPanel.ts comparison of barracks and gbrain. Do not interpret the earlier clean build as validation of those later uncommitted edits.
+
+## Urgent Form team live click-through on 4619
+
+- PASS after coordinating mock-engine quiet time. Selected mixed u4/u5/u6, clicked Form team, observed POST /api/teams 200 and exact team 4. Eight preset cards appeared. Clicked Trio and observed PUT 200. Armed planner, clicked Eno's bench portrait, observed full-graph PUT 200 and bindings u5/u4/u6. A real mouse right-click on camp t108 sent {teamId:4,targetId:t108}; HTTP 200 returned running run w1, active planner, order o2.
+- pageerrors=[] and the art-on scene was ready. Earlier attempt got API 200 but a concurrent engine redeploy/reset removed the new team before the assertion. Engine lead confirmed automatic redeploys plus test resets caused those flips, and provided /tmp/engplan/with4618 for future live checks.
+- A separate 15-second scene-readiness timeout under high machine/software-render load did not recur in the successful full flow. Diagnostic console contained test-induced blocked Vite WebSocket messages and one resource 404; no caught scene mount exception was captured. Remaining A3 checks remove that interception and hold the engine test lock. No request was sent to 4610/4611.

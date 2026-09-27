@@ -1,11 +1,15 @@
 # Team Engine plan (lead: raid-eng-plan)
 
-Owners: raid-eng-impl `services/engine/` (except `src/forge.ts`) · raid-eng-mock `services/mock-bridge/`, `services/autopilot/`, `services/engine/src/forge.ts` (E12, new file, impl wires it) · raid-eng-rev `reviews/eng.md` · raid-eng-plan this file, `data/`.
+Owners: raid-eng-impl `services/engine/` (except the files below) · raid-eng-mock `services/mock-bridge/`, `services/autopilot/`, `services/engine/src/forge.ts` (E12), `services/engine/test/soak.ts`, `services/engine/test/demo.e2e.ts` (new files; impl wires any source hooks) · raid-eng-rev `reviews/eng.md` · raid-eng-plan this file, `data/`.
 Stack: Bun 1.4.2 + TypeScript, `Bun.serve` (Hono allowed, nothing else heavy). Every service: own `package.json` with `"dev": "bun --watch src/index.ts"`, `README.md`, `GET /health` -> `{"ok":true,"service":"<name>"}`, `test/smoke.ts` (run with `bun test/smoke.ts` against the running service), host `127.0.0.1` only, port from `PORT` env with the contract default.
 Types: `import type {...} from "../../../contract/types.ts"` (from `src/`). Never import another service.
 Commit after every step that works: `git add -- <your dir> && git commit -m "<agent>: <what>" -- <your dir> && git push origin main`, then `herdr agent prompt raid-eng-rev "review <sha>: <one line>"`.
 
 Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, timestamps are epoch ms everywhere, issue ids are strings like `LUM-12`, bridge send carries `orderId`, and bridge `activity` / `reply` / `error` carry `orderId`.
+
+## Instances (Analyst, 15:07)
+- 4610 = shared engine on real QM (`BRIDGE_URL=http://127.0.0.1:4614`), run by raid-eng-impl, for the board, one-order milestone checks and the demo. Autopilot OFF by default for every team, also after reset.
+- 4618 = test engine on the mock (`PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 VETO_LOG=/tmp/engplan/vetoes-test.jsonl BRAIN_RESET=0 bun --watch src/index.ts`), run by raid-eng-plan. Every automated check and review uses 4618, never 4610. `BRAIN_RESET=0` makes its /api/reset skip brain /reset so tests never wipe the shared game brain.
 
 ## Team decisions (binding inside the team; contract questions go to the Analyst via the lead)
 - Events: emit exactly the `EngineEvent` union from contract/types.ts (commit ca1a93d); type `emit` against it so tsc catches drift. Envelope `{seq, ts: epoch ms, type, ...payload}`; `seq` increments per engine process. `forge.updated` carries `{unitType}`. SSE: send `state.snapshot` first, then a `: ping` comment every 15 s.
@@ -73,6 +77,10 @@ raid-eng-rev
 - E14. `POST /api/reset`: brain `/reset`, reload world, DELETE and re-register units, clear orders/teams/memory/stats, emit `state.snapshot`. `PATCH /api/units/:id` {team?, effort?, role?, autonomy?}.
 - K8. Demo safety net if QM is down: `MOCK_SCRIPT=demo` (or `/debug/config {script:"demo"}`): wave 1 on a billing target remembers `learnings/<issue>-<unit>-<ms>` stating the idempotency rule (links rules/billing-idempotency); a later billing order recalls that exact slug and quotes it in the reply.
 - K9. autopilot reasons mention the memory text when it names the component or a learning ("team learned the idempotency rule").
+
+- E17. `BRAIN_RESET` env (default 1; 0 = reset skips brain /reset). Stats from bridge `usage`. Exact demo reset (units at spawn positions, all targets open, default teams, autopilot off, memory.recent empty; vetoes log kept).
+- K10. `services/engine/test/soak.ts` on 4618: autopilot on for all teams N minutes with random go/cancel/adjust/expire; engine healthy, no stuck units, no double engagement, seq increasing, every resolution in the test veto log.
+- K11. `services/engine/test/demo.e2e.ts` on 4618 with mock script demo: wave 1 learns the rule, wave 2 recalls the exact slug (brain /page returns it via E16), one proposal vetoed, one gone; passes twice in a row.
 
 ## M5 (16:25): demo path twice in a row, reset clean, no crash after 10 minutes of autopilot.
 

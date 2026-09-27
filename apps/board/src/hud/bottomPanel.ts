@@ -235,7 +235,7 @@ export class BottomPanel {
           h("div", { class: "hud-sum-name", style: group ? `color:${safeColor(group.color)}` : null }, group ? group.name : `${units.length} selected`),
           h("div", { class: "hud-sum-row" },
             group ? h("span", { class: "hud-tag" }, `Group ${group.id}`) : null,
-            h("span", { class: "hud-tag" }, `${units.length} units`),
+            group ? h("span", { class: "hud-tag" }, `${units.length} units`) : null, // "4 selected" already counts them
             group?.workflow ? h("span", { class: "hud-tag" }, icon("formation"), group.workflow.preset) : null,
             group?.autopilot ? h("span", { class: "hud-tag", style: "color:var(--gold)" }, "Auto") : null),
           h("div", { class: "hud-sum-row" },

@@ -65,6 +65,7 @@ export class SidePanel {
 
   /** Focus the message box (command grid "Message"). */
   focusMessage(): void {
+    if (this.tab === "loadout" && this.focusUnitId()) this.setTab("activity"); // the composer lives on Activity
     if (!this.msg.el.hidden) this.msg.focus();
   }
 
@@ -160,26 +161,21 @@ export class SidePanel {
     this.feed.scrollTop = stick ? this.feed.scrollHeight : top;
   }
 
+  // Identity (team name, group, count) is on the bottom summary; the side lists who is in the selection.
   private renderRoster(s: State, units: Unit[]): void {
     const team = teamOfSelection(s, units.map((u) => u.id));
     put(this.out,
-      team
-        ? h("header", { class: "hud-side-head hud-team-head", style: `--team:${safeColor(team.color)}` },
-            h("span", { class: "hud-team-dot" }),
-            h("div", null, h("h2", null, team.name),
-              h("div", { class: "hud-sum-row" },
-                h("span", { class: "hud-tag" }, `Group ${team.id}`),
-                h("span", { class: "hud-tag" }, `${units.length} units`),
-                team.autopilot ? h("span", { class: "hud-tag", style: "color:var(--gold)" }, "Auto") : null)))
-        : h("h2", null, `${units.length} selected`),
+      h("h3", null, "Roster"),
       h("ul", { class: "hud-roster" },
         units.map((u) => {
-          const team = s.teams.find((t) => t.id === u.team);
+          // One team selected: roles from its formation, the same source as the slots (a stale u.team must not win).
+          const ut = team ?? s.teams.find((t) => t.id === u.team);
+          const role = roleOf(ut, u.id);
           return h("li", null,
             h("button", { class: "hud-roster-item", type: "button", "data-unit": u.id, onclick: () => this.bus.select([u.id]) },
-              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, portraitArt(u.class, team?.color, 28)),
+              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, ut?.color) }, portraitArt(u.class, ut?.color, 28)),
               h("span", { class: "hud-roster-name" }, u.name),
-              roleOf(team, u.id) ? h("span", { class: "hud-role-tag" }, roleOf(team, u.id)!) : null,
+              role ? h("span", { class: "hud-role-tag" }, role) : null,
               statusPill(u.status),
             ));
         }),

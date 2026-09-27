@@ -61,6 +61,33 @@ export function humanize(text: string): string {
     .replace(SLUG_IN_TEXT, (m) => pageTitle(m));
 }
 
+// Forged units answer in house-style sections ("Recall: ...", "Plan: ...", "Decision: ..."; see services/forge).
+const SECTION = /^\s*(?:#+\s*)?\**\s*(Recall|Plan|Decision|Customer (?:reply|update)|Remember|Rules|Finding)\s*\**\s*:\s*\**\s*(.*)$/i;
+const GIST: [string, string][] = [["decision", "decided"], ["finding", "found"], ["plan", "planned"], ["customer reply", "wrote"],
+  ["customer update", "wrote"], ["remember", "learned"], ["rules", "applied"], ["recall", "recalled"]];
+
+/** A sectioned reply as one feed phrase from its most telling section: ["decided", "reuse the invoice key"]; null if unsectioned. */
+export function replyGist(text: string): [string, string] | null {
+  const found = new Map<string, string>();
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    const m = SECTION.exec(line);
+    if (!m) return;
+    const body = (m[2].trim() || lines.slice(i + 1).find((l) => l.trim() && !SECTION.test(l)) || "").replace(/\*+/g, "").replace(/^\s*(?:\d+\.|[-*])\s*/, "").trim();
+    if (body && !found.has(m[1].toLowerCase())) found.set(m[1].toLowerCase(), body);
+  });
+  for (const [k, verb] of GIST) {
+    const body = found.get(k);
+    if (body) return [verb, dropCustomerSlugs(humanize(body))];
+  }
+  return null;
+}
+
+/** "LUM-101 in billing for acme-corp, globex" -> "LUM-101 in billing": raw customer ids are not player text. */
+function dropCustomerSlugs(text: string): string {
+  return text.replace(/\s+for\s+[a-z0-9]+(?:-[a-z0-9]+)+(?:\s*(?:,|and)\s*[a-z0-9]+(?:-[a-z0-9]+)*)*/g, "").trim();
+}
+
 /** "order active: LUM-101 Payment retry" -> "took LUM-101"; "workflow done: LUM-101" -> "finished LUM-101". */
 export function orderPhrase(text: string): string {
   const m = /^(order|workflow) (\w+): (\S+)(.*)$/.exec(text);

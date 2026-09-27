@@ -2,7 +2,7 @@
 // One line each: icon, name, short verb phrase, object ("Bram recalled Billing Idempotency"), relative time.
 import type { Bus, FeedEntry, Store } from "../core";
 import { icon, kindIcon } from "../theme/icons";
-import { firstLine, humanize, orderPhrase, pageTitle, refreshTimes, relTime, stripName, toolPhrase } from "../theme/text";
+import { firstLine, humanize, orderPhrase, pageTitle, refreshTimes, relTime, replyGist, stripName, toolPhrase } from "../theme/text";
 import { h, RowList } from "./dom";
 
 const LINES = 5;
@@ -49,7 +49,7 @@ function phrase(e: FeedEntry, name: string, slug: string | undefined): [string, 
     case "handoff": return ["", text.replace(/:.*$/, "")];
     case "tool": return ["", toolPhrase(e.tool, e.text, e.slugs)];
     case "order": return ["", orderPhrase(e.text)];
-    case "reply": return ["", text];
+    case "reply": return replyGist(stripName(e.text, name)) ?? ["", text];
     case "error": return ["failed", text];
     default: return ["", text];
   }

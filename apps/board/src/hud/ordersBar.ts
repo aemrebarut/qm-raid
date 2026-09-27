@@ -8,7 +8,7 @@ const R = 15;
 const CIRC = 2 * Math.PI * R;
 const SVG = "http://www.w3.org/2000/svg";
 
-interface Card { el: HTMLElement; ring: SVGCircleElement; secs: HTMLElement; title: HTMLElement; reason: HTMLElement; deadline: number | null }
+interface Card { el: HTMLElement; ring: SVGCircleElement; secs: HTMLElement; title: HTMLElement; reason: HTMLElement; deadline: number | null; unitId: string }
 
 export class OrdersBar {
   readonly root = h("section", { class: "hud-orders", hidden: true },
@@ -28,6 +28,7 @@ export class OrdersBar {
     for (const o of proposed) {
       const c = this.cards.get(o.id) ?? this.add(o);
       c.deadline = o.vetoDeadline;
+      c.unitId = o.unitId; // Adjust can move the same order to another unit
       const u = s.units.find((x) => x.id === o.unitId);
       const t = s.targets.find((x) => x.id === o.targetId);
       const team = u ? s.teams.find((x) => x.id === u.team) : undefined;
@@ -63,11 +64,10 @@ export class OrdersBar {
     const title = h("div", { class: "hud-card-title" });
     const reason = h("div", { class: "hud-card-reason" });
     const id = o.id;
-    const unitId = o.unitId;
     const el = h("article", { class: "hud-card", "data-order": id },
       h("div", { class: "hud-ring-wrap", title: "Time left to veto" }, svg, secs),
-      h("div", { class: "hud-card-body", title: "Click to select the unit", onclick: () => this.bus.select([unitId]),
-          onmouseenter: () => this.bus.hover({ kind: "unit", id: unitId }), onmouseleave: () => this.bus.hover(null) },
+      h("div", { class: "hud-card-body", title: "Click to select the unit", onclick: () => this.bus.select([card.unitId]),
+          onmouseenter: () => this.bus.hover({ kind: "unit", id: card.unitId }), onmouseleave: () => this.bus.hover(null) },
         title, reason),
       h("div", { class: "hud-card-btns" },
         h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel", type: "button", title: "Veto this order", onclick: () => this.act(api.cancelOrder(id), "Order vetoed") }, "Cancel"),
@@ -76,7 +76,7 @@ export class OrdersBar {
         h("button", { class: "hud-btn hud-btn-sm hud-btn-go", type: "button", title: "Approve now", onclick: () => this.act(api.goOrder(id), "Order approved") }, "Go now"),
       ),
     );
-    const card: Card = { el, ring, secs, title, reason, deadline: o.vetoDeadline };
+    const card: Card = { el, ring, secs, title, reason, deadline: o.vetoDeadline, unitId: o.unitId }; // handlers read it later
     this.cards.set(id, card);
     this.root.append(el);
     return card;

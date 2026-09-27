@@ -71,12 +71,9 @@ export class BottomPanel {
       const b = s.buildings.find((x) => x.id === sel.building);
       const focus: Cmd = { glyph: "\u{1F441}", label: "Focus", title: "Centre the camera here", enabled: !!b, run: () => b && this.bus.focusTile(b.x, b.y) };
       if (b?.kind === "barracks") {
-        return [
-          this.train("knight", "Knight", "♞"),
-          this.train("ranger", "Ranger", "\u{1F3F9}"),
-          this.train("scout", "Scout", "\u{1F9ED}"),
-          focus,
-        ];
+        const builtin = s.unitTypes.filter((t) => t.source === "builtin").slice(0, SLOTS - 1);
+        const types = builtin.length ? builtin.map((t) => [t.id, t.name] as const) : ([["knight", "Knight"], ["ranger", "Ranger"], ["scout", "Scout"]] as const);
+        return [...types.map(([id, name]) => this.train(id, name, classGlyph(id))), focus];
       }
       return [focus];
     }

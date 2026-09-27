@@ -237,3 +237,10 @@
 .hud-ring-fg { fill: none; stroke: #3d7a2c; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset .25s linear; }
 .hud-card[data-urgent="true"] .hud-ring-fg { stroke: #b3261e; }
 .hud-ring-secs { position: absolute; inset: 0; display: grid; place-items: center; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+
+/* Barracks training list (side panel) */
+.hud-train { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.hud-train-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; background: rgba(255,255,255,.35); border: 1px solid rgba(90,60,20,.3); }
+.hud-train-info { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.hud-train-team { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.hud-select { font: inherit; font-size: 13px; background: #fbf4df; color: #2f2415; border: 1px solid #6b5a3f; border-radius: 2px; padding: 1px 4px; }

@@ -1,5 +1,6 @@
 // Right side panel: the selected unit (details, order, live feed, reply, message box) or target.
 import { api, type Building, type Bus, type FeedEntry, type Order, type Selection, type State, type Store, type Target, type Unit } from "../core";
+import { BarracksPanel } from "./barracks";
 import { clear, h, put, safeColor, safeUrl, timeOf } from "./dom";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
@@ -16,6 +17,7 @@ export class SidePanel {
   private body = h("div", { class: "hud-side-body" });
   private replySlot = h("div");
   private feedFor: string | null = null;
+  private barracks: BarracksPanel;
   private feedLast: unknown = null;
   private sent = new Map<string, FeedItem[]>(); // the user's own messages, merged into the feed
   private feed = h("ol", { class: "hud-feed" });
@@ -25,8 +27,9 @@ export class SidePanel {
   private state: State | null = null;
 
   constructor(private store: Store, private bus: Bus) {
+    this.barracks = new BarracksPanel(bus);
     // Feed and message box stay attached (only hidden) so typing focus survives re-renders.
-    this.root.append(this.body, this.feedWrap, this.replySlot, this.msg.el);
+    this.root.append(this.body, this.barracks.root, this.feedWrap, this.replySlot, this.msg.el);
     store.onEvent(() => {
       const id = this.focusUnitId();
       if (id && this.feedFor === id && store.feed(id).at(-1) !== this.feedLast) this.renderFeed();
@@ -54,16 +57,32 @@ export class SidePanel {
     return this.sel.focus === "units" && this.sel.units.length === 1 ? this.sel.units[0] : null;
   }
 
+  // Render into detached nodes and swap only when the markup changed: moving units re-render
+  // many times a second, and replacing buttons under the cursor would swallow clicks.
+  private out = h("div");
+  private outReply = h("div");
+  private bodyHtml = "";
+  private replyHtml = "";
+
   private render(): void {
+    this.out = h("div");
+    this.outReply = h("div");
+    this.renderInto();
+    swap(this.body, this.out, this.bodyHtml, (html) => (this.bodyHtml = html));
+    swap(this.replySlot, this.outReply, this.replyHtml, (html) => (this.replyHtml = html));
+  }
+
+  private renderInto(): void {
     const s = this.state;
-    clear(this.body);
-    clear(this.replySlot);
     const unitView = !!s && this.focusUnitId() !== null && s.units.some((u) => u.id === this.focusUnitId());
     this.feedWrap.hidden = !unitView;
     this.msg.el.hidden = !unitView;
     if (!unitView) this.feedFor = null;
+    const barracks = !!s && this.sel.focus === "building" && s.buildings.find((b) => b.id === this.sel.building)?.kind === "barracks";
+    this.barracks.root.hidden = !barracks;
+    if (barracks && s) this.barracks.setState(s);
     this.root.dataset.empty = "false";
-    if (!s) return void put(this.body, h("p", { class: "hud-hint" }, "Waiting for the engine..."));
+    if (!s) return void put(this.out, h("p", { class: "hud-hint" }, "Waiting for the engine..."));
     const sel = this.sel;
     const units = sel.units.map((id) => s.units.find((u) => u.id === id)).filter((u): u is Unit => !!u);
     const target = sel.target ? s.targets.find((t) => t.id === sel.target) : undefined;
@@ -74,7 +93,7 @@ export class SidePanel {
     else if (units.length > 1) this.renderRoster(s, units);
     else {
       this.root.dataset.empty = "true";
-      put(this.body, h("p", { class: "hud-hint" }, "Select a unit, an enemy camp or a building."));
+      put(this.out, h("p", { class: "hud-hint" }, "Select a unit, an enemy camp or a building."));
     }
   }
 
@@ -85,7 +104,7 @@ export class SidePanel {
     const lastReply = [...s.orders].reverse().find((o) => o.unitId === u.id && o.reply);
     const qmUrl = safeUrl(u.qm?.sessionUrl);
 
-    put(this.body, 
+    put(this.out, 
       h("header", { class: "hud-side-head" },
         h("div", { class: "hud-portrait", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
         h("div", null,
@@ -108,7 +127,7 @@ export class SidePanel {
       ),
       qmUrl ? h("a", { class: "hud-btn hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in QM") : null,
     );
-    if (lastReply) this.replySlot.append(h("section", { class: "hud-section" }, h("h3", null, "Last reply"), h("div", { class: "hud-reply" }, lastReply.reply)));
+    if (lastReply) this.outReply.append(h("section", { class: "hud-section" }, h("h3", null, "Last reply"), h("div", { class: "hud-reply" }, lastReply.reply)));
     if (this.feedFor !== u.id) this.renderFeed();
   }
 
@@ -129,13 +148,13 @@ export class SidePanel {
   }
 
   private renderRoster(s: State, units: Unit[]): void {
-    put(this.body, 
+    put(this.out, 
       h("h2", null, `${units.length} units selected`),
       h("ul", { class: "hud-roster" },
         units.map((u) => {
           const team = s.teams.find((t) => t.id === u.team);
           return h("li", null,
-            h("button", { class: "hud-roster-item", onclick: () => this.bus.select([u.id]) },
+            h("button", { class: "hud-roster-item", type: "button", "data-unit": u.id, onclick: () => this.bus.select([u.id]) },
               h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: `--team:${safeColor(team?.color)}` }, classGlyph(u.class)),
               h("span", null, u.name),
               statusPill(u.status),
@@ -150,7 +169,7 @@ export class SidePanel {
     const comp = s.components.find((c) => c.id === t.component);
     const engaged = s.orders.filter((o) => o.targetId === t.id && (o.status === "active" || o.status === "proposed"));
     const lastReply = [...s.orders].reverse().find((o) => o.targetId === t.id && o.reply);
-    put(this.body, 
+    put(this.out, 
       h("header", { class: "hud-side-head" },
         h("div", { class: "hud-portrait hud-portrait-foe", "data-kind": t.kind }, t.kind === "bug" ? "\u{1F47E}" : "\u{1F3F0}"),
         h("div", null,
@@ -179,7 +198,7 @@ export class SidePanel {
   private renderBuilding(s: State, b: Building): void {
     const info = BUILDINGS[b.kind] ?? { name: b.id, glyph: "\u{1F3DB}", blurb: "" };
     const idle = s.units.filter((u) => u.status === "idle").length;
-    put(this.body, 
+    put(this.out, 
       h("header", { class: "hud-side-head" },
         h("div", { class: "hud-portrait hud-portrait-building", "data-kind": b.kind }, info.glyph),
         h("div", null, h("h2", null, info.name), h("div", { class: "hud-sub" }, info.blurb)),
@@ -262,6 +281,13 @@ class MessageBox {
     this.note.dataset.error = err ? "true" : "false";
     if (!err && this.input.value === draft) this.input.value = ""; // keep edits made while sending
   }
+}
+
+function swap(el: HTMLElement, next: HTMLElement, prevHtml: string, save: (html: string) => void): void {
+  const html = next.innerHTML;
+  if (html === prevHtml) return;
+  save(html);
+  el.replaceChildren(...next.childNodes);
 }
 
 function row(k: string, v: string | null | undefined) {

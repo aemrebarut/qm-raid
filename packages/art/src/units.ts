@@ -4,7 +4,7 @@
 import * as THREE from "three";
 
 import type { UnitAnim, UnitArt, UnitOpts } from "./types";
-import { bakeRigid, type Baked } from "./rigid";
+import { addOutline, bakeRigid, type Baked } from "./rigid";
 
 export type BuiltinClass = "knight" | "ranger" | "scout" | "oracle";
 export const UNIT_CLASSES: BuiltinClass[] = ["knight", "ranger", "scout", "oracle"];
@@ -176,7 +176,7 @@ interface Rig {
 const HIP_Y = 0.2;
 const SHOULDER_Y = 0.22; // above the hips, in torso space
 
-export function makeUnit(opts: UnitOpts): UnitHandle {
+export function makeUnit(opts: UnitOpts & { outline?: boolean }): UnitHandle {
   const cls = opts.cls;
   const builtin = (UNIT_CLASSES as string[]).includes(cls);
   const forged = opts.forged ?? !builtin;
@@ -434,10 +434,11 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   object3d.add(root);
   gem.userData.keep = true; // stays a real mesh: its own glow material, and staffTip reads its world position
   const baked = bakeRigid(object3d);
+  const outline = opts.outline === false ? null : addOutline(object3d, baked, 1.5);
 
   const rig: Rig = { root, hips, torso, head, legL, legR, armL, armR, elbowL, elbowR, wrist, gem, cape, halo };
   return animate(rig, {
-    object3d, baked, gemMat, gemBase, runeMat, owned, robed, forged, scale,
+    object3d, baked, outline, gemMat, gemBase, runeMat, owned, robed, forged, scale,
     phase: (seed % 1000) / 1000,
     height: 0.8 * scale,
     knight: cls === "knight",
@@ -449,6 +450,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
 interface Ctx {
   object3d: THREE.Group;
   baked: Baked;
+  outline: THREE.SkinnedMesh | null;
   gemMat: THREE.MeshLambertMaterial;
   gemBase: THREE.Color;
   runeMat: THREE.MeshBasicMaterial;
@@ -668,6 +670,7 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
     height: c.height,
     dispose() {
       c.baked.dispose();
+      c.outline?.geometry.dispose();
       for (const m of c.owned) m.dispose();
       // Non-shared geometries created per unit (tiny); shared ones are flagged userData.shared.
       c.object3d.traverse((o) => {

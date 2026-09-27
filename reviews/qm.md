@@ -108,3 +108,16 @@ Owner: raid-qm-rev. Implementation owners: raid-qm-plan and raid-qm-impl.
 - **P1, server.ts begin/pump: a queued send's idempotency key is not saved before dispatch.** finish saves active:null plus the remaining queue, then pump removes its next send and begin assigns a key, but the next save occurs only after startTurn returns. Crash after QM accepts the request but before its response is saved: disk still has the queued send without a key; restart generates a different key and executes the order again. Assign and persist the key and active transition before making the external request, including sends started from finish and loadUnits.
 - Exact-commit fixture observed a dispatched request with a generated raid key while units.json still contained active:null and queued next-order without any key. Fixture: /tmp/raid-qm-review-2d6f45d/src/check.ts.
 - The network retry behavior is accepted; the claim that post-crash re-sends never start a second run is not yet accepted.
+
+## 2026-09-27 15:12 PDT: 21a68ed adoption rollback
+
+- Reviewed the full diff. Four client tests pass. Exact-commit fixture proves unknown GET/send/PATCH return 404, DELETE returns 200, unit count remains zero, and no QM turn starts from these requests.
+- A subsequent full SpawnRequest and send forwards gpt-6-luna, low thinkingLevel, and team 3, with a nonempty new sessionId. Both adoption findings from 15e2dda are resolved.
+- Follow now exits after receiving a stream chunk for a deleted/replaced/finished send and avoids the subsequent run read. Combined with ab8ce96's emission guards, the old deleted-unit activity finding remains resolved.
+- Fixture: /tmp/raid-qm-review-21a68ed/src/check.ts. No live QM check was run.
+
+## 2026-09-27 15:12 PDT: 7b2724d usage attribution window
+
+- Reviewed the attribution-window change from 15 to 90 seconds. It broadens which recent units share delayed org-wide spend; it does not make usage attributable to a specific run.
+- No new finding from this small change. The open 5e878d1 usage findings still apply: deleted ids remain eligible, integer rounding does not preserve totals, and overlapping polls can regress the baseline. The longer window extends retired-unit eligibility until those fixes land.
+- Implementer-reported real engine/GBrain evidence was not rerun because the shared QM instance is reserved for the demo. Prior isolated accounting fixtures remain the relevant review evidence.

@@ -4,16 +4,18 @@
 export const PORTAL_URL = (process.env.QM_PORTAL_URL ?? "http://localhost:8129").replace(/\/$/, "");
 
 export interface RunResult {
-  status: string; // "ok" on success
+  status: string; // ok | refused | failed | pending_approval | queued | silent | react
   sessionId?: string;
   reply?: string;
+  reason?: string;
+  refusalKind?: string;
   adminUrl?: string;
   error?: string;
   message?: string;
 }
 
 export interface RunState {
-  status: string; // "queued" | "running" | "done" | "failed" | ...
+  status: string; // pending | running | done | failed
   result: RunResult | null;
   partial?: string;
   activity?: Array<{ seq: number; type: string; payload: Record<string, unknown> }>;
@@ -70,12 +72,17 @@ export async function getRun(runId: string): Promise<RunState> {
   return api("GET", `/api/runs/${encodeURIComponent(runId)}`);
 }
 
-/** Poll a run until it leaves queued/running. */
+/** QM run statuses are pending | running | done | failed; a run is over once done/failed or its result is set. */
+export function runFinished(run: RunState): boolean {
+  return run.status === "done" || run.status === "failed" || run.result != null;
+}
+
+/** Poll a run until it is finished (done/failed or result set). */
 export async function waitRun(runId: string, timeoutMs = 180_000, everyMs = 1500): Promise<RunState> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     const run = await getRun(runId);
-    if (run.status !== "running" && run.status !== "queued") return run;
+    if (runFinished(run)) return run;
     if (Date.now() > deadline) throw new Error(`run ${runId} still ${run.status} after ${timeoutMs} ms`);
     await Bun.sleep(everyMs);
   }

@@ -14,6 +14,6 @@ const r = run.result;
 console.log(`run status: ${run.status}`);
 console.log(`status: ${r?.status}`);
 console.log(`sessionId: ${r?.sessionId}`);
-console.log(`reply: ${r?.reply ?? r?.message ?? r?.error}`);
+console.log(`reply: ${r?.reply ?? r?.reason ?? r?.message ?? r?.error}`);
 console.log(`elapsed: ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 process.exit(r?.status === "ok" && r.reply ? 0 : 1);

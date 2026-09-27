@@ -3,7 +3,7 @@ import { beforeEach, expect, test } from "bun:test";
 import type { EngineEvent, Order, Workflow } from "../../../contract/types.ts";
 import { store, subscribe } from "../src/store.ts";
 import { fixtureState } from "../src/fixture.ts";
-import { cancelRun, initWorkflows, onOrderEnded, parseVerdict, presetWorkflow, runForOrder, startRun, validateWorkflow, type NodeBrief } from "../src/workflow.ts";
+import { cancelRun, initWorkflows, loadRuns, onOrderEnded, parseVerdict, presetWorkflow, runForOrder, saveRuns, startRun, validateWorkflow, type NodeBrief } from "../src/workflow.ts";
 
 // Fake game.ts: startOrder cancels the unit's previous open order (re-entering onOrderEnded), cancelOrder re-enters too.
 let nextOrder = 1;
@@ -400,4 +400,47 @@ test("previous keeps every node's latest reply first, then older rounds up to th
   const prev = briefs.get(activeOf("u3").id)!.previous;
   expect(prev.map((p) => p.reply)).toEqual(["plan", "impl 1", "VERDICT: CHANGES: a", "impl 2"]);
   expect(r.status).toBe("running");
+});
+
+test("E18: a running fanout survives a restart (save, fresh state from JSON, load) and finishes", () => {
+  setPreset(1, "fanout", ["u1", "u2", "u3", "u4"]);
+  const r = run(1, "t104");
+  finish("u1", "plan");
+  finish("u2", "part one"); // reviewer is pending, implementer2 still running
+  const saved = JSON.parse(JSON.stringify({ state: store.state, flow: saveRuns() }));
+  store.state = saved.state; // what game.ts restoreGame does
+  loadRuns(saved.flow);
+  const r2 = store.state.workflowRuns.find((x) => x.id === r.id)!;
+  expect(r2).not.toBe(r);
+  expect(r2.active).toEqual(["implementer2"]);
+  expect(runForOrder(activeOf("u3").id)).toBe(r2);
+  finish("u3", "part two");
+  expect(r2.active).toEqual(["reviewer"]);
+  expect(handoffs().filter((h) => h.endsWith(":reviewer"))).toEqual(["u2>u4:reviewer", "u3>u4:reviewer"]);
+  expect(briefs.get(activeOf("u4").id)!.previous.map((p) => p.reply)).toEqual(["plan", "part one", "part two"]);
+  finish("u4", "VERDICT: APPROVED");
+  expect(r2.status).toBe("done");
+  expect(target("t104").status).toBe("resolved");
+  const later = run(1, "t101");
+  expect(Number(later.id.slice(1))).toBeGreaterThan(Number(r.id.slice(1)));
+});
+
+test("E18: without saved data a running run fails; a step the restore closed ends its run", () => {
+  setPreset(1, "trio");
+  const r = run(1, "t101");
+  let saved = JSON.parse(JSON.stringify({ state: store.state, flow: saveRuns() }));
+  store.state = saved.state;
+  loadRuns(null);
+  expect(store.state.workflowRuns[0]!.status).toBe("failed");
+  expect(target("t101").status).toBe("open");
+
+  store.state = fixtureState();
+  setPreset(1, "trio");
+  const r3 = run(1, "t101");
+  saved = JSON.parse(JSON.stringify({ state: store.state, flow: saveRuns() }));
+  store.state = saved.state;
+  store.state.orders.find((o) => o.runId === r3.id)!.status = "cancelled"; // restoreGame closed it quietly
+  loadRuns(saved.flow);
+  expect(store.state.workflowRuns.find((x) => x.id === r3.id)!.status).toBe("cancelled");
+  expect(r.status).toBe("running"); // the old object is dead and untouched
 });

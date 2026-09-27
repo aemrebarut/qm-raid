@@ -382,3 +382,44 @@ export function cancelRun(runId: string): Result {
 export function runForOrder(orderId: string): WorkflowRun | undefined {
   return runs().find((r) => r.steps.some((s) => s.orderId === orderId));
 }
+
+// ---------- E18: survive an engine restart ----------
+
+interface SavedCtx { id: string; wf: Workflow; pending: string[]; arrivals: [string, Done[]][]; done: Done[] }
+
+// The per-run data outside store.state, as JSON (game.ts saves it next to the state).
+export function saveRuns(): unknown {
+  const saved: SavedCtx[] = [];
+  for (const c of ctxs.values()) if (live(c)) saved.push({ id: c.run.id, wf: c.wf, pending: c.pending, arrivals: [...c.arrivals], done: c.done });
+  return { nextRun, runs: saved };
+}
+
+// After store.state (with workflowRuns) is restored: link each run to its saved data. A running run without it cannot
+// take its next edge and fails; a step whose order the restore closed ends like any other (its run ends with it).
+export function loadRuns(saved: unknown): void {
+  const s = saved && typeof saved === "object" ? (saved as { nextRun?: unknown; runs?: unknown }) : {};
+  const byId = new Map<string, SavedCtx>();
+  for (const x of Array.isArray(s.runs) ? s.runs : []) if (x && typeof x.id === "string" && x.wf && Array.isArray(x.wf.nodes)) byId.set(x.id, x);
+  nextRun = Math.max(nextRun, Number(s.nextRun) || 1, ...runs().map((r) => (Number(r.id.slice(1)) || 0) + 1));
+  ctxs.clear();
+  for (const run of runs()) {
+    const x = byId.get(run.id);
+    if (x) {
+      ctxs.set(run.id, { run, wf: x.wf, pending: Array.isArray(x.pending) ? x.pending : [], arrivals: new Map(Array.isArray(x.arrivals) ? x.arrivals : []), done: Array.isArray(x.done) ? x.done : [] });
+    } else if (run.status === "running") {
+      run.status = "failed";
+      run.active = [];
+      for (const st of run.steps) if (st.status === "active") { st.status = "failed"; st.summary = "engine restarted without the run's data"; }
+      hooks?.setTargetStatus(run.targetId, "open");
+    }
+  }
+  for (const c of [...ctxs.values()]) {
+    if (c.run.status !== "running") continue;
+    for (const st of [...c.run.steps]) {
+      if (st.status !== "active") continue;
+      const o = S().orders.find((x) => x.id === st.orderId);
+      if (!o) onOrderEnded({ id: st.orderId, unitId: st.unitId, targetId: c.run.targetId, status: "cancelled", source: "workflow", runId: c.run.id, nodeId: st.nodeId, vetoDeadline: null, reply: null });
+      else if (o.status !== "active") onOrderEnded(o);
+    }
+  }
+}

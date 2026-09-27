@@ -239,7 +239,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       b.flashRaise("recall", 0.9);
       fx.burst(head(b)(), color, 0.9, 0.6);
       const text = summary.replace(/\s+/g, " ").trim();
-      if (text) fx.text(() => head(b)().add(new THREE.Vector3(0, 0.55, 0)), text.length > 52 ? text.slice(0, 51) + "\u2026" : text, { height: 0.24, dur: 3.2 });
+      if (text) fx.text(() => head(b)().add(new THREE.Vector3(0, 0.55, 0)), text.length > 52 ? text.slice(0, 51) + "\u2026" : text, { height: 0.3, dur: 3.4 });
     });
   }
 

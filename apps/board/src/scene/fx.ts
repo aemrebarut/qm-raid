@@ -200,9 +200,9 @@ export class Fx {
   scroll(from: Pt, to: Pt, opts: { color?: THREE.ColorRepresentation; dur?: number } = {}, onArrive?: () => void) {
     const color = opts.color ?? "#ffd45a";
     const g = new THREE.Group();
-    const glow = glowSprite(color, 0.9);
+    const glow = glowSprite(color, 1.1);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: scrollTexture(), transparent: true, depthTest: false }));
-    s.scale.set(0.5, 0.39, 1);
+    s.scale.set(0.66, 0.51, 1);
     s.renderOrder = 12;
     glow.renderOrder = 11;
     glow.material.depthTest = false;

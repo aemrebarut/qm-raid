@@ -16,7 +16,8 @@ Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost o
 - `src/index.ts` boot: startGame, Bun.serve (`idleTimeout: 0` for SSE)
 - `src/app.ts` HTTP routes, CORS allowlist and CSRF guards, Library proxies, error handling
 - `src/sse.ts` GET /api/events, drops clients with more than 2000 unread events
-- `src/game.ts` world load, orders, movement tick, bridge event mapping, teams, spawn, reset
+- `src/game.ts` world load, orders, movement tick, bridge event mapping, teams, spawn, reset, autopilot
+- `src/flowlink.ts` links team workflows (`src/workflow.ts`, owner raid-eng-flow) to the game; logs "team workflows disabled" if that module fails to load
 - `src/store.ts` state holder, typed `emit()` (seq, epoch ms ts), SSE fan-out, last 200 events
 - `src/bridge.ts` Bridge API client and SSE follower with reconnect
 - `src/config.ts` ports, URLs, class to model map, speeds
@@ -25,11 +26,13 @@ Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost o
 - `test/smoke.ts` end-to-end smoke test
 
 ## API
-`GET /health`, `GET /api/state`, `GET /api/events` (SSE, `state.snapshot` first, `: ping` every 15 s), `POST /api/orders` {unitIds? | teamId?, targetId}, `POST /api/orders/:id/cancel`, `POST /api/units` {class, name?, team?}, `PATCH /api/units/:id` {team?, effort?, role?}, `POST /api/units/:id/message` {text}, `POST /api/teams` {id, members}, `PATCH /api/teams/:id` {autopilot?, name?}, `POST /api/reset`, Library proxies `GET /api/brain/graph|stats|search?q=|page?slug=`. Debug: `GET /api/debug/events`.
+`GET /health`, `GET /api/state`, `GET /api/events` (SSE, `state.snapshot` first, `: ping` every 15 s), `POST /api/orders` {unitIds? | teamId?, targetId}, `POST /api/orders/:id/cancel`, `POST /api/units` {class, name?, team?}, `PATCH /api/units/:id` {team?, effort?, role?}, `POST /api/units/:id/message` {text}, `POST /api/teams` {id, members}, `PATCH /api/teams/:id` {autopilot?, name?}, `PUT /api/teams/:id/workflow` {workflow}, `DELETE /api/teams/:id/workflow`, `POST /api/reset`, Library proxies `GET /api/brain/graph|stats|search?q=|page?slug=`. Debug: `GET /api/debug/events`.
 Errors are `{ok: false, error}` with 400 (bad input), 404 (unknown id), 502 (dependency down).
 
 ## Behavior
 - World: brain `GET /world` at start (4 s timeout); the brain has no units, so the 6 fixture units are added. Brain down: the local fixture.
 - Orders: one per unit (a new order cancels the old), unit steps one tile every 333 ms (diagonal allowed) to a free tile next to the target, then `working` and the bridge gets `{text, orderId, targetId, componentId}`. `reply` -> order `done`, target `resolved`; `error` -> order `failed`. Terminal events for a non-current orderId are dropped.
 - GBrain tool activity (tool name contains `gbrain`): contains `link` -> `memory.link`, contains put/remember/write/capture/add_page -> `memory.remember`, else `memory.recall`; the unit shows `recalling` / `remembering` for 1.5 s.
+- Bridge events (re)connect: every idle unit on that bridge is re-registered (`POST /units`, idempotent) and gets fresh `qm` session links via `unit.updated`, so a bridge restart needs no reset. Units mid-order re-register lazily (send 404 -> POST /units -> retry).
+- Team workflows: an order for a team with a workflow starts a run; each node is a `workflow` order whose prompt adds `Role: <role>. <instructions>` and `Previous work:`. Autopilot skips such teams.
 - Dependencies down: log once a minute, retry every 2 s, keep serving.

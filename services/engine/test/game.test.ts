@@ -7,16 +7,21 @@ let proposeAnswer: unknown = { proposals: [] };
 let proposeGate: Promise<void> | null = null; // when set, /propose waits for it (a slow proposer)
 let spawnGate: Promise<void> | null = null; // when set, bridge POST /units waits for it (slow registration)
 const calls: { url: string; body: any }[] = [];
+let sessionGen = 0; // bridge POST /units answers a fresh sessionId each time
 globalThis.fetch = (async (url: string, init?: RequestInit) => {
   calls.push({ url: String(url), body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined });
   if (String(url).endsWith("/propose") && proposeGate) await proposeGate;
   if (String(url).endsWith("/units") && init?.method === "POST" && spawnGate) await spawnGate;
+  if (String(url).endsWith("/units") && init?.method === "POST") {
+    const id = `s${++sessionGen}`;
+    return new Response(JSON.stringify({ sessionId: id, sessionUrl: `http://qm.test/c/${id}` }), { status: 200 });
+  }
   return new Response(JSON.stringify(String(url).endsWith("/propose") ? proposeAnswer : { ok: true }), { status: 200 });
 }) as unknown as typeof fetch;
 const VETO = `/tmp/engine-test-vetoes-${process.pid}.jsonl`;
 process.env.VETO_LOG = VETO;
 
-const { store } = await import("../src/store.ts");
+const { store, recentEvents } = await import("../src/store.ts");
 const { fixtureState } = await import("../src/fixture.ts");
 const { createOrders, onBridgeEvent, resetWorld, autopilotTick, goOrder, adjustOrder, cancelOrder } = await import("../src/game.ts");
 const game = await import("../src/game.ts");
@@ -353,4 +358,22 @@ test("F2: workflow wiring with a fake flow (routes, run start, prompt brief, ste
   await put({ preset: "trio" });
   game.assignTeam({ id: 2, members: ["u4", "u5", "u3"] });
   expect(store.state.teams[0]!.workflow).toBeNull();
+});
+
+test("bridge reconnect re-registers idle units with fresh sessions; units mid-order keep the lazy path", async () => {
+  const { BRIDGE_URL } = await import("../src/config.ts");
+  const o = orderFor(["u2"], "t101");
+  game.resyncUnits(BRIDGE_URL); // first connect
+  await Bun.sleep(20);
+  const first = unit("u1").qm.sessionId;
+  expect(first).toBeTruthy();
+  calls.length = 0;
+  game.resyncUnits(BRIDGE_URL); // bridge restarted: SSE reconnect
+  await Bun.sleep(20);
+  const posted = calls.filter((c) => c.url === `${BRIDGE_URL}/units`).map((c) => c.body.id).sort();
+  expect(posted).toEqual(["u1", "u3", "u4", "u5", "u6"]);
+  expect(unit("u1").qm.sessionId).not.toBe(first);
+  expect(unit("u1").qm.sessionUrl).toBe(`http://qm.test/c/${unit("u1").qm.sessionId}`);
+  expect(recentEvents().some((e: any) => e.type === "unit.updated" && e.unit.id === "u1" && e.unit.qm.sessionId === unit("u1").qm.sessionId)).toBe(true);
+  expect(order(o.id).status).toBe("active");
 });

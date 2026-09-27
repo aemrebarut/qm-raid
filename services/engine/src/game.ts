@@ -101,6 +101,17 @@ async function ensureSpawned(u: Unit): Promise<boolean> {
   return r.spawning;
 }
 
+// Every bridge (re)connect: register its units. A restarted bridge dropped its sessions, so idle units re-POST
+// (idempotent on every bridge) and get fresh session links; units mid-order keep the lazy 404 -> re-POST path.
+function resyncUnits(base: string): void {
+  for (const u of S().units) {
+    if (bridgeFor(u) !== base) continue;
+    const r = runtime(u.id);
+    if (u.status === "idle" && !u.orderId && !r.spawning) r.spawned = false;
+    void ensureSpawned(u);
+  }
+}
+
 function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string {
   const issue = t.issue.toLowerCase();
   const pages = [`components/${t.component}`, `issues/${issue}`, ...t.customers.map((c) => `companies/${c}`)];
@@ -857,10 +868,8 @@ export async function startGame(): Promise<void> {
   startForge();
   const bridges = new Set<string>([BRIDGE_URL, FORGE_URL]);
   for (const base of bridges) {
-    followBridgeEvents(base, onBridgeEvent, () => {
-      for (const u of S().units) if (bridgeFor(u) === base) void ensureSpawned(u);
-    });
+    followBridgeEvents(base, onBridgeEvent, () => resyncUnits(base));
   }
 }
 
-export { fixtureUnits, autopilotTick, tick };
+export { fixtureUnits, autopilotTick, tick, resyncUnits };

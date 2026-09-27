@@ -89,18 +89,6 @@
     ],
     "events": [
       {
-        "name": "verdict_approved",
-        "at": 0
-      },
-      {
-        "name": "camp_resolved",
-        "at": 0
-      },
-      {
-        "name": "run_done",
-        "at": 0
-      },
-      {
         "name": "ready",
         "at": 0
       },

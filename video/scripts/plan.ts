@@ -92,6 +92,9 @@ const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
 
 function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, ext: string, title = TITLE, target = rule.target) {
   const D = doc.duration;
+  // Events before the clip's own "ready" marker are stale SSE from earlier work (seen at t 0.01 in dry runs).
+  const ready = doc.events.find((e) => e.name === "ready")?.t ?? 0.3;
+  doc = { ...doc, events: doc.events.filter((e) => e.t >= ready) };
   const evs = doc.events.filter((e) => match(rule.hold, e.name));
   if (!evs.length) return null;
   // 1x windows around events; the first one also covers the title card.
@@ -191,7 +194,7 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   return { id, src, sfx, voSwap, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
-const dir = process.argv[2] ?? join(import.meta.dir, "../public/clips");
+const dir = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? join(import.meta.dir, "../public/clips");
 const edlPath = join(import.meta.dir, "../src/edl.json");
 const edl: Record<string, unknown> = {};
 // --real: skip mock captures (the final take). Loadout always comes from the approved mock close-up.
@@ -254,9 +257,13 @@ if (ap) {
 
 // Hero: 2 s of busy gameplay, starting just before its first recall beam when marked.
 const heroExt = ["mp4", "webm"].find((x) => existsSync(join(dir, `hero.${x}`)));
-if (heroExt) {
+const heroDoc = (() => {
   const hm = join(dir, "hero.markers.json");
-  const doc = existsSync(hm) ? JSON.parse(readFileSync(hm, "utf8")) : { duration: 4, events: [] };
+  return existsSync(hm) ? JSON.parse(readFileSync(hm, "utf8")) : { duration: 4, events: [] };
+})();
+if (heroExt && realOnly && heroDoc.backend === "mock") console.log("hero: mock capture skipped (--real), falls back to orders");
+if (heroExt && !(realOnly && heroDoc.backend === "mock")) {
+  const doc = heroDoc;
   const beam = (doc.events as Ev[]).find((e) => e.name === "recall_beam");
   const from = round(Math.min(Math.max(0.3, beam ? beam.t - 0.6 : 0.5), Math.max(0.3, doc.duration - 2.1)));
   edl.hero = { src: `clips/hero.${heroExt}`, from };

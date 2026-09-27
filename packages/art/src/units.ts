@@ -4,6 +4,7 @@
 import * as THREE from "three";
 
 import type { UnitAnim, UnitArt, UnitOpts } from "./types";
+import { bakeRigid, type Baked } from "./rigid";
 
 export type BuiltinClass = "knight" | "ranger" | "scout" | "oracle";
 export const UNIT_CLASSES: BuiltinClass[] = ["knight", "ranger", "scout", "oracle"];
@@ -137,17 +138,17 @@ function part(g: THREE.BufferGeometry, m: THREE.Material, x = 0, y = 0, z = 0, s
 }
 
 interface Rig {
-  root: THREE.Group;     // bob, lean, jump
-  hips: THREE.Group;     // at hip height
-  torso: THREE.Group;    // leans
-  head: THREE.Group;
-  legL: THREE.Group; legR: THREE.Group;
-  armL: THREE.Group; armR: THREE.Group;
-  elbowL: THREE.Group; elbowR: THREE.Group;
-  wrist: THREE.Group;    // staff grip in the right hand
+  root: THREE.Object3D;  // bob, lean, jump
+  hips: THREE.Object3D;  // at hip height
+  torso: THREE.Object3D; // leans
+  head: THREE.Object3D;
+  legL: THREE.Object3D; legR: THREE.Object3D;
+  armL: THREE.Object3D; armR: THREE.Object3D;
+  elbowL: THREE.Object3D; elbowR: THREE.Object3D;
+  wrist: THREE.Object3D; // staff grip in the right hand
   gem: THREE.Mesh;
   cape: THREE.Object3D | null;
-  halo: THREE.Group | null;
+  halo: THREE.Object3D | null;
 }
 
 const HIP_Y = 0.2;
@@ -166,6 +167,8 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   const gemBase = rc.clone();
   const gemMat = new THREE.MeshLambertMaterial({ color: rc.clone().lerp(new THREE.Color("#ffffff"), 0.35), emissive: rc.clone(), emissiveIntensity: 0.9, flatShading: true });
   const runeMat = new THREE.MeshBasicMaterial({ color: rc.clone().lerp(new THREE.Color("#ffffff"), 0.2) });
+  teamMat.userData.tag = "team";
+  runeMat.userData.bake = "own";
   const owned: THREE.Material[] = [teamMat, gemMat, runeMat];
 
   const skin = mat(SKINS[Math.floor(rnd() * SKINS.length)]);
@@ -185,14 +188,14 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     : mat(new THREE.Color("#2c2a38").lerp(rc, 0.18));
   const trouser = cls === "knight" ? metalDark : cls === "ranger" ? mat("#3a3226") : cls === "scout" ? mat("#5c4632") : dark;
 
-  const root = new THREE.Group();
-  const hips = new THREE.Group();
+  const root = new THREE.Bone();
+  const hips = new THREE.Bone();
   hips.position.y = HIP_Y;
   root.add(hips);
 
   // Legs
   const mkLeg = (x: number) => {
-    const g = new THREE.Group();
+    const g = new THREE.Bone();
     g.position.set(x, 0, 0);
     if (robed) g.add(part(G.robeLeg, dark));
     else g.add(part(G.leg, trouser), part(G.boot, cls === "knight" ? metalDark : leatherDark));
@@ -202,7 +205,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   const legL = mkLeg(-0.055), legR = mkLeg(0.055);
 
   // Torso
-  const torso = new THREE.Group();
+  const torso = new THREE.Bone();
   hips.add(torso);
   torso.add(part(G.torso, cloth));
   if (robed) torso.add(part(G.robe, cloth));
@@ -246,10 +249,10 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
 
   // Arms: shoulder -> elbow -> hand
   const mkArm = (side: -1 | 1) => {
-    const arm = new THREE.Group();
+    const arm = new THREE.Bone();
     arm.position.set(side * 0.155, SHOULDER_Y, 0);
     arm.add(part(G.upperArm, cloth));
-    const elbow = new THREE.Group();
+    const elbow = new THREE.Bone();
     elbow.position.y = -0.12;
     elbow.add(part(G.foreArm, cls === "knight" ? metal : robed ? cloth : cloth), part(G.hand, skin, 0, -0.11, 0.005));
     arm.add(elbow);
@@ -261,7 +264,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   const { arm: armR, elbow: elbowR } = mkArm(1);
 
   // Head
-  const head = new THREE.Group();
+  const head = new THREE.Bone();
   head.position.y = 0.345;
   torso.add(head);
   torso.add(part(G.neck, skin, 0, 0.27, 0, false));
@@ -274,7 +277,16 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   }
 
   let cape: THREE.Object3D | null = null;
-  let halo: THREE.Group | null = null;
+  let halo: THREE.Bone | null = null;
+  /** Wrap a cape mesh in its own bone so it can swing. */
+  const capeBone = (m: THREE.Mesh) => {
+    const b = new THREE.Bone();
+    b.position.copy(m.position).setY(m.position.y + 0.18);
+    m.position.set(0, -0.18, 0);
+    b.add(m);
+    torso.add(b);
+    return b;
+  };
 
   if (cls === "knight") {
     head.add(part(G.helm, metal, 0, 0.01, 0), part(G.helmTop, metal, 0, 0.085, 0));
@@ -292,17 +304,16 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     shield.add(stripe);
     elbowL.add(shield);
     // short red-brown cape
-    cape = part(G.cloak, teamMat, 0, 0.08, -0.02);
-    cape.scale.set(1.05, 0.85, 1.05);
-    torso.add(cape);
+    const c = part(G.cloak, teamMat, 0, 0.08, -0.02);
+    c.scale.set(1.05, 0.85, 1.05);
+    cape = capeBone(c);
   } else if (cls === "ranger") {
     const green = mat("#3d5a2c");
     head.add(part(G.hairCap, hair, 0, 0.01, -0.005));
     const hood = part(G.hood, green, 0, 0.1, -0.015);
     hood.rotation.x = -0.18;
     head.add(hood, part(G.hoodBack, green, 0, 0.0, -0.02));
-    cape = part(G.cloak, green, 0, 0.06, -0.01);
-    torso.add(cape);
+    cape = capeBone(part(G.cloak, green, 0, 0.06, -0.01));
     const quiver = part(G.quiver, leather, 0.06, 0.16, -0.15);
     quiver.rotation.z = -0.45;
     torso.add(quiver);
@@ -318,8 +329,9 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
     const feather = part(G.feather, teamMat, 0.08, 0.1, -0.03);
     feather.rotation.set(-0.5, 0, -0.7);
     head.add(feather);
-    cape = part(G.capelet, mat("#6a5a3a"), 0, 0.2, -0.005);
-    torso.add(cape);
+    const c = part(G.capelet, mat("#6a5a3a"), 0, 0.2, -0.005);
+    c.material = mat("#6a5a3a");
+    torso.add(c); // shoulder capelet sits still
     const sat = part(G.satchel, leather, -0.15, -0.02, 0.02);
     sat.rotation.y = 0.3;
     torso.add(sat);
@@ -339,7 +351,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
       head.add(beard, part(G.hairCap, mat("#e8e4dc"), 0, 0.0, -0.01));
     } else head.add(part(G.hairCap, hair, 0, 0.0, -0.01));
     if (forged) {
-      halo = new THREE.Group();
+      halo = new THREE.Bone();
       halo.position.y = 0.12;
       const ring = part(G.halo, runeMat, 0, 0, 0, false);
       ring.rotation.x = Math.PI / 2;
@@ -353,7 +365,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   }
 
   // Staff in the right hand. The wrist counter-rotates so the staff angle is set in body space.
-  const wrist = new THREE.Group();
+  const wrist = new THREE.Bone();
   wrist.position.set(0, -0.11, 0.005);
   elbowR.add(wrist);
   const staff = new THREE.Group();
@@ -395,10 +407,12 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
   const object3d = new THREE.Group();
   object3d.name = `art-unit:${cls}`;
   object3d.add(root);
+  gem.userData.keep = true; // stays a real mesh: its own glow material, and staffTip reads its world position
+  const baked = bakeRigid(object3d);
 
   const rig: Rig = { root, hips, torso, head, legL, legR, armL, armR, elbowL, elbowR, wrist, gem, cape, halo };
   return animate(rig, {
-    object3d, teamMat, gemMat, gemBase, runeMat, owned, robed, forged, scale,
+    object3d, baked, gemMat, gemBase, runeMat, owned, robed, forged, scale,
     phase: (seed % 1000) / 1000,
     height: 0.8 * scale,
     knight: cls === "knight",
@@ -409,7 +423,7 @@ export function makeUnit(opts: UnitOpts): UnitHandle {
 
 interface Ctx {
   object3d: THREE.Group;
-  teamMat: THREE.MeshLambertMaterial;
+  baked: Baked;
   gemMat: THREE.MeshLambertMaterial;
   gemBase: THREE.Color;
   runeMat: THREE.MeshBasicMaterial;
@@ -436,6 +450,7 @@ interface Pose {
 
 const ZERO: Pose = { y: 0, lean: 0, twist: 0, roll: 0, legL: 0, legR: 0, armL: 0.08, armLz: -0.12, elbowL: -0.25, armR: 0.1, armRz: 0.08, elbowR: -0.35, staff: 0.05, staffZ: 0, head: 0, headY: 0, squash: 1 };
 
+const POSE_KEYS = Object.keys(ZERO) as (keyof Pose)[];
 const ease = (x: number) => x * x * (3 - 2 * x);
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
@@ -451,8 +466,10 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
   const gemEm = new THREE.Color();
   const WHITE = new THREE.Color("#ffffff");
 
+  const tg: Pose = { ...ZERO };
+  const mainMat = c.baked.material();
   function target(t: number, dt: number): Pose {
-    const p: Pose = { ...ZERO };
+    const p = Object.assign(tg, ZERO);
     const breathe = Math.sin(t * 2.1 + c.phase * 6.28);
     switch (anim) {
       case "idle": {
@@ -557,10 +574,10 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
   }
 
   function tick(t: number, dt: number) {
-    const tg = target(t, dt);
+    target(t, dt);
     // Critically damped blend toward the target pose; fast channels for strikes.
     const k = Math.min(1, dt * (anim === "work" || anim === "walk" ? 22 : 9));
-    for (const key of Object.keys(cur) as (keyof Pose)[]) cur[key] = lerp(cur[key], tg[key], k);
+    for (const key of POSE_KEYS) cur[key] = lerp(cur[key], tg[key], k);
 
     const r = rig;
     r.root.position.y = cur.y;
@@ -601,6 +618,11 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
     else if (anim === "error") gemEm.setRGB(0.9 * pulse, 0.05, 0.05);
     else gemEm.copy(c.gemBase).multiplyScalar(0.75 + 0.15 * Math.sin(t * 2 + c.phase * 6));
     c.gemMat.emissive.copy(gemEm);
+    // Error: the whole unit pulses red (one material for the baked body)
+    if (mainMat) {
+      if (anim === "error") mainMat.emissive.setRGB(0.4 * pulse, 0, 0);
+      else if (mainMat.emissive.r !== 0) mainMat.emissive.setRGB(0, 0, 0);
+    }
     c.gemMat.color.copy(gemEm).lerp(WHITE, 0.4);
     if (c.forged) c.runeMat.color.copy(c.gemBase).multiplyScalar(0.75 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.4 + c.phase * 6))).lerp(WHITE, 0.15);
   }
@@ -614,12 +636,13 @@ function animate(rig: Rig, c: Ctx): UnitHandle {
       speed = o?.speed ?? 1;
     },
     tick,
-    setTeamColor(col) { c.teamMat.color.set(col ?? NEUTRAL); },
+    setTeamColor(col) { c.baked.recolor("team", col ?? NEUTRAL); },
     setGlow(kind) { glow = kind; },
     staffTip(out = new THREE.Vector3()) { return rig.gem.getWorldPosition(out); },
     onStrike: null,
     height: c.height,
     dispose() {
+      c.baked.dispose();
       for (const m of c.owned) m.dispose();
       // Non-shared geometries created per unit (tiny); shared ones are flagged userData.shared.
       c.object3d.traverse((o) => {

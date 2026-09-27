@@ -184,7 +184,7 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
   // Floor overlay (grass worn to dirt) and cobbled lanes, merged across zones
   const fPos: number[] = [], fCol: number[] = [], fUv: number[] = [];
   const lanes: THREE.BufferGeometry[] = [];
-  const grassA = new THREE.Color("#78a443"), grassB = new THREE.Color("#658f36"), dirt = new THREE.Color("#a98a5c"), dirtDark = new THREE.Color("#8c7049");
+  const grassA = new THREE.Color("#78a443"), grassB = new THREE.Color("#658f36"), dirt = new THREE.Color("#b69565"), dirtDark = new THREE.Color("#977850");
   const tmp = new THREE.Color();
 
   const waving: { batch: Batch; index: number; base: THREE.Matrix4; phase: number; flag: boolean }[] = [];
@@ -272,7 +272,7 @@ export function makeZones(zones: ZoneSpec[], opts: ZonesOpts = {}): ZonesArt {
       for (const [vx, vz] of [[px, pz], [px, pz + step], [px + step, pz + step], [px, pz], [px + step, pz + step], [px + step, pz]]) {
         const edgeD = Math.min(vx - x0, x1 - vx, vz - z0, z1 - vz);
         const n = vnoise(vx * 0.9, vz * 0.9, seed + zi) * 0.6 + vnoise(vx * 2.3, vz * 2.3, seed + zi + 5) * 0.4;
-        const wear = Math.min(1, smooth(0.4, 2.2, edgeD) * 0.75 + (1 - smooth(0.4, 1.6, laneDist(vx, vz))) * 0.6) * smooth(0.25, 0.65, n + 0.15);
+        const wear = Math.min(1, smooth(0.4, 2.2, edgeD) * 0.7 + (1 - smooth(0.4, 1.6, laneDist(vx, vz))) * 0.6) * smooth(0.3, 0.72, n + 0.1);
         tmp.copy(grassA).lerp(grassB, vnoise(vx * 0.4, vz * 0.4, seed + 3));
         tmp.lerp(dirt, wear).lerp(dirtDark, wear * wear * 0.35);
         fPos.push(vx, 0.004, vz);

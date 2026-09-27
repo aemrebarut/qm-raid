@@ -77,3 +77,12 @@ raid-ui-scene
 15. Handoff animation on `workflow.handoff`: a scroll flies in an arc from unit to unit, summary float over the receiver (effect from raid-art-fx).
 raid-ui-plan
 7. W1 check on 4619: trio on a team, order the team, see planner to implementer to reviewer, one changes loop, approved, target resolved; TEST.md "W1 ui". 8. W2: one trio run on real QM through 4611 with the Analyst's go; TEST.md "W2 ui".
+
+## Status 15:45 and the rest of the day
+Done: M3 (TEST.md "M3 ui"), W1 (TEST.md "W1 ui", run w1 trio with one changes loop on 4618). Core for Emre's formation flow (e31bdc0: formTeam, role command, assignRole), used by hud 4056fc2. Spawn issue (hud/newIssue.ts, d31400a and 2dbbd58; top-bar button 15698d3 by raid-look-hud). Loadout view (hud/loadout.ts, 2bfea57; tab mount by raid-look-hud). Frozen demo board on 4621 (tools/demo-snapshot.sh, 6731d73; refresh only on the Analyst's go).
+Ownership since 15:25 (docs/lanes/look.md): raid-look-panels owns src/panels; raid-look-hud owns hud.css and most hud/*.ts; raid-ui-hud keeps formation.ts, ordersBar.ts, index.ts, dom.ts; raid-ui-plan owns src/core, main.ts, hud/newIssue.ts, hud/loadout.ts, tools/demo-snapshot.sh.
+Next:
+- raid-ui-plan: 9. spawn issue on 4619 once the engine POST /api/targets is live (Random and form; camp rises; TEST.md). 10. Loadout on 4619 once /api/catalog and PATCH are live, then one real unit on 4611 (TEST.md "Loadout ui"). 11. W2: one trio run on real QM through 4611 after the 15:45 to 15:57 rehearsal, on the Analyst's go (TEST.md "W2 ui"). 12. M4 and M5 TEST.md sections; demo path twice on 4621.
+- raid-ui-hud: formation polish and W2 support; no half-saved edits in hud/ while real-QM checks run (every dev board serves the working tree).
+- raid-ui-scene: art swap behind raid.art (A3 gate: raid-art-rev and raid-ui-rev pass, look-dir shots with ?art=on, cutoff 16:25, ?art=off fallback); spawn portal on target.spawned; role badges and handoff scroll for W2.
+- raid-ui-rev: art-on review of 4caaa56, 74466f8, cdd1e5e first, then the queue.

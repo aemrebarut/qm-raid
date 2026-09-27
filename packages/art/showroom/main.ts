@@ -148,7 +148,7 @@ function addRow(ex: Exhibit, err?: string, p?: Placed) {
   const n = document.createElement("div");
   n.className = "name";
   n.textContent = ex.name;
-  n.onclick = () => p && lookAt(p.center, 2.2);
+  n.onclick = () => p && fitAll([p]);
   d.appendChild(n);
   if (p) {
     const calls = drawCalls(p.inst.object3d);
@@ -175,12 +175,15 @@ function addRow(ex: Exhibit, err?: string, p?: Placed) {
 }
 
 /** Frame every exhibit: project the bounds into the camera, zoom to fit the area right of the sidebar. */
-function fitAll() {
+function fitAll(list: Placed[] = placed) {
   const box = new THREE.Box3();
-  // cells, not object bounds (particle pools and beams have huge or stale bounds)
-  for (const p of placed) {
+  // cells, plus the object's real height (not its full bounds: particle pools and beams have huge or stale bounds)
+  const ob = new THREE.Box3();
+  for (const p of list) {
     const h = (p.ex.span ?? 3) / 2;
-    box.expandByPoint(p.center.clone().add(new THREE.Vector3(-h, 0, -h))).expandByPoint(p.center.clone().add(new THREE.Vector3(h, Math.min(h * 1.6, 3), h)));
+    let top = Math.min(h * 1.6, 3);
+    if (p.ex.area !== "fx") { ob.setFromObject(p.inst.object3d); if (!ob.isEmpty()) top = Math.max(top, Math.min(ob.max.y, 10)); }
+    box.expandByPoint(p.center.clone().add(new THREE.Vector3(-h, 0, -h))).expandByPoint(p.center.clone().add(new THREE.Vector3(h, top + 0.2, h)));
   }
   const c = box.getCenter(new THREE.Vector3()).setY(0);
   lookAt(c, 1);
@@ -229,8 +232,10 @@ async function load() {
       addRow(ex, String(e));
     }
   }
-  const f = focusName ? placed.find((p) => p.ex.name.toLowerCase() === focusName.toLowerCase()) : undefined;
-  if (f) lookAt(f.center, 2.4);
+  // ?focus=knight matches "Unit: knight" (exact name first, then a case-insensitive substring)
+  const q = focusName?.toLowerCase();
+  const f = q ? placed.find((p) => p.ex.name.toLowerCase() === q) ?? placed.find((p) => p.ex.name.toLowerCase().includes(q)) : undefined;
+  if (f) fitAll([f]);
   else if (placed.length) fitAll();
   else lookAt(new THREE.Vector3(), 1);
   (window as any).showroom = { placed, scene, camera, renderer, lookAt };

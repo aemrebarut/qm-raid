@@ -55,3 +55,27 @@ Findings:
 2. **P2, fallback human titles.** `slugTitle('learnings/dev-u1-1790547966120')` returns `Dev u1 1790547966120`; a non-uN actor likewise exposes the epoch. The mandatory busy-feed fixture uses dev learning slugs. Handle all learning slugs without exposing the timestamp or actor identifier. Acceptance: no 13-digit epoch in any Library graph, search or memory label, including local dev events and forged agents.
 
 Additional narrow i1 evidence (overview, unit, workflow, Library, Forge) and the icon contact sheet were inspected. The formation history falls below the fold at 1280, already covered by the director's roster/formation redesign; no new blocker beyond the recorded findings.
+
+## R5 HUD 15698d3, e346453 and 9e16717, 2026-09-27 15:54 PDT
+
+**Verdict: reskin and reply-expansion fix pass.** The initial 15698d3 review found a P1: clicking a long reply toggled a class without removing its three-line clamp, making the removed Last reply content inaccessible. Reported directly to raid-look-hud and director; 9e16717 fixes it with a chevron button and expanded-state CSS. Independent Chrome repro on 4619: before 52 px visible / 539 px content, after 539 / 539, clamp none, aria-expanded true. No page errors, no painted hidden elements, and 20 px / 32 px icon requests measure correctly. This closes R1 item 2 and R3.
+
+Reviewed e346453 Loadout integration and i2 evidence at both sizes. Slate treatment and tab navigation are present. The narrow shot still has native left checkboxes and a tall list rather than the requested right-side switches; this is visual followup, not a functional failure. Board TypeScript passes and all 20 board tests / 119 assertions pass, including Loadout draft retention and Apply behavior. Earlier scene WIP type errors are absent in this run.
+
+Capture gaps sent to director: i2-loadout.png shows unselected overview, i2-workflow images do not show a running workflow, and i2-rolepick images show the preset grid rather than active role selection. These files do not establish coverage of the named states. Assert state before taking the next shot; shared mock team edits can invalidate fixed team assumptions.
+
+## R6 panels aa3d28b, 2026-09-27 15:57 PDT
+
+**Verdict: R4 P2 fixes pass.** Source reviewed after the Analyst's approved per-command Git workaround restored access. Changes were not attributed to a commit until aa3d28b was supplied.
+
+- Delayed search: submit, immediately clear, wait for response. Query and results both remain empty.
+- Learning titles: owner tests cover dev-u1, ordinary uN, forged actor names and epochs; all pass.
+- Hover card: pan a node 20 px above the graph bottom. Tooltip bottom 580.28 px, field bottom 589 px, no clipping. Hover redraw and click-to-page still pass; at 1280 backing canvas and CSS both 916x411. Offline-to-reopen recovery passes. Zero page errors.
+- Forge fallback: actual mock state displays trained/base Style, Grounded, Overall and Verdict metrics without model URIs, and Dry types say No eval score. Full endpoint rendering is being checked with a routed synthetic payload because the mock endpoint is not yet available.
+
+## R7 iteration i3, initial pass 2026-09-27 15:58 PDT
+
+Art-on overview, unit, Library, Forge and proposals inspected against the director's art-direction block. World labels are now legible, model portraits read clearly, Library uses the field well, and Forge results are scannable. Main HUD no longer reads as parchment scaffolding.
+
+1. **P2, raid-look-hud: compact proposals truncate the issue identifier.** In i3-proposals.png rows show Ada > LUM-10..., Bram > LUM-1..., Cato > LUM-1...; Cancel, Adjust and Go occupy most of the 320 px row. Preserve the full short issue ID and unit name before any optional title. Use the planned icon controls for secondary actions. Acceptance: distinguish LUM-101, LUM-102 and LUM-103 beside each Go button at both viewports. Sent to owner and director.
+2. **P2 visual, raid-look-hud: empty Activity remains a blank well.** i3-unit.png repeats Activity as tab and section header, then reserves roughly 100 px for an empty feed. Collapse that section when empty so the message composer anchors to content. Sent to owner and director.

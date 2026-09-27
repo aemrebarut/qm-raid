@@ -86,3 +86,37 @@ raid-eng-rev
 
 ## Lead (raid-eng-plan)
 Answer questions fast, run each milestone test, append docs/TEST.md, keep devbrain pages `code/engine`, `code/mock-bridge`, `code/autopilot` and `code/decisions/*` current, ping the Analyst at each milestone.
+
+## Team workflows (W1 16:00 trio on 4618 with the mock incl. one changes loop; W2 16:20 trio on real QM via 4611)
+Spec: CONTRACT.md "Team workflows", contract/types.ts (Workflow, WorkflowRun, workflow.* events), docs/lanes/flow.md. Owners: raid-eng-flow `services/engine/src/workflow.ts` (+ `services/engine/test/workflow.test.ts`); raid-eng-impl wiring in game.ts / app.ts / config.ts; raid-eng-mock verdicts in mock-bridge.
+
+Interface (fixed now so both sides build in parallel; change only via the lead):
+```ts
+// services/engine/src/workflow.ts  (imports only ./store.ts, ./config.ts and contract types)
+export interface NodeBrief { runId: string; nodeId: string; role: string; instructions: string;
+  previous: { nodeId: string; role: string; unitId: string; reply: string }[] }   // latest last
+export interface FlowHooks {
+  startOrder(unitId: string, targetId: string, brief: NodeBrief): string | null; // game.ts creates an order (source "workflow"), walks, prompts; returns orderId or null
+  cancelOrder(orderId: string): void;
+  setTargetStatus(targetId: string, status: "open" | "engaged" | "resolved"): void;
+}
+export function initWorkflows(h: FlowHooks): void;
+export function presetWorkflow(preset: Workflow["preset"], members: string[]): Workflow | { error: string };
+export function validateWorkflow(w: Workflow, members: string[]): string | null;   // error text or null
+export function startRun(teamId: number, targetId: string): { ok: true; run: WorkflowRun } | { ok: false; error: string };
+export function onOrderEnded(order: Order): void;   // game.ts calls it when an order with source "workflow" becomes done / failed / cancelled (order.reply set)
+export function cancelRun(runId: string): { ok: true } | { ok: false; error: string };
+export function runForOrder(orderId: string): WorkflowRun | undefined;
+```
+- workflow.ts owns `store.state.workflowRuns` (keep the last 20) and emits `workflow.updated` {run} on every change and `workflow.handoff` {runId, fromUnitId, toUnitId, nodeId, summary: first 160 chars of the reply} whenever a finished node starts the next one.
+- Presets bind members in member order: solo = implementer; pair = implementer -> reviewer (done), reviewer -> implementer (changes); trio = planner -> implementer (done) -> reviewer (done), reviewer -> implementer (changes); fanout = first member planner, last reviewer, the rest implementers (planner -> each implementer, each implementer -> reviewer, reviewer -> all implementers on changes). Too few members -> error "trio needs 3 members".
+- Verdict: last line matching `/VERDICT:\s*(APPROVED|CHANGES)(?::\s*(.*))?/i` in the reply; a reviewer reply with no verdict counts as `approved` when the order is done. failed order -> run `failed`.
+- Join: a node with several incoming edges starts when every predecessor started in this run has finished. `changes` edge taken -> `loops++`; past `maxLoops` (default 2) -> run `needs_human`. Done when a finished node has no matching outgoing edge -> target resolved. failed / cancelled / needs_human -> target back to open.
+- Role instructions default in config.ts (`ROLE_INSTRUCTIONS`, CONTRACT.md text); node.instructions overrides.
+
+Steps
+- F1 (flow). workflow.ts per the interface with pure unit tests: presets, validation, trio happy path, one changes loop, maxLoops -> needs_human, fanout join, cancel. Fake hooks, no HTTP.
+- F2 (impl). Wiring: `PUT /api/teams/:id/workflow` {preset} or {workflow} -> {ok, team}; `DELETE /api/teams/:id/workflow`; `POST /api/orders {teamId, targetId}` on a team with a workflow -> startRun; `Team.workflow` null by default (also after reset); `state.workflowRuns` []; order prompt for a workflow order = normal prompt + "Role: <role>. <instructions>" + "Previous work:" block with each previous reply (latest last); order `source: "workflow"`; call onOrderEnded on terminal status; cancelling any order of a running run cancels the run.
+- K12 (mock). Reviewer orders (text contains "VERDICT:") reply ending `VERDICT: CHANGES: <one concrete change>` the first time per (unit, target) and `VERDICT: APPROVED` the second; planner orders (text contains "Role: planner") reply with a 3-step numbered plan. Smoke covers both.
+- R5 (rev). On 4618 under the lock: trio preset on team 1, team order, expect planner -> implementer -> reviewer (changes) -> implementer -> reviewer (approved) -> run done, target resolved, handoff events between the right units, 5 orders with source workflow.
+- W2 (lead + impl). Same trio on 4610 real QM once, watched through the board on 4611.

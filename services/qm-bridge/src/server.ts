@@ -45,7 +45,8 @@ const alive = (u: Unit): boolean => units.get(u.id) === u;
 function saveUnits(): void {
   try {
     mkdirSync(dirname(STATE_FILE), { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify({ units: [...units.values()], retired: [...retired] }, null, 1));
+    const undelivered = backlog.filter(isTerminal); // terminals nobody has received yet survive a bridge restart
+    writeFileSync(STATE_FILE, JSON.stringify({ units: [...units.values()], retired: [...retired], undelivered }, null, 1));
   } catch (err) {
     console.warn(`[qm-bridge] cannot save unit map: ${String((err as Error)?.message ?? err)}`);
   }
@@ -53,9 +54,13 @@ function saveUnits(): void {
 
 function loadUnits(): void {
   try {
-    const saved = JSON.parse(readFileSync(STATE_FILE, "utf8")) as { units?: Unit[]; retired?: string[] } | Unit[];
+    const saved = JSON.parse(readFileSync(STATE_FILE, "utf8")) as
+      | { units?: Unit[]; retired?: string[]; undelivered?: BridgeEvent[] }
+      | Unit[];
     const rows = Array.isArray(saved) ? saved : (saved.units ?? []);
     for (const id of Array.isArray(saved) ? [] : (saved.retired ?? [])) retired.add(id);
+    backlog.push(...(Array.isArray(saved) ? [] : (saved.undelivered ?? [])));
+    if (backlog.length) console.log(`[qm-bridge] restored ${backlog.length} undelivered terminal event(s)`);
     for (const r of rows) {
       if (!r?.id || !r.threadRef) continue;
       const busy = r.active || r.queue?.length;
@@ -86,22 +91,29 @@ const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const enc = new TextEncoder();
 
 // Events emitted while no client is connected (engine restarting, bridge just restarted) are replayed to the next client.
-const backlog: Uint8Array[] = [];
+// Terminal events (reply, error) in it are also persisted in .state, so an order's terminal survives a bridge restart.
+const backlog: BridgeEvent[] = [];
+const isTerminal = (ev: BridgeEvent): boolean => ev.type === "reply" || ev.type === "error";
+const sse = (ev: BridgeEvent): Uint8Array => enc.encode(`data: ${JSON.stringify(ev)}\n\n`);
 
 function emit(ev: BridgeEvent): void {
-  const line = enc.encode(`data: ${JSON.stringify(ev)}\n\n`);
-  if (clients.size === 0) {
-    backlog.push(line);
-    if (backlog.length > 500) backlog.shift();
-    return;
-  }
+  const line = sse(ev);
+  let delivered = false;
   for (const c of clients) {
     try {
       c.enqueue(line);
+      delivered = true;
     } catch {
       clients.delete(c);
     }
   }
+  if (delivered) return;
+  backlog.push(ev);
+  if (backlog.length > 500) {
+    const drop = backlog.findIndex((e) => !isTerminal(e)); // drop chatter before terminals
+    backlog.splice(drop >= 0 ? drop : 0, 1);
+  }
+  if (isTerminal(ev)) saveUnits();
 }
 setInterval(() => {
   const ping = enc.encode(": ping\n\n");
@@ -172,7 +184,7 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
   u.active = null;
   lastWork.set(u.id, Date.now());
   if (!alive(u)) return;
-  saveUnits();
+  // Emit before saving: a crash in between repeats the terminal (engine ignores it for a finished order) instead of losing it.
   if (s.intro) {
     // The intro is not an order: its text was streamed as chat; never a terminal event.
     if (!outcome.ok) activity(u, s, "error", outcome.text);
@@ -181,6 +193,7 @@ function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void 
   } else {
     emit({ type: "error", unitId: u.id, ...(s.orderId ? { orderId: s.orderId } : {}), text: outcome.text });
   }
+  saveUnits();
   pump(u);
 }
 
@@ -452,8 +465,11 @@ const server = Bun.serve({
           clients.add(c);
           c.enqueue(enc.encode(": open\n\n"));
           const replay = backlog.splice(0);
-          for (const line of replay) c.enqueue(line);
-          if (replay.length) console.log(`[qm-bridge] replayed ${replay.length} buffered event(s) to a new /events client`);
+          for (const ev of replay) c.enqueue(sse(ev));
+          if (replay.length) {
+            console.log(`[qm-bridge] replayed ${replay.length} buffered event(s) to a new /events client`);
+            if (replay.some(isTerminal)) saveUnits();
+          }
         },
         cancel() {
           clients.delete(ctl);

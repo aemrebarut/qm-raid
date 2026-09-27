@@ -13,7 +13,7 @@ import {
   threadRefFor,
   type RunState,
 } from "./qm.ts";
-import { normalizeTool, toolText } from "./tools.ts";
+import { normalizeTool, toolArgs, toolText } from "./tools.ts";
 
 const PORT = Number(process.env.PORT ?? 4614);
 const HOST = "127.0.0.1";
@@ -67,12 +67,13 @@ function activity(u: Unit, send: Send, kind: "message" | "tool" | "thinking" | "
 function header(u: Unit, s: Send): string {
   if (s.intro) return s.text;
   const tags = [
+    `unit ${u.id}`,
     s.orderId && `order ${s.orderId}`,
     s.targetId && `target ${s.targetId}`,
     s.componentId && `component ${s.componentId}`,
     u.team != null && `team ${u.team}`,
   ].filter(Boolean);
-  return tags.length ? `[${tags.join(" | ")}]\n${s.text}` : s.text;
+  return `[${tags.join(" | ")}]\n${s.text}`;
 }
 
 function turnOptions(u: Unit): { model?: string; thinkingLevel?: string } {
@@ -175,7 +176,8 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
             if (seenTools.has(ev.toolCallId)) continue;
             seenTools.add(ev.toolCallId);
             const tool = normalizeTool(ev.toolCallName, ev.args ?? {});
-            activity(u, s, "tool", toolText(tool, ev.args ?? {}), { tool, args: ev.args ?? {} });
+            const args = toolArgs(ev.args ?? {});
+            activity(u, s, "tool", toolText(tool, args), { tool, args });
           } else if (ev.type === "TOOL_CALL_RESULT") {
             if (ev.isError) activity(u, s, "error", `tool failed: ${String(ev.content ?? "").slice(0, 200)}`);
           } else if (ev.type === "CUSTOM" && ev.name === "delta") {

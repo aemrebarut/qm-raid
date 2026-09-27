@@ -1,18 +1,17 @@
-// Right side panel: the selected unit (details, order, live feed, reply, message box) or target.
+// Right side panel: what the selection is doing (the bottom centre shows who it is).
+// Unit: order, activity, message box. Camp: customers, engaged units, report. Team: roster and formation.
 import { api, type Building, type Bus, type FeedEntry, type Order, type Selection, type State, type Store, type Target, type Unit } from "../core";
+import { icon, kindIcon } from "../theme/icons";
+import { portraitArt } from "../theme/portrait";
+import { refreshTimes, relTime, stripName } from "../theme/text";
 import { BarracksPanel } from "./barracks";
 import { slugChips } from "./chips";
-import { clear, h, put, RowList, safeColor, safeUrl, timeOf } from "./dom";
+import { h, put, RowList, safeColor, safeUrl } from "./dom";
 import { FormationPanel, roleOf, teamOfSelection } from "./formation";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
 
 const FEED_SHOWN = 40;
-
-const KIND_ICON: Record<string, string> = {
-  message: "\u{1F4AC}", tool: "\u{1F6E0}", thinking: "\u{1F4AD}", error: "⚠",
-  recall: "\u{1F4D6}", remember: "\u{1F4DC}", link: "\u{1F517}", order: "⚔", reply: "✉", you: "\u{1F451}", handoff: "\u{1F4E8}",
-};
 
 export class SidePanel {
   readonly root = h("aside", { class: "hud-side hud-parchment", "data-empty": "true" });
@@ -25,7 +24,7 @@ export class SidePanel {
   private sent = new Map<string, FeedItem[]>(); // the user's own messages, merged into the feed
   private feed = h("ol", { class: "hud-feed" });
   private feedWrap = h("section", { class: "hud-section" }, h("h3", null, "Activity"), this.feed);
-  private feedRows = new RowList<FeedItem>(this.feed, (it) => feedRow(it, this.bus));
+  private feedRows = new RowList<FeedItem>(this.feed, (it) => feedRow(it, this.bus, this.store.unit(this.feedFor ?? "")?.name));
   private msg = new MessageBox((text) => this.send(text));
   private sel: Selection = { units: [], target: null, building: null, focus: null };
   private state: State | null = null;
@@ -39,6 +38,7 @@ export class SidePanel {
       const id = this.focusUnitId();
       if (id && this.feedFor === id && store.feed(id).at(-1) !== this.feedLast) this.renderFeed();
     });
+    setInterval(() => { if (!this.feedWrap.hidden) refreshTimes(this.feed); }, 5000);
   }
 
   setState(s: State): void {
@@ -86,61 +86,38 @@ export class SidePanel {
     const barracks = !!s && this.sel.focus === "building" && s.buildings.find((b) => b.id === this.sel.building)?.kind === "barracks";
     this.barracks.root.hidden = !barracks;
     if (barracks && s) this.barracks.setState(s);
-    // Team view: the selection is exactly one team's members (chip name or its digit key).
-    const team = s && this.sel.focus === "units" ? teamOfSelection(s, this.sel.units) : undefined;
-    this.formation.root.hidden = !team;
-    if (team && s) this.formation.setState(s, team);
     this.root.dataset.empty = "false";
-    if (!s) return void put(this.out, h("p", { class: "hud-hint" }, "Waiting for the engine..."));
+    if (!s) return void (this.root.dataset.empty = "true");
     const sel = this.sel;
     const units = sel.units.map((id) => s.units.find((u) => u.id === id)).filter((u): u is Unit => !!u);
     const target = sel.target ? s.targets.find((t) => t.id === sel.target) : undefined;
     const building = sel.building ? s.buildings.find((b) => b.id === sel.building) : undefined;
     if (sel.focus === "target" && target) this.renderTarget(s, target);
-    else if (sel.focus === "building" && building) this.renderBuilding(s, building);
+    else if (sel.focus === "building" && building) this.renderBuilding(s, building, barracks);
     else if (units.length === 1) this.renderUnit(s, units[0]);
     else if (units.length > 1) this.renderRoster(s, units);
-    else {
-      this.root.dataset.empty = "true";
-      put(this.out, h("p", { class: "hud-hint" }, "Select a unit, an enemy camp or a building."));
-    }
+    else this.root.dataset.empty = "true";
   }
 
   private renderUnit(s: State, u: Unit): void {
-    const team = s.teams.find((t) => t.id === u.team);
     const order = u.orderId ? s.orders.find((o) => o.id === u.orderId) : undefined;
     const target = order ? s.targets.find((t) => t.id === order.targetId) : undefined;
-    const lastReply = [...s.orders].reverse().find((o) => o.unitId === u.id && o.reply);
     const qmUrl = safeUrl(u.qm?.sessionUrl);
 
-    put(this.out, 
-      h("header", { class: "hud-side-head" },
-        h("div", { class: "hud-portrait", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
-        h("div", null,
-          h("h2", null, u.name),
-          h("div", { class: "hud-sub" }, `${u.class}${team ? ` · ${team.name}` : ""}`),
-          statusPill(u.status),
-        ),
-      ),
-      h("dl", { class: "hud-stats" },
-        row("Model", u.model), row("Effort", u.effort), row("Role", u.role),
-        row("Tile", `${u.pos.x}, ${u.pos.y}`),
-      ),
-      h("section", { class: "hud-section" },
-        h("h3", null, "Order"),
-        order
-          ? h("div", { class: "hud-order" },
-              h("div", null, target ? `${target.issue}: ${target.title}` : order.targetId),
-              h("div", { class: "hud-sub" }, `${order.status} · ${sourceLabel(s, order)}`))
-          : h("div", { class: "hud-sub" }, "No order. Right-click a camp to send this unit."),
-      ),
-      qmUrl ? h("a", { class: "hud-btn hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer" }, "Open in QM") : null,
+    put(this.out,
+      order
+        ? h("section", { class: "hud-section" },
+            h("h3", null, "Order"),
+            h("div", { class: "hud-order" },
+              h("div", { class: "hud-order-title" }, target ? `${target.issue} ${target.title}` : "Camp"),
+              h("div", { class: "hud-sum-row" }, h("span", { class: `hud-pill hud-order-${order.status}` }, order.status), h("span", { class: "hud-sub" }, sourceLabel(s, order)))))
+        : null,
+      qmUrl ? h("a", { class: "hud-btn hud-btn-sm hud-qm", href: qmUrl, target: "_blank", rel: "noopener noreferrer", title: "Open the QM session" }, icon("open"), "QM session") : null,
       u.status === "error"
         ? h("section", { class: "hud-section hud-error" }, h("h3", null, "Error"),
-            h("div", null, [...this.store.feed(u.id)].reverse().find((e) => e.kind === "error")?.text ?? "The agent reported an error."))
+            h("div", null, [...this.store.feed(u.id)].reverse().find((e) => e.kind === "error")?.text ?? "Agent error"))
         : null,
     );
-    if (lastReply) this.outReply.append(h("section", { class: "hud-section" }, h("h3", null, "Last reply"), h("div", { class: "hud-reply" }, lastReply.reply)));
     if (this.feedFor !== u.id) this.renderFeed();
   }
 
@@ -156,7 +133,7 @@ export class SidePanel {
     const items: FeedItem[] = [...log, ...(this.sent.get(id) ?? [])].sort((a, b) => a.ts - b.ts).slice(-FEED_SHOWN);
     if (fresh) this.feedRows.reset();
     this.feedRows.set(items);
-    if (!items.length) this.feed.append(h("li", { class: "hud-hint" }, "Nothing yet."));
+    refreshTimes(this.feed);
     this.feed.scrollTop = stick ? this.feed.scrollHeight : top;
   }
 
@@ -166,77 +143,61 @@ export class SidePanel {
       team
         ? h("header", { class: "hud-side-head hud-team-head", style: `--team:${safeColor(team.color)}` },
             h("span", { class: "hud-team-dot" }),
-            h("div", null, h("h2", null, `${team.name} team`),
-              h("div", { class: "hud-sub" }, `group ${team.id} · ${units.length} units · ${team.workflow ? `${team.workflow.preset} formation` : "no formation"} · autopilot ${team.autopilot ? "on" : "off"}`)))
-        : h("h2", null, `${units.length} units selected`),
+            h("div", null, h("h2", null, team.name),
+              h("div", { class: "hud-sum-row" },
+                h("span", { class: "hud-tag" }, `Group ${team.id}`),
+                h("span", { class: "hud-tag" }, `${units.length} units`),
+                team.autopilot ? h("span", { class: "hud-tag", style: "color:var(--gold)" }, "Auto") : null)))
+        : h("h2", null, `${units.length} selected`),
       h("ul", { class: "hud-roster" },
         units.map((u) => {
           const team = s.teams.find((t) => t.id === u.team);
           return h("li", null,
             h("button", { class: "hud-roster-item", type: "button", "data-unit": u.id, onclick: () => this.bus.select([u.id]) },
-              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, classGlyph(u.class)),
-              h("span", null, u.name),
+              h("span", { class: "hud-portrait hud-portrait-sm", "data-class": u.class, style: portraitStyle(u.class, team?.color) }, portraitArt(u.class, team?.color, 28)),
+              h("span", { class: "hud-roster-name" }, u.name),
               roleOf(team, u.id) ? h("span", { class: "hud-role-tag" }, roleOf(team, u.id)!) : null,
               statusPill(u.status),
             ));
         }),
       ),
-      h("p", { class: "hud-hint" }, "Right-click a camp to order them all. Click a name to focus one."),
     );
   }
 
   private renderTarget(s: State, t: Target): void {
-    const comp = s.components.find((c) => c.id === t.component);
     const engaged = s.orders.filter((o) => o.targetId === t.id && (o.status === "active" || o.status === "proposed"));
     const lastReply = [...s.orders].reverse().find((o) => o.targetId === t.id && o.reply);
-    put(this.out, 
-      h("header", { class: "hud-side-head" },
-        h("div", { class: "hud-portrait hud-portrait-foe", "data-kind": t.kind }, t.kind === "bug" ? "\u{1F47E}" : "\u{1F3F0}"),
-        h("div", null,
-          h("h2", null, t.title),
-          h("div", { class: "hud-sub" }, `${t.issue} · ${t.kind} · ${comp?.name ?? t.component}`),
-          h("span", { class: `hud-pill hud-target-${t.status}` }, t.status),
-        ),
+    const replyName = lastReply ? s.units.find((u) => u.id === lastReply.unitId)?.name : undefined;
+    put(this.out,
+      h("section", { class: "hud-section" },
+        h("h3", null, "Engaged"),
+        engaged.length
+          ? h("ul", { class: "hud-roster" }, engaged.map((o) => {
+              const u = s.units.find((x) => x.id === o.unitId);
+              const team = u ? s.teams.find((tm) => tm.id === u.team) : undefined;
+              return h("li", null, h("button", { class: "hud-roster-item", type: "button", onclick: () => u && this.bus.select([u.id]) },
+                h("span", { class: "hud-portrait hud-portrait-sm", style: portraitStyle(u?.class ?? "", team?.color) }, portraitArt(u?.class ?? "knight", team?.color, 28)),
+                h("span", { class: "hud-roster-name" }, u?.name ?? o.unitId),
+                o.source !== "user" ? h("span", { class: "hud-role-tag" }, sourceLabel(s, o)) : null,
+                h("span", { class: `hud-pill hud-order-${o.status}` }, o.status)));
+            }))
+          : h("div", { class: "hud-sub" }, "None"),
       ),
-      h("dl", { class: "hud-stats" }, row("Severity", "⚔".repeat(t.severity) + ` (${t.severity}/3)`), row("Tile", `${t.pos.x}, ${t.pos.y}`)),
       h("section", { class: "hud-section" },
         h("h3", null, "Customers"),
         t.customers.length
           ? h("ul", { class: "hud-list" }, t.customers.map((c) => h("li", null, prettySlug(c))))
-          : h("div", { class: "hud-sub" }, "None recorded."),
+          : h("div", { class: "hud-sub" }, "None"),
       ),
-      h("section", { class: "hud-section" },
-        h("h3", null, "Engaged by"),
-        engaged.length
-          ? h("ul", { class: "hud-list" }, engaged.map((o) => h("li", null, orderLine(s, o))))
-          : h("div", { class: "hud-sub" }, "Nobody yet. Select units, then right-click this camp."),
-      ),
-      lastReply ? h("section", { class: "hud-section" }, h("h3", null, "Last report"), h("div", { class: "hud-reply" }, lastReply.reply)) : null,
+      lastReply?.reply ? h("section", { class: "hud-section" }, h("h3", null, "Report"), clamped(stripName(lastReply.reply, replyName))) : null,
     );
   }
 
-  private renderBuilding(s: State, b: Building): void {
-    const info = BUILDINGS[b.kind] ?? { name: b.id, glyph: "\u{1F3DB}", blurb: "" };
-    const idle = s.units.filter((u) => u.status === "idle").length;
-    put(this.out, 
-      h("header", { class: "hud-side-head" },
-        h("div", { class: "hud-portrait hud-portrait-building", "data-kind": b.kind }, info.glyph),
-        h("div", null, h("h2", null, info.name), h("div", { class: "hud-sub" }, info.blurb)),
-      ),
-      h("dl", { class: "hud-stats" },
-        b.kind === "gbrain" ? row("Pages", String(s.memory.pages)) : null,
-        b.kind === "barracks" ? row("Idle agents", String(idle)) : null,
-        b.kind === "river" ? row("Unit types", String((s.unitTypes ?? []).filter((t) => t.source === "forge").length)) : null,
-        row("Tile", `${b.x}, ${b.y}`),
-      ),
-      b.kind === "gbrain" && s.memory.recent.length
-        ? h("section", { class: "hud-section" },
-            h("h3", null, "Recent memory"),
-            h("ol", { class: "hud-feed" }, s.memory.recent.slice(-12).map((m) =>
-              feedRow({ ts: m.ts, kind: m.op, text: `${m.unitId ? `${unitName(s, m.unitId)}: ` : ""}${m.summary || m.slugs.join(", ")}` }))),
-          )
-        : null,
-    );
+  private renderBuilding(s: State, b: Building, barracks: boolean): void {
+    // Library and Forge open their own overlays; the Barracks section is persistent (this.barracks).
+    if (!barracks) this.root.dataset.empty = "true";
+    void s;
+    void b;
   }
 
   private async send(text: string): Promise<string | null> {
@@ -259,11 +220,11 @@ export class SidePanel {
 
 // Persistent message box: survives re-renders so typed text and focus are not lost.
 class MessageBox {
-  private input = h("textarea", { class: "hud-input", rows: 2, placeholder: "Message this agent (Enter to send)" });
+  private input = h("textarea", { class: "hud-input", rows: 2, placeholder: "Message" });
   private button = h("button", { class: "hud-btn", type: "submit" }, "Send");
   private note = h("div", { class: "hud-note" });
   private gen = 0;
-  readonly el = h("form", { class: "hud-section hud-msg" }, h("h3", null, "Orders"), this.input, h("div", { class: "hud-msg-row" }, this.note, this.button));
+  readonly el = h("form", { class: "hud-section hud-msg" }, this.input, h("div", { class: "hud-msg-row" }, this.note, this.button));
 
   constructor(private onSend: (text: string) => Promise<string | null>) {
     this.el.addEventListener("submit", (e) => { e.preventDefault(); void this.submit(); });
@@ -292,12 +253,12 @@ class MessageBox {
     if (!text || this.button.disabled) return;
     const gen = ++this.gen;
     this.button.disabled = true;
-    this.note.textContent = "Sending...";
+    this.note.textContent = "Sending";
     this.note.dataset.error = "false";
     const err = await this.onSend(text);
     if (gen !== this.gen) return; // another unit is shown now (or a newer send); leave its UI alone
     this.button.disabled = false;
-    this.note.textContent = err ?? "Sent.";
+    this.note.textContent = err ?? "Sent";
     this.note.dataset.error = err ? "true" : "false";
     if (!err && this.input.value === draft) this.input.value = ""; // keep edits made while sending
   }
@@ -328,23 +289,32 @@ export function portraitStyle(cls: string, teamColor: string | null | undefined)
   return `--team:${safeColor(teamColor)};--forge-hue:${hash % 360}`;
 }
 
-export function classGlyph(cls: string): string {
-  return ({ knight: "♞", ranger: "\u{1F3F9}", scout: "\u{1F9ED}", oracle: "\u{1F52E}" } as Record<string, string>)[cls] ?? "⚒";
-}
-
-function feedRow(it: FeedItem, bus?: Bus) {
-  return h("li", { class: `hud-feed-${it.kind}` },
-    h("span", { class: "hud-feed-time" }, timeOf(it.ts)),
-    h("span", { class: "hud-feed-icon" }, KIND_ICON[it.kind] ?? "•"),
+function feedRow(it: FeedItem, bus?: Bus, name?: string) {
+  const li = h("li", { class: `hud-feed-${it.kind}`, title: new Date(it.ts).toLocaleTimeString() },
+    h("span", { class: "hud-feed-time", "data-ts": it.ts }, relTime(it.ts)),
+    h("span", { class: "hud-feed-icon" }, icon(kindIcon(it.kind))),
     it.tool ? h("code", null, it.tool) : null,
-    h("span", { class: "hud-feed-text" }, it.text, bus ? slugChips(it.slugs, bus) : null),
+    h("span", { class: "hud-feed-text" }, stripName(it.text, name), bus ? slugChips(it.slugs, bus) : null),
   );
+  li.addEventListener("click", () => li.classList.toggle("hud-feed-open"));
+  return li;
 }
 
-export const BUILDINGS: Record<string, { name: string; glyph: string; blurb: string }> = {
-  gbrain: { name: "The Library", glyph: "\u{1F4DA}", blurb: "GBrain: what every agent has learned." },
-  barracks: { name: "Barracks", glyph: "\u{1F6E1}", blurb: "Train new agents." },
-  river: { name: "The Forge", glyph: "\u{1F525}", blurb: "River: forge new kinds of agent." },
+/** Long text clamped to four lines with an expand chevron. */
+function clamped(text: string): HTMLElement {
+  const body = h("div", { class: "hud-reply" }, text);
+  const more = h("button", { class: "hud-more", type: "button", title: "Expand" }, icon("chevron"));
+  more.addEventListener("click", () => {
+    const open = body.dataset.open !== "true";
+    body.dataset.open = more.dataset.open = String(open);
+  });
+  return h("div", { class: "hud-section" }, body, text.length > 180 || text.split("\n").length > 4 ? more : null);
+}
+
+export const BUILDINGS: Record<string, { name: string; icon: string; mark: string }> = {
+  gbrain: { name: "Library", icon: "library", mark: "GBrain" },
+  barracks: { name: "Barracks", icon: "barracks", mark: "" },
+  river: { name: "Forge", icon: "forge", mark: "River" },
 };
 
 function unitName(s: State, id: string): string {

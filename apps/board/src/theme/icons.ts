@@ -12,15 +12,14 @@ const P: Record<string, string> = {
   // Commands
   order: '<path d="M4.5 4.5l11 11M13 18l5-5M15.5 15.5l4 4M19.5 4.5l-11 11M6 13l5 5M8.5 15.5l-4 4"/>',
   message: '<path d="M4.5 5.5h15v10h-8.5l-4.5 4v-4h-2z"/>',
-  recall: '<path d="M4 10v9c3.2 0 6 .5 8 2 2-1.5 4.8-2 8-2v-9M12 21v-9M12 3v5.5M9 5.5L12 3l3 2.5"/>',
+  recall: '<path d="M3 13.5c3.5 0 6.5.6 9 2.2 2.5-1.6 5.5-2.2 9-2.2v6c-3.5 0-6.5.6-9 2.2-2.5-1.6-5.5-2.2-9-2.2zM12 15.7v6.2M12 3.5v8.5M7.5 6l2.5 5M16.5 6L14 11"/>',
   remember: '<path d="M19.5 4C13 4.5 8.8 9 7.5 15.5L6 20.5M8.3 12.5H13c3-1.8 5.5-4.5 6.5-8.5M4 20.5h9"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   open: '<path d="M14 4h6v6M20 4l-9 9M18 14v5.2a.8.8 0 0 1-.8.8H4.8a.8.8 0 0 1-.8-.8V6.8a.8.8 0 0 1 .8-.8H10"/>',
   retire: '<path d="M7 20V9.5a5 5 0 0 1 10 0V20M4.5 20h15M9.5 12.5h5M12 10v6"/>',
   focus: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/><circle cx="12" cy="12" r="2.2"/>',
-  formation: '<circle cx="4.5" cy="15" r="2.3"/><circle cx="12" cy="15" r="2.3"/><circle cx="19.5" cy="15" r="2.3"/><path d="M6.8 15h2.9M14.3 15h2.9M19.5 12.7C18.5 6 5.5 6 4.5 12.7"/><path d="M4.5 12.7l-1.4-1.9M4.5 12.7l2-1.1"/>',
+  formation: '<circle cx="4" cy="12" r="2.3"/><circle cx="12" cy="12" r="2.3"/><circle cx="20" cy="12" r="2.3"/><path d="M6.3 12h3.4M14.3 12h3.4M16.2 10.3l1.5 1.7-1.5 1.7"/>',
   train: '<path d="M12 3l7 2.8v5.4c0 4.4-2.9 7.9-7 9.8-4.1-1.9-7-5.4-7-9.8V5.8z"/><path d="M12 9v6M9 12h6"/>',
-  attack: '<path d="M4.5 4.5l11 11M13 18l5-5M15.5 15.5l4 4M19.5 4.5l-11 11M6 13l5 5M8.5 15.5l-4 4"/>',
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   cross: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   search: '<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
@@ -59,7 +58,7 @@ const NS = "http://www.w3.org/2000/svg";
 
 export function icon(name: string, size?: number, cls = ""): SVGSVGElement {
   const svg = document.createElementNS(NS, "svg");
-  if (size) { svg.setAttribute("width", String(size)); svg.setAttribute("height", String(size)); }
+  if (size) svg.style.cssText = `width:${size}px;height:${size}px`; // beats the 1em default in .lk-icon
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("class", `lk-icon${cls ? ` ${cls}` : ""}`);
   svg.setAttribute("fill", "none");

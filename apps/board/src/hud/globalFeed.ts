@@ -1,37 +1,53 @@
-// Global feed: the last few lines of store.feed() across all units, bottom left above the panel.
+// Global feed: the last few events across all units, bottom left above the panel.
+// One line each: icon, name, short verb phrase, object ("Bram recalled Billing Idempotency"), relative time.
 import type { Bus, FeedEntry, Store } from "../core";
-import { slugChips } from "./chips";
-import { h, RowList, timeOf } from "./dom";
+import { icon, kindIcon } from "../theme/icons";
+import { firstLine, pageTitle, refreshTimes, relTime, stripName } from "../theme/text";
+import { h, RowList } from "./dom";
 
-const LINES = 6;
-const ICON: Record<string, string> = {
-  message: "\u{1F4AC}", tool: "\u{1F6E0}", thinking: "\u{1F4AD}", error: "⚠",
-  recall: "\u{1F4D6}", remember: "\u{1F4DC}", order: "⚔", reply: "✉", handoff: "\u{1F4E8}",
-};
+const LINES = 5;
 
 export class GlobalFeed {
   readonly root = h("ol", { class: "hud-gfeed" });
   private last: FeedEntry | undefined;
   private rows = new RowList<FeedEntry>(this.root, (e) => this.row(e));
 
-  constructor(private store: Store, private bus: Bus) {}
+  constructor(private store: Store, private bus: Bus) {
+    setInterval(() => refreshTimes(this.root), 5000);
+  }
 
   render(): void {
     const all = this.store.feed();
     if (all.at(-1) === this.last) return;
     this.last = all.at(-1);
-    this.rows.set(all.slice(-LINES));
+    // A handoff is logged on both units; show it once, from the sender. Thinking stays in the unit panel.
+    this.rows.set(all.filter((e) => e.kind !== "thinking" && !(e.kind === "handoff" && e.text.startsWith("received from"))).slice(-LINES));
+    refreshTimes(this.root);
   }
 
   private row(e: FeedEntry): HTMLElement {
     const name = this.store.unit(e.unitId)?.name ?? e.unitId;
-    return h("li", { class: `hud-gfeed-${e.kind}` },
-      h("span", { class: "hud-feed-time" }, timeOf(e.ts)),
-      h("span", null, ICON[e.kind] ?? "\u2022"),
+    const slug = e.slugs?.find((x) => typeof x === "string" && x);
+    const [verb, obj] = phrase(e, name, slug);
+    return h("li", { class: `hud-gfeed-${e.kind}`, title: e.text },
+      h("span", { class: "hud-feed-time", "data-ts": e.ts }, relTime(e.ts)),
+      h("span", { class: "hud-gfeed-icon" }, icon(kindIcon(e.kind))),
       h("b", null, name),
-      e.tool ? h("code", null, e.tool) : null,
-      h("span", { class: "hud-gfeed-text" }, e.text),
-      slugChips(e.slugs, this.bus),
+      h("span", { class: "hud-gfeed-text" }, verb ? `${verb} ` : "", obj ? h("span", { class: "hud-gfeed-obj" }, obj) : null),
+      slug ? h("button", { class: "hud-chip", type: "button", title: "Open in the Library", onclick: () => this.bus.openPage(slug) }, icon("page")) : null,
     );
+  }
+}
+
+function phrase(e: FeedEntry, name: string, slug: string | undefined): [string, string] {
+  const text = firstLine(stripName(e.text, name));
+  switch (e.kind) {
+    case "recall": return ["recalled", slug ? pageTitle(slug) : text];
+    case "remember": return ["remembered", slug ? pageTitle(slug) : text];
+    case "handoff": return ["", text.replace(/:.*$/, "")];
+    case "tool": return ["used", e.tool ?? text];
+    case "reply": return ["", text];
+    case "error": return ["failed", text];
+    default: return ["", text];
   }
 }

@@ -32,7 +32,7 @@
   --lk-line-soft: rgba(200, 164, 98, .12);
   --lk-bevel: inset 0 1px 0 rgba(255, 240, 210, .07), inset 0 -1px 0 rgba(0, 0, 0, .5);
   --lk-inner: inset 0 0 0 1px rgba(0, 0, 0, .55), inset 0 12px 24px -12px rgba(0, 0, 0, .6);
-  --lk-drop: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 0 rgba(0, 0, 0, .6);
+  --lk-drop: 0 4px 12px rgba(0, 0, 0, .4), 0 1px 0 rgba(0, 0, 0, .6);
 
   /* Text */
   --lk-text: var(--ink);

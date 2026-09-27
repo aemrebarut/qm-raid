@@ -23,7 +23,8 @@ Contract v3 (commit 75dc182) is in force: `contract/types.ts` is authoritative, 
 - GBrain tool classification (robust to MCP name variants like `mcp__gbrain__put_page`, `gbrain_search`): lowercase the tool name; if it contains `gbrain`: contains `link` -> `memory.link`; contains `put`, `remember`, `write`, `capture` or `add_page` -> `memory.remember`; anything else -> `memory.recall`. Slugs from `args.slugs`, `args.slug`, `args.page`, `args.from`/`args.to`, else from `args.query` text.
 - Mock gbrain args shape: `gbrain.recall` {query, slugs: [...]}, `gbrain.remember` {slug, text, links: [...]}, `gbrain.add_link` {from, to, linkType}. Slugs follow the contract conventions: `components/<c>`, `issues/lum-12`, `companies/<id>`, `learnings/<issue lowercased>-<unitId>-<epoch ms>`.
 - Autopilot history shape (engine -> /propose): `history: [{targetId, component}]`, most recent last, max 10.
-- Class to model map (one object, `src/config.ts`): knight -> claude-opus-5-5 / high, ranger -> claude-sonnet-5 / medium, scout -> claude-haiku-4-5-20251001 / low.
+- Class to model map (one object, `src/config.ts`; QM runs HARNESS=codex, set by the Analyst in CONTRACT.md): knight -> gpt-6-astra / high, ranger -> gpt-6-sol / medium, scout -> gpt-6-luna / low. No claude-* names.
+- Bridge sends: a send is an order only when the body has `orderId`. A send without `orderId` is a direct message: bridges answer it without cancelling or touching the running order.
 - Veto log path: `data/vetoes.jsonl` at repo root (engine resolves `new URL("../../../data/vetoes.jsonl", import.meta.url)`, override `VETO_LOG`). Gitignored.
 - Degrade, never crash: bridge, brain, proposer or forge down -> log once per minute, retry every 2 s, keep serving. `process.on("unhandledRejection")` logs.
 

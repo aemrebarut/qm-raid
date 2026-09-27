@@ -266,6 +266,10 @@ test("CORS allowlist and CSRF guards", async () => {
   expect(cancel.status).toBe(200);
   const noOrigin = await handle(new Request("http://e/api/orders", { method: "POST", headers: { "content-type": "application/json" }, body: '{"unitIds":["u2"],"targetId":"t102"}' }));
   expect(noOrigin.status).toBe(200); // curl, tests and services send no Origin
+  for (const o of ["http://127.0.0.1:4619", "http://localhost:4619", "http://127.0.0.1:4621", "http://localhost:4621"]) {
+    const r = await handle(new Request("http://e/api/orders", { method: "OPTIONS", headers: { origin: o } }));
+    expect(r.headers.get("access-control-allow-origin")).toBe(o); // test board and frozen demo board
+  }
 });
 
 for (const action of ["retire", "cancel", "reset"] as const) {

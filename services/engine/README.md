@@ -10,7 +10,7 @@ bun test/smoke.ts      # against the running engine and bridge
 ```
 Env: `PORT` (4610), `BRIDGE_URL` (mock http://127.0.0.1:4615; QM http://127.0.0.1:4614), `BRAIN_URL` (http://127.0.0.1:4616), `PROPOSER_URL` (4613), `FORGE_URL` (4612), `VETO_LOG` (repo `data/vetoes.jsonl`), `BRAIN_RESET` (default 1; `0` makes `POST /api/reset` skip brain `/reset`, required for test instances such as `PORT=4618 BRIDGE_URL=http://127.0.0.1:4615 BRAIN_RESET=0`), `CORS_ORIGINS` (comma-separated browser origins added to the allowlist).
 
-Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost on 4611 and 4619, plus `CORS_ORIGINS`). POST/PATCH/DELETE with any other `Origin` get 403 (blocks bodyless cross-site posts); a non-empty body must be `application/json` (415 otherwise). Requests without `Origin` (curl, services, tests) are allowed.
+Browser safety: CORS headers only for the board origins (127.0.0.1 / localhost on 4611, 4619 and the frozen demo board 4621, plus `CORS_ORIGINS`). POST/PATCH/DELETE with any other `Origin` get 403 (blocks bodyless cross-site posts); a non-empty body must be `application/json` (415 otherwise). Requests without `Origin` (curl, services, tests) are allowed.
 
 ## Files
 - `src/index.ts` boot: startGame, Bun.serve (`idleTimeout: 0` for SSE)

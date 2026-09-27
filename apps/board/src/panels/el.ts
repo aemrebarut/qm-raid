@@ -15,17 +15,21 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-/** Renders brain markdown safely: headings, bullets, paragraphs, and [[slug]] / [[slug|label]] links. */
-export function renderMarkdown(body: string, onLink: (slug: string) => void): HTMLElement {
+/** Renders brain markdown safely: headings, bullets, paragraphs, [[slug]] / [[slug|label]] links, `code`, **bold**.
+ *  labelOf names a link by its page title instead of its slug. */
+export function renderMarkdown(body: string, onLink: (slug: string) => void, labelOf: (slug: string) => string = (s) => s): HTMLElement {
   const root = h("div", { class: "pnl-md" });
   const inline = (text: string): Node[] => {
     const out: Node[] = [];
-    const re = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+    const re = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|`([^`]+)`|\*\*([^*]+)\*\*/g;
     let last = 0;
     for (let m: RegExpExecArray | null; (m = re.exec(text)); ) {
       if (m.index > last) out.push(document.createTextNode(text.slice(last, m.index)));
-      const slug = m[1]!.trim();
-      out.push(h("a", { class: "pnl-link", href: "#", onclick: (e: Event) => { e.preventDefault(); onLink(slug); } }, m[2]?.trim() || slug));
+      if (m[1]) {
+        const slug = m[1].trim();
+        out.push(h("a", { class: "pnl-link", href: "#", title: slug, onclick: (e: Event) => { e.preventDefault(); onLink(slug); } }, m[2]?.trim() || labelOf(slug)));
+      } else if (m[3]) out.push(h("code", {}, m[3]));
+      else if (m[4]) out.push(h("b", {}, m[4]));
       last = re.lastIndex;
     }
     if (last < text.length) out.push(document.createTextNode(text.slice(last)));
@@ -56,4 +60,15 @@ export function ago(ts: number, now = Date.now()): string {
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   return `${Math.floor(s / 86400)}d`;
+}
+
+/** Markdown to one line of plain text for snippets: links by label, no heading marks, code ticks or bold stars. */
+export function plainText(md: string, labelOf: (slug: string) => string = (s) => s): string {
+  return md
+    .replace(/^---[\s\S]*?\n---\n?/, "")
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, slug: string, label?: string) => label?.trim() || labelOf(slug.trim()))
+    .replace(/(^|\s)#{1,6}\s+/g, "$1")
+    .replace(/[`*]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

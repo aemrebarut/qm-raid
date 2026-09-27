@@ -26,6 +26,8 @@ export class GraphView {
   private selected: string | null = null;
   private raf = 0;
   private heat = 1;
+  /** Width / height the layout was settled for; gravity is elliptical so the graph fills a wide field. */
+  private aspect = 1;
   // View on top of the fit-to-box transform: wheel zooms around the cursor, drag pans, double-click resets.
   private zoom = 1;
   private panX = 0;
@@ -136,12 +138,14 @@ export class GraphView {
   }
 
   /** Hover card: type, full title, link count; placed beside the node and kept inside the field. */
-  private placeTip(n: N | null, x = 0, y = 0, w = 0): void {
+  private placeTip(n: N | null, x = 0, y = 0, w = 0, hgt = 0): void {
     if (!n) { this.tip.hidden = true; this.tipFor = null; return; }
     if (this.tipFor !== n) this.fillTip(n);
-    const tw = this.tip.offsetWidth || 200;
-    const left = x + 14 + tw > w ? x - 14 - tw : x + 14;
-    this.tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(y - 12)}px)`;
+    const tw = this.tip.offsetWidth || 200, th = this.tip.offsetHeight || 56;
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(Math.max(lo, hi), v));
+    const left = clamp(x + 14 + tw > w - 8 ? x - 14 - tw : x + 14, 8, w - tw - 8);
+    const top = clamp(y - 12, 8, hgt - th - 8);
+    this.tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
   }
 
   private tipFor: N | null = null;
@@ -192,7 +196,7 @@ export class GraphView {
     for (const n of ns) {
       // Loose pages (no links) get a stronger pull so they do not fly off and shrink the whole view.
       const k = n.deg ? 0.004 : 0.012;
-      n.vx -= n.x * k; n.vy -= n.y * k;
+      n.vx -= (n.x * k) / this.aspect; n.vy -= n.y * k * this.aspect;
       n.x += n.vx * this.heat; n.y += n.vy * this.heat;
       n.vx *= 0.6; n.vy *= 0.6;
     }
@@ -205,10 +209,12 @@ export class GraphView {
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const n of this.nodes) { minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x); minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y); }
     if (!this.nodes.length) { minX = minY = -1; maxX = maxY = 1; }
-    const fit = Math.min((w - 120) / Math.max(1, maxX - minX), (hgt - 64) / Math.max(1, maxY - minY), 2.6);
-    const s = fit * this.zoom;
-    const ox = w / 2 - ((minX + maxX) / 2) * s + this.panX, oy = hgt / 2 - ((minY + maxY) / 2) * s + this.panY;
-    return { s, ox, oy, w, hgt };
+    // Fit to the field; a wide field may stretch positions (not nodes or labels) up to 1.8x on one axis.
+    const fx = (w - 140) / Math.max(1, maxX - minX), fy = (hgt - 72) / Math.max(1, maxY - minY);
+    const fit = Math.min(fx, fy, 2.6);
+    const sx = Math.min(fx, fit * 1.8, 3.2) * this.zoom, sy = Math.min(fy, fit * 1.8, 3.2) * this.zoom;
+    const ox = w / 2 - ((minX + maxX) / 2) * sx + this.panX, oy = hgt / 2 - ((minY + maxY) / 2) * sy + this.panY;
+    return { sx, sy, ox, oy, w, hgt };
   }
 
   private radius(n: N): number {
@@ -218,11 +224,11 @@ export class GraphView {
 
   private pick(e: MouseEvent): N | null {
     const r = this.canvas.getBoundingClientRect();
-    const { s, ox, oy } = this.transform();
+    const { sx, sy, ox, oy } = this.transform();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     let best: N | null = null, bd = 12 * 12;
     for (const n of this.nodes) {
-      const dx = n.x * s + ox - mx, dy = n.y * s + oy - my;
+      const dx = n.x * sx + ox - mx, dy = n.y * sy + oy - my;
       const d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = n; }
     }
@@ -231,8 +237,18 @@ export class GraphView {
 
   private draw(): void {
     const c = this.canvas;
-    const { s, ox, oy, w, hgt } = this.transform();
+    const { sx, sy, ox, oy, w, hgt } = this.transform();
     if (!w || !hgt) return; // not laid out yet; the ResizeObserver redraws once it is
+    // Fit the layout to the field's shape: re-settle when the aspect changes a lot (first open, resize).
+    const a = Math.min(2.6, Math.max(1, w / hgt));
+    if (this.nodes.length && Math.abs(a - this.aspect) > 0.2) {
+      this.aspect = a;
+      this.heat = Math.max(this.heat, 0.4);
+      for (let i = 0; i < 220 && this.heat > 0.03; i++) this.step();
+      this.heat = Math.min(this.heat, 0.03);
+      this.draw();
+      return;
+    }
     const dpr = window.devicePixelRatio || 1;
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(hgt * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(hgt * dpr); }
     const g = c.getContext("2d");
@@ -246,7 +262,7 @@ export class GraphView {
       near.add(focus);
       for (const e of this.edges) { if (e.a === focus) near.add(e.b); else if (e.b === focus) near.add(e.a); }
     }
-    const P = (n: N) => [n.x * s + ox, n.y * s + oy] as const;
+    const P = (n: N) => [n.x * sx + ox, n.y * sy + oy] as const;
 
     // Links: quiet brass hairlines; the focused node's links light up.
     g.lineWidth = 1;
@@ -322,6 +338,6 @@ export class GraphView {
       g.fillText(t, x, ty);
       g.globalAlpha = 1;
     }
-    if (this.hover) { const [x, y] = P(this.hover); this.placeTip(this.hover, x, y, w); } else this.placeTip(null);
+    if (this.hover) { const [x, y] = P(this.hover); this.placeTip(this.hover, x, y, w, hgt); } else this.placeTip(null);
   }
 }

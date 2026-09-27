@@ -1,18 +1,26 @@
 // Library (GBrain) panel: the knowledge graph as the hero, search, page view with wikilinks, and the memory feed.
 import { api, type Store, type Bus, type EngineEvent } from "../core";
 import { icon } from "../theme/icons";
-import { h, renderMarkdown, ago } from "./el";
+import { h, renderMarkdown, plainText, ago } from "./el";
 import { GraphView, TYPE_COLORS, TYPE_LABELS } from "./graph";
 
-/** Human title for a brain slug when the graph has none: learnings/lum-101-u3-1790... -> "LUM-101 learning". */
+/** Human title for a brain slug when the graph has none; never shows unit ids or epoch stamps.
+ *  learnings/lum-101-u3-1790... -> "LUM-101 learning", learnings/dev-u1-1790... -> "Learning", issues/lum-101 -> "LUM-101". */
 export function slugTitle(slug: string): string {
-  const leaf = slug.split("/").pop() ?? slug;
-  const learn = /^(?:([a-z]+-\d+)|general)-u\d+-\d+$/.exec(leaf);
-  if (learn) return learn[1] ? `${learn[1].toUpperCase()} learning` : "Learning";
+  const parts = slug.split("/");
+  const leaf = parts.pop() ?? slug;
+  const issue = /\b([a-z]{2,5})-(\d{2,5})\b/.exec(leaf.replace(/-\d{10,}$/, ""));
+  if (parts[0] === "learnings") return issue ? `${issue[1]!.toUpperCase()}-${issue[2]} learning` : "Learning";
   if (/^[a-z]+-\d+$/.test(leaf)) return leaf.toUpperCase();
-  const words = leaf.replace(/[-_]+/g, " ").trim();
-  return words ? words[0]!.toUpperCase() + words.slice(1) : slug;
+  const words = leaf
+    .replace(/-\d{10,}$/, "")          // epoch stamps
+    .replace(/(^|-)u\d+(?=-|$)/g, "$1") // unit ids
+    .replace(/[-_]+/g, " ").trim();
+  return words ? words[0]!.toUpperCase() + words.slice(1) : "Page";
 }
+
+/** Page titles without a type prefix the type tag already shows ("Rule: billing idempotency key"). */
+const pageTitle = (t: string) => t.replace(/^(Rule|Component|Company|Customer|Person|Product|Learning):\s*(.)/, (_, _p, c: string) => c.toUpperCase());
 
 export class LibraryPanel {
   readonly root: HTMLElement;
@@ -52,7 +60,7 @@ export class LibraryPanel {
     const input = h("input", { class: "pnl-input", placeholder: "Search", type: "search", title: "Search the Library (Enter)" });
     const form = h("form", { class: "pnl-search", onsubmit: (e: Event) => { e.preventDefault(); this.search(input.value); } },
       icon("search"), input);
-    input.addEventListener("input", () => { if (!input.value.trim()) this.results.replaceChildren(); });
+    input.addEventListener("input", () => { if (!input.value.trim()) { this.searchGen++; this.results.replaceChildren(); } });
 
     this.root = h("div", { class: "pnl-body pnl-library" },
       h("div", { class: "pnl-col pnl-col-graph" },
@@ -153,8 +161,8 @@ export class LibraryPanel {
       const type = this.graph.type(hit.slug);
       this.results.append(h("button", { class: "pnl-hit", onclick: () => this.openPage(hit.slug) },
         h("i", { class: "pnl-dot", style: `background:${TYPE_COLORS[type ?? ""] ?? "#8b8f96"}` }),
-        h("span", { class: "pnl-hit-t" }, hit.title || this.titleOf(hit.slug)),
-        hit.snippet ? h("span", { class: "pnl-snippet" }, hit.snippet) : null));
+        h("span", { class: "pnl-hit-t" }, pageTitle(hit.title || this.titleOf(hit.slug))),
+        hit.snippet ? h("span", { class: "pnl-snippet" }, plainText(hit.snippet, (sl) => this.titleOf(sl))) : null));
     }
   }
 
@@ -175,8 +183,8 @@ export class LibraryPanel {
     this.pageBox.replaceChildren(
       h("div", { class: "pnl-page-head" },
         type ? h("span", { class: "pnl-tag", style: `--tag:${TYPE_COLORS[type] ?? "#8b8f96"}` }, TYPE_LABELS[type] ?? type) : null,
-        h("span", { class: "pnl-page-t", title: r.slug ?? slug }, r.title || this.titleOf(slug)), close),
-      renderMarkdown(r.body ?? "", (s) => this.openPage(s)),
+        h("span", { class: "pnl-page-t", title: r.slug ?? slug }, pageTitle(r.title || this.titleOf(slug))), close),
+      renderMarkdown(r.body ?? "", (s) => this.openPage(s), (s) => this.titleOf(s)),
     );
   }
 
@@ -199,7 +207,7 @@ export class LibraryPanel {
       const learned = m.op === "remember" && !!slug?.startsWith("learnings/");
       const issue = learned ? /^learnings\/([a-z]+-\d+)-/.exec(slug!)?.[1]?.toUpperCase() : undefined;
       // Feed titles never name the author again ("LUM-108 learning", not "LUM-108 learning, Bram").
-      const ft = (sl: string) => (sl.startsWith("learnings/") ? slugTitle(sl) : this.titleOf(sl));
+      const ft = (sl: string) => (sl.startsWith("learnings/") || sl.startsWith("issues/") ? slugTitle(sl) : this.titleOf(sl));
       const link = m.op === "link" && m.slugs.length >= 2;
       const obj = learned ? issue ?? "a lesson" : link ? `${ft(m.slugs[0]!)} to ${ft(m.slugs[1]!)}` : slug ? ft(slug) : m.summary || "";
       const verb = m.op === "recall" ? "recalled" : learned ? (issue ? "learned from" : "learned") : m.op === "remember" ? "remembered" : "linked";

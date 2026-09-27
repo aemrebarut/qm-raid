@@ -81,6 +81,7 @@
 .pnl-search { position: relative; display: flex; }
 .pnl-search .lk-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--ink-3, #6e757d); pointer-events: none; }
 .pnl-search .pnl-input { flex: 1; height: 32px; padding-left: 32px; }
+.pnl-search .pnl-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
 .pnl-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; cursor: pointer;
   font: 600 12px var(--font-head, sans-serif); letter-spacing: .08em; text-transform: uppercase; color: var(--ink, #ece6d8);
@@ -97,7 +98,7 @@
 .pnl-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--tag, var(--ink-2)); border: 1px solid color-mix(in srgb, var(--tag, #a7adb4) 45%, transparent); border-radius: 2px; }
 
 /* Search hits */
-.pnl-results { display: flex; flex-direction: column; gap: 2px; max-height: 30%; overflow-y: auto; }
+.pnl-results { flex: none; display: flex; flex-direction: column; gap: 2px; max-height: 208px; overflow-y: auto; -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(180deg, #000 calc(100% - 24px), transparent); padding-bottom: 16px; }
 .pnl-results:empty { display: none; }
 .pnl-hit { display: grid; grid-template-columns: 7px 1fr; column-gap: 8px; align-items: center; text-align: left; font: inherit; padding: 6px 8px; cursor: pointer; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 2px; }
 .pnl-hit:hover { background: rgba(255,255,255,.04); border-color: var(--lk-line-soft, rgba(200,164,98,.12)); }
@@ -112,6 +113,8 @@
 .pnl-md { color: var(--ink-2, #a7adb4); max-width: 64ch; }
 .pnl-md h4, .pnl-md h5 { margin: 8px 0 2px; font: 600 11px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--lk-head, #d9c79f); }
 .pnl-md p { margin: 4px 0; }
+.pnl-md code { padding: 0 4px; font: 12px var(--lk-font-mono, ui-monospace, Menlo, monospace); color: var(--ink, #ece6d8); background: rgba(255,255,255,.06); border-radius: 2px; }
+.pnl-md b { color: var(--ink, #ece6d8); font-weight: 600; }
 .pnl-md ul { margin: 2px 0; padding-left: 16px; }
 .pnl-md li::marker { color: var(--gold, #d9a441); }
 .pnl-link { color: var(--gold, #d9a441); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--gold, #d9a441) 35%, transparent); cursor: pointer; }
@@ -161,22 +164,43 @@
 .pnl-type-failed .pnl-bar i { background: var(--danger, #d65a45); }
 .pnl-detail { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-3, #6e757d); }
 .pnl-detail b { font-weight: 600; color: var(--ink-2, #a7adb4); }
-/* Eval: trained vs base as two bars and a delta */
-.pnl-eval { display: flex; align-items: center; gap: 12px; }
-.pnl-eval-rows { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-.pnl-eval-row { display: grid; grid-template-columns: 56px 1fr 36px; align-items: center; gap: 8px; font-size: 11px; color: var(--ink-3, #6e757d); }
-.pnl-eval-row span { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; }
-.pnl-eval-row b { text-align: right; font-weight: 600; color: var(--ink-2, #a7adb4); }
-.pnl-eval-bar { height: 4px; background: rgba(255,255,255,.07); border-radius: 1px; overflow: hidden; }
-.pnl-eval-bar i { display: block; height: 100%; }
-.pnl-eval-trained .pnl-eval-bar i { background: var(--river, #4fa7e0); }
-.pnl-eval-trained b { color: var(--ink, #ece6d8); }
-.pnl-eval-base .pnl-eval-bar i { background: var(--ink-3, #6e757d); }
-.pnl-delta { min-width: 48px; text-align: right; font: 600 16px var(--font-head, sans-serif); }
-.pnl-delta.up { color: var(--ok, #7cc47f); }
-.pnl-delta.down { color: var(--danger, #d65a45); }
+/* Eval: per metric, trained (River blue) over base (grey) with values and the delta; overall last and brighter */
+.pnl-eval { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--lk-line-soft, rgba(200,164,98,.12)); }
+.pnl-metric { display: grid; grid-template-columns: 64px 1fr 44px 44px 52px; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3, #6e757d); }
+.pnl-metric-head { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; }
+.pnl-metric-k { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2, #a7adb4); }
+.pnl-metric-bars { display: flex; flex-direction: column; gap: 2px; }
+.pnl-metric-bars i { display: block; height: 3px; border-radius: 1px; }
+.pnl-metric-bars .t { background: var(--river, #4fa7e0); }
+.pnl-metric-bars .b { background: var(--ink-3, #6e757d); opacity: .7; }
+.pnl-metric-t, .pnl-metric-b { text-align: right; }
+b.pnl-metric-t { font-weight: 600; color: var(--ink, #ece6d8); }
+.pnl-metric-d { text-align: right; font-weight: 600; }
+.pnl-metric-d.up { color: var(--ok, #7cc47f); }
+.pnl-metric-d.down { color: var(--danger, #d65a45); }
+.pnl-metric-overall { margin-top: 2px; }
+.pnl-metric-overall .pnl-metric-k { color: var(--ink, #ece6d8); }
+.pnl-metric-overall .pnl-metric-bars i { height: 4px; }
+.pnl-metric-overall .pnl-metric-d { font: 600 15px var(--font-head, sans-serif); }
+.pnl-eval-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.pnl-train { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.pnl-train span { display: inline-flex; align-items: baseline; gap: 4px; }
+.pnl-train small { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3, #6e757d); }
+.pnl-train b { font-size: 12px; font-weight: 600; color: var(--ink-2, #a7adb4); }
+.pnl-toggle { flex: none; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; cursor: pointer; font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2, #a7adb4); background: transparent; border: 1px solid var(--lk-line, rgba(200,164,98,.24)); border-radius: 2px; transition: color 140ms var(--ease), border-color 140ms var(--ease); }
+.pnl-toggle:hover, .pnl-toggle.on { color: var(--ink, #ece6d8); border-color: var(--river, #4fa7e0); }
+.pnl-toggle .lk-icon { font-size: 12px; transform: rotate(-90deg); transition: transform 140ms var(--ease); }
+.pnl-toggle.on .lk-icon { transform: none; }
+.pnl-sample { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; animation: pnl-in 150ms var(--ease); }
+.pnl-sample-order { margin: 0; padding-left: 8px; border-left: 2px solid var(--lk-line, rgba(200,164,98,.24)); font-size: 12px; color: var(--ink-2, #a7adb4); }
+.pnl-sample-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pnl-sample-a { display: flex; flex-direction: column; gap: 4px; padding: 8px; background: var(--lk-well, rgba(6,8,11,.55)); border: 1px solid var(--lk-line-soft, rgba(200,164,98,.12)); border-top: 2px solid var(--ink-3, #6e757d); border-radius: 2px; }
+.pnl-sample-a.t { border-top-color: var(--river, #4fa7e0); }
+.pnl-sample-a small { font: 600 10px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3, #6e757d); }
+.pnl-sample-a.t small { color: var(--river, #4fa7e0); }
+.pnl-sample-a p { margin: 0; max-height: 168px; overflow-y: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.45; color: var(--ink-2, #a7adb4); }
 .pnl-failed { display: flex; flex-direction: column; gap: 8px; }
 .pnl-failed summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; font: 600 11px var(--font-head, sans-serif); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3, #6e757d); }
 .pnl-failed summary::-webkit-details-marker { display: none; }
-.pnl-failed summary .lk-icon { transition: transform 140ms var(--ease); }
-.pnl-failed[open] summary .lk-icon { transform: rotate(90deg); }
+.pnl-failed summary .lk-icon { transform: rotate(-90deg); transition: transform 140ms var(--ease); }
+.pnl-failed[open] summary .lk-icon { transform: none; }

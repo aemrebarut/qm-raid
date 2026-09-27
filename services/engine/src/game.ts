@@ -714,6 +714,7 @@ export async function startGame(): Promise<void> {
   await loadWorld();
   setInterval(tick, Math.round(1000 / TILES_PER_SEC));
   setInterval(() => void autopilotTick(), AUTOPILOT_EVERY_MS);
+  setInterval(() => void refreshPages(), 10000);
   startForge();
   const bridges = new Set<string>([BRIDGE_URL, FORGE_URL]);
   for (const base of bridges) {

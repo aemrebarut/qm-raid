@@ -16,11 +16,11 @@ type Result = { ok: true; [k: string]: unknown } | { ok: false; error: string; s
 const fail = (error: string, status = 400): Result => ({ ok: false, error, status });
 
 // Per-unit runtime data that is not part of the contract state.
-interface Runtime { dest: Pos | null; spawned: boolean; spawning: Promise<boolean> | null; sentOrderId: string | null; learningSlug: string | null; gbrainCalls: number; gbrainReads: number; gbrainWrites: number; animTimer: ReturnType<typeof setTimeout> | null }
+interface Runtime { dest: Pos | null; spawned: boolean; spawning: Promise<boolean> | null; sentOrderId: string | null; learningSlug: string | null; recalled: string[]; gbrainCalls: number; gbrainReads: number; gbrainWrites: number; animTimer: ReturnType<typeof setTimeout> | null }
 const rt = new Map<string, Runtime>();
 function runtime(unitId: string): Runtime {
   let r = rt.get(unitId);
-  if (!r) { r = { dest: null, spawned: false, spawning: null, sentOrderId: null, learningSlug: null, gbrainCalls: 0, gbrainReads: 0, gbrainWrites: 0, animTimer: null }; rt.set(unitId, r); }
+  if (!r) { r = { dest: null, spawned: false, spawning: null, sentOrderId: null, learningSlug: null, recalled: [], gbrainCalls: 0, gbrainReads: 0, gbrainWrites: 0, animTimer: null }; rt.set(unitId, r); }
   return r;
 }
 
@@ -164,6 +164,7 @@ async function dispatchOrder(u: Unit, o: Order): Promise<void> {
   r.gbrainCalls = 0;
   r.gbrainReads = 0;
   r.gbrainWrites = 0;
+  r.recalled = [];
   r.learningSlug = `learnings/${t.issue}-${u.id}-${Date.now()}`.toLowerCase();
   const req = { text: orderPrompt(u, o, t, r.learningSlug) + briefText(briefs.get(o.id)), orderId: o.id, targetId: t.id, componentId: t.component };
   // Every await may see a cancel, retire, adjust or reset: re-check before each send.
@@ -220,6 +221,7 @@ function completeOrder(o: Order, reply: string): void {
   o.status = "done";
   o.reply = reply;
   emit("order.updated", { order: o });
+  emitApplied(o, reply, r);
   releaseUnit(o);
   const t = targetById(o.targetId);
   if (t) {
@@ -231,6 +233,18 @@ function completeOrder(o: Order, reply: string): void {
   if (o.source === "workflow") flowEnded(o);
   refreshTarget(t, o.source !== "workflow");
   void brainFallback(o, reply, used);
+}
+
+// Pages the reply says it applied but no recall of this order showed (the agent read them another way): one more
+// memory.recall so the board can draw the link. Its own learning slug is what it wrote, not what it applied.
+const APPLIED_SLUG = /\b(?:learnings|rules)\/[a-z0-9]+(?:[._-][a-z0-9]+)*/gi;
+function emitApplied(o: Order, reply: string, r: Runtime): void {
+  const seen = new Set([...r.recalled, r.learningSlug ?? ""]);
+  const slugs = [...new Set((reply.match(APPLIED_SLUG) ?? []).map((x) => x.toLowerCase()))].filter((x) => !seen.has(x)).slice(0, 8);
+  if (!slugs.length) return;
+  const summary = `Applied ${slugs.join(", ")}`;
+  pushMemory({ ts: Date.now(), unitId: o.unitId, op: "recall", slugs, summary });
+  emit("memory.recall", { unitId: o.unitId, slugs, summary });
 }
 
 // E7: when the agent made no gbrain read (or write) call for this order, the engine does it through the brain service.
@@ -343,7 +357,7 @@ function handleGbrainTool(u: Unit, tool: string, rawArgs: any, text: string, ord
   const op = classifyGbrain(tool);
   // Counters feed the fallback (E7); a throwaway record absorbs stale or chat calls.
   const current = !!orderId && orderId === u.orderId;
-  const r = current ? runtime(u.id) : { gbrainCalls: 0, gbrainReads: 0, gbrainWrites: 0 };
+  const r = current ? runtime(u.id) : { gbrainCalls: 0, gbrainReads: 0, gbrainWrites: 0, recalled: [] as string[] };
   r.gbrainCalls++;
   if (op === "link") {
     const from = argStrings(args, ["from", "source"])[0] ?? "";
@@ -365,6 +379,7 @@ function handleGbrainTool(u: Unit, tool: string, rawArgs: any, text: string, ord
   } else {
     r.gbrainReads++;
     const slugs = slugsFrom(args);
+    r.recalled.push(...slugs.map((x) => x.toLowerCase()));
     const summary = text || argStrings(args, ["query", "q"])[0] || slugs.join(", ");
     pushMemory({ ts: Date.now(), unitId: u.id, op: "recall", slugs, summary });
     emit("memory.recall", { unitId: u.id, slugs, summary });
@@ -939,7 +954,7 @@ async function autopilotTick(): Promise<void> {
 
 // ---------- E18: save and restore (src/persist.ts writes the file) ----------
 
-type SavedRuntime = Pick<Runtime, "sentOrderId" | "learningSlug" | "gbrainCalls" | "gbrainReads" | "gbrainWrites">;
+type SavedRuntime = Pick<Runtime, "sentOrderId" | "learningSlug" | "recalled" | "gbrainCalls" | "gbrainReads" | "gbrainWrites">;
 export interface GameSave {
   backend: string; state: State; nextOrder: number; nextUnit: number; customers: Customer[];
   briefs: [string, NodeBrief][]; proposals: [string, { proposal: Proposal; context: ProposeContext }][];
@@ -950,7 +965,7 @@ export interface GameSave {
 export function gameSnapshot(): GameSave | null {
   if (resetting) return null;
   const runtime: Record<string, SavedRuntime> = {};
-  for (const [id, r] of rt) runtime[id] = { sentOrderId: r.sentOrderId, learningSlug: r.learningSlug, gbrainCalls: r.gbrainCalls, gbrainReads: r.gbrainReads, gbrainWrites: r.gbrainWrites };
+  for (const [id, r] of rt) runtime[id] = { sentOrderId: r.sentOrderId, learningSlug: r.learningSlug, recalled: r.recalled, gbrainCalls: r.gbrainCalls, gbrainReads: r.gbrainReads, gbrainWrites: r.gbrainWrites };
   let flowRuns: unknown = null;
   try { flowRuns = flow.saveRuns?.() ?? null; } catch (err) { logOnce("flowsave", `workflow saveRuns failed: ${err}`); }
   return {
@@ -985,6 +1000,7 @@ export function restoreGame(g: GameSave): boolean {
     u.loadout ??= defaultLoadout();
     const r = runtime(u.id);
     Object.assign(r, g.runtime?.[u.id] ?? {});
+    if (!Array.isArray(r.recalled)) r.recalled = [];
     const o = u.orderId ? orderById(u.orderId) : undefined;
     const t = o ? targetById(o.targetId) : undefined;
     if (!o || !t || o.unitId !== u.id || (o.status !== "active" && o.status !== "proposed")) {

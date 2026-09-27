@@ -723,3 +723,28 @@ test("Loadout P2 race: a send waits for the loadout restore of a registration in
   expect(sends[0]!.body.orderId).toBe(o.id);
   expect(calls.findIndex((c) => c.url.endsWith("/units/u1/send"))).toBeGreaterThan(calls.findIndex((c) => c.url.endsWith("/units/u1") && c.body?.loadout));
 });
+
+test("a reply that names learnings or rules no recall showed emits one memory.recall 'Applied' for the board link", async () => {
+  const o = orderFor(["u1"], "t101");
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  const own = (calls.findLast((c) => c.url.endsWith("/units/u1/send"))!.body.text as string).match(/slug (learnings\/\S+),/)![1]!;
+  onBridgeEvent({ type: "activity", unitId: "u1", orderId: o.id, kind: "tool", text: "recall", tool: "gbrain.get_page", args: { slug: "rules/billing-idempotency" } });
+  const mark = recentEvents().at(-1)!.seq;
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: o.id, text: `Applied \`rules/billing-idempotency\` and Learnings/LUM-104-u4-1790000000000. Also rules/refund-window; saved ${own}.` });
+  expect(order(o.id).status).toBe("done");
+  const applied = recentEvents().filter((e: any) => e.seq > mark && e.type === "memory.recall") as any[];
+  expect(applied.length).toBe(1);
+  expect(applied[0].unitId).toBe("u1");
+  expect(applied[0].slugs).toEqual(["learnings/lum-104-u4-1790000000000", "rules/refund-window"]);
+  expect(applied[0].summary).toBe("Applied learnings/lum-104-u4-1790000000000, rules/refund-window");
+
+  // nothing new named: no extra event
+  const o2 = orderFor(["u1"], "t105");
+  for (let i = 0; i < 60 && unit("u1").status === "moving"; i++) tick();
+  await Bun.sleep(20);
+  onBridgeEvent({ type: "activity", unitId: "u1", orderId: o2.id, kind: "tool", text: "recall", tool: "gbrain.search", args: { query: "rules/refund-window" } });
+  const mark2 = recentEvents().at(-1)!.seq;
+  onBridgeEvent({ type: "reply", unitId: "u1", orderId: o2.id, text: "Applied rules/refund-window." });
+  expect(recentEvents().filter((e: any) => e.seq > mark2 && e.type === "memory.recall").length).toBe(0);
+});

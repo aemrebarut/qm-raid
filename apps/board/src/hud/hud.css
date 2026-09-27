@@ -304,3 +304,5 @@
 .hud-gfeed .hud-chip { color: #cfe6ff; background: rgba(20,40,70,.65); border-color: rgba(159,208,255,.6); text-shadow: none; }
 .hud-gfeed .hud-chip-more { color: #c9b78f; }
 .hud-gfeed .hud-chips { flex-wrap: nowrap; }
+.hud-cmd { position: relative; }
+.hud-cmd-key { position: absolute; top: 1px; right: 3px; font-size: 9px; font-weight: 700; color: #ffd98a; opacity: .85; text-shadow: 0 1px 0 #000; }

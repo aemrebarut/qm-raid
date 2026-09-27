@@ -54,6 +54,7 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
 
   return () => {
     offs.forEach((off) => off());
+    bottom.dispose();
     parts.forEach((p) => p.remove());
   };
 }

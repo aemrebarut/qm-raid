@@ -90,3 +90,17 @@ All 32 i3 images inspected. Additional coverage caveat: i3-formation-1280.png sh
 **P2 integration, raid-look-hud:** Message command is swallowed while Loadout is active. Repro: select a unit, open Loadout, click Message in the command card. Loadout remains aria-selected=true and keyboard focus stays on the command button. SidePanel.focusMessage only focuses when the hidden composer is already visible. Switch to Activity before focusing. Reported to HUD owner and director; no message was sent.
 
 Resource discipline after the Analyst's 15:57 notice: at most one short-lived browser at a time, closed after each check; use saved captures and source review where sufficient. Devbrain code/look-review update confirmed by a read after the initial asynchronous write receipt.
+
+## R8 Library index 6caa194 and fix 32864eb, 2026-09-27 16:03 PDT
+
+**P2 found and closed.** The new index is visually useful and its degree ordering is straightforward. Independent isolated Library-only browser test avoids the 3D scene: 24 synthetic graph nodes, 20 issues, routed page response, 1280x720. Clicking the last issue after scrolling the index inserted its page above the retained scroll position. Before fix: page top -239 px, sidebar visible 57..551 px, scrollTop 349. The page also shrank to 23 px. Reported to owner and director.
+
+32864eb rerun passes: page top 65 px, bottom 384.39 px, sidebar visible 57..551 px, scrollTop 45. Title and body are readable, the page has its own scroll area, and index stays below. Before/after evidence in `/tmp/raid-look-rev/r8-index-scroll-1280.png` and `r8-index-scroll-fixed-1280.png`. Browser closed immediately. No new issue in this followup.
+
+### Additional HUD reviews
+
+- dfe726c: source and a3 minimap screenshots inspected. Muted terrain, building-system accents and selected rings align with the brief. Duplicate sender text and proposal feed duplication are removed; learning fallback titles no longer produce fake acronym labels.
+- 7154cd4: source reviewed. Short team names remain available at 1280, and an empty Activity section collapses rather than reserving blank space.
+- a3-loadout.png exposed Formation presets above the Loadout contents. Sent to HUD/UI owners and director. 6498d77 adds a scoped CSS visibility rule for the selected Loadout tab; next combined screenshot check will verify under team updates.
+- a3-workflow.png and a3-rolepick.png now show the named states. Their local team fixture still mixes Red membership with green member portraits and another team's role badges; director notified to align member unit.team with the local fixture before using these for role signoff.
+- Message command P2 is confirmed by its owner; TS fix intentionally queued until W2 rehearsal ends around 16:08. No request to interrupt that rehearsal.

@@ -41,10 +41,16 @@ if (process.env.SMOKE_WRITE === "1") {
     const page = await get("/page?slug=" + encodeURIComponent(slug));
     const bothLinks = page.body.includes("[[companies/orchard-education]]") && page.body.includes("[[companies/brightpath-clinics]]");
     if (!bothLinks) console.log("  parallel add_link lost a link");
+    // Engine-assigned slug is used as given (MCP remember).
+    const want = `learnings/lum-101-smoke-${Date.now()}`;
+    const res = await fetch(BASE.replace(/:4616$/, ":4617") + "/mcp", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "remember", arguments: { slug: want, targetId: "t101", unitId: "smoke", text: "Smoke learning with a given slug." } } }) }).then((r) => r.json());
+    const givenOk = JSON.parse(res.result.content[0].text).slug === want && (await get("/page?slug=" + encodeURIComponent(want))).slug === want;
+    if (!givenOk) console.log("  remember ignored the given slug");
+    await post("/forget", { slug: want });
     await post("/forget", { slug });
     const after = await post("/recall", { componentId: "billing", targetId: "t101", unitId: "u2" });
     await post("/forget", { slug: "units/smoke" });
-    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && bothLinks && !after.slugs.includes(slug);
+    return slug.startsWith("learnings/lum-101-smoke-") && r.slugs.includes(slug) && bothLinks && givenOk && !after.slugs.includes(slug) && !after.slugs.includes(want);
   });
 }
 console.log(failed ? `${failed} failed` : "all passed");

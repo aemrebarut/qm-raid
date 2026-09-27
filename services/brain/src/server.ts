@@ -118,18 +118,23 @@ async function ensureUnitPage(unitId: string) {
   return slug;
 }
 
-async function remember(unitId: string, targetId: string | undefined, text: string) {
+const LEARNING_SLUG = /^learnings\/[a-z0-9][a-z0-9._-]{0,120}$/;
+
+async function remember(unitId: string, targetId: string | undefined, text: string, wantSlug?: string) {
   const world = loadWorld();
   const target = world.targets.find((t) => t.id === targetId);
   const issue = target?.issue ?? "general";
   const ts = Date.now();
-  const slug = `learnings/${issue.toLowerCase()}-${unitId}-${ts}`;
+  // The engine may assign the slug (learnings/<issue>-<unitId>-<ms>) so its memory.remember event matches the page.
+  const given = wantSlug?.trim().toLowerCase();
+  const slug = given && LEARNING_SLUG.test(given) ? given : `learnings/${issue.toLowerCase()}-${unitId}-${ts}`;
   const unitSlug = await ensureUnitPage(unitId);
   const about = target ? `About [[${issueSlug(target.issue)}]] in [[components/${target.component}]]. ` : "";
   const title = `Learning${target ? ` on ${target.issue}` : ""} by ${unitId}`;
   const content = `---\ntype: learning\ntitle: "${title}"\n---\n${text.trim()}\n\n${about}Learned by [[${unitSlug}]] at ${new Date(ts).toISOString()}.\n`;
-  await tool("put_page", { slug, content });
-  if (target) recentLearnings.push({ slug, component: target.component, issue: target.issue });
+  // A repeated remember on the same slug overwrites that learning.
+  await tool("put_page", { slug, content }).catch(() => tool("put_page", { slug, content, force: true }));
+  if (target && !recentLearnings.some((l) => l.slug === slug)) recentLearnings.push({ slug, component: target.component, issue: target.issue });
   graphCache = null;
   return { slug };
 }
@@ -209,7 +214,7 @@ async function route(req: Request): Promise<Response> {
   if (req.method === "POST" && p === "/remember") {
     const b = await body(req);
     if (!b.unitId || !b.text) return fail("unitId and text required");
-    return json(await exclusive(() => remember(String(b.unitId), b.targetId, String(b.text))));
+    return json(await exclusive(() => remember(String(b.unitId), b.targetId, String(b.text), b.slug)));
   }
   if (req.method === "POST" && p === "/reset") return json(await exclusive(reset));
   if (req.method === "POST" && p === "/forget") {
@@ -240,6 +245,6 @@ Bun.serve({
 console.log(`[brain] listening on http://${HOST}:${PORT}`);
 startMcp({
   search, getPage, recall,
-  remember: (unitId, targetId, text) => exclusive(() => remember(unitId, targetId, text)),
+  remember: (unitId, targetId, text, slug) => exclusive(() => remember(unitId, targetId, text, slug)),
   addLink: (from, to, linkType) => exclusive(() => addLink(from, to, linkType)),
 }, MCP_PORT);

@@ -5,7 +5,7 @@ export interface BrainOps {
   search(q: string): Promise<unknown>;
   getPage(slug: string): Promise<unknown>;
   recall(componentId?: string, targetId?: string, query?: string): Promise<unknown>;
-  remember(unitId: string, targetId: string | undefined, text: string): Promise<unknown>;
+  remember(unitId: string, targetId: string | undefined, text: string, slug?: string): Promise<unknown>;
   addLink(from: string, to: string, linkType?: string): Promise<unknown>;
 }
 
@@ -20,7 +20,7 @@ const TOOLS = [
   {
     name: "remember",
     description: "Save a learning to the shared brain after working an issue: a non-obvious rule, root cause or gotcha that the next agent should know. One or two sentences. Creates a learning page linked to the issue, component and your unit.",
-    inputSchema: { type: "object", properties: { targetId: str("target id, e.g. t101"), text: str("the learning"), unitId: str("your unit id") }, required: ["text"] },
+    inputSchema: { type: "object", properties: { targetId: str("target id, e.g. t101"), text: str("the learning"), unitId: str("your unit id"), slug: str("learning slug from your order header, e.g. learnings/lum-101-u1-1790546000000") }, required: ["text"] },
   },
   {
     name: "search",
@@ -44,7 +44,7 @@ async function callTool(ops: BrainOps, name: string, a: any): Promise<unknown> {
     case "recall": return ops.recall(a.componentId, a.targetId, a.query);
     case "remember":
       if (!a.text) throw new Error("text required");
-      return ops.remember(String(a.unitId ?? "agent"), a.targetId, String(a.text));
+      return ops.remember(String(a.unitId ?? "agent"), a.targetId, String(a.text), a.slug ? String(a.slug) : undefined);
     case "search": return ops.search(String(a.query ?? ""));
     case "get_page": {
       const p = await ops.getPage(String(a.slug ?? ""));

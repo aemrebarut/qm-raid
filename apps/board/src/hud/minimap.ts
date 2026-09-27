@@ -10,8 +10,9 @@ const K = (W - 4) / (2 * MAP); // px per tile step
 const CX = W / 2;
 const TOP = (H - MAP * K) / 2;
 
-const BUILDING_COLOR: Record<string, string> = { gbrain: "#5fa8ff", barracks: "#b5793a", river: "#ff8a2a" };
-const ZONE_TINTS = ["#7a8f4e", "#8c7f52", "#6f8a6a", "#8a6f5a", "#6a7f8f", "#8f7a8a", "#7f8a5a", "#5a7f7a"];
+// Tactical palette (Look tokens): dark field, muted zones, one accent per building system.
+const BUILDING_COLOR: Record<string, string> = { gbrain: "#d9a441", barracks: "#a7adb4", river: "#4fa7e0" };
+const ZONE_TINTS = ["#3c4a3a", "#474636", "#3a4843", "#4a3f38", "#394550", "#463c48", "#434a36", "#35463f"];
 
 const toScreen = (x: number, y: number): [number, number] => [CX + (x - y) * K, TOP + ((x + y) * K) / 2];
 
@@ -52,10 +53,10 @@ export class Minimap {
     c.clearRect(0, 0, W, H);
 
     quad(c, 0, 0, MAP, MAP);
-    c.fillStyle = "#3f5a2a";
+    c.fillStyle = "#222b24";
     c.fill();
-    c.strokeStyle = "#1f2a14";
-    c.lineWidth = 1.5;
+    c.strokeStyle = "rgba(200,164,98,.45)";
+    c.lineWidth = 1;
     c.stroke();
 
     s.components.forEach((comp, i) => {
@@ -63,24 +64,26 @@ export class Minimap {
       quad(c, z.x, z.y, z.w, z.h);
       c.fillStyle = ZONE_TINTS[i % ZONE_TINTS.length];
       c.fill();
-      c.strokeStyle = "rgba(20,15,5,.6)";
+      c.strokeStyle = "rgba(236,230,216,.12)";
       c.lineWidth = 1;
       c.stroke();
     });
 
     for (const b of s.buildings) {
       const [x, y] = toScreen(b.x + 0.5, b.y + 0.5);
-      c.fillStyle = BUILDING_COLOR[b.kind] ?? "#ccc";
-      c.strokeStyle = "#111";
+      c.beginPath();
+      c.moveTo(x, y - 4); c.lineTo(x + 4, y); c.lineTo(x, y + 4); c.lineTo(x - 4, y); c.closePath();
+      c.fillStyle = BUILDING_COLOR[b.kind] ?? "#a7adb4";
+      c.fill();
+      c.strokeStyle = "rgba(0,0,0,.8)";
       c.lineWidth = 1;
-      c.fillRect(x - 4, y - 3, 8, 6);
-      c.strokeRect(x - 4, y - 3, 8, 6);
+      c.stroke();
     }
 
     for (const t of s.targets) {
       if (t.status === "resolved") continue;
       const [x, y] = toScreen(t.pos.x + 0.5, t.pos.y + 0.5);
-      dot(c, x, y, 1.5 + t.severity * 0.6, t.status === "engaged" ? "#ff9d2a" : "#e02a20");
+      dot(c, x, y, 1.4 + t.severity * 0.5, t.status === "engaged" ? "#e39a3b" : "#d65a45");
     }
 
     const selected = new Set(this.bus.selection.units);
@@ -91,8 +94,8 @@ export class Minimap {
       if (selected.has(u.id)) {
         c.beginPath();
         c.arc(x, y, 4.2, 0, Math.PI * 2);
-        c.strokeStyle = "#fff";
-        c.lineWidth = 1.2;
+        c.strokeStyle = "#ece6d8";
+        c.lineWidth = 1;
         c.stroke();
       }
     }
@@ -105,8 +108,8 @@ export class Minimap {
       c.beginPath();
       this.view.forEach((p, i) => (i ? c.lineTo(...toScreen(p.x, p.y)) : c.moveTo(...toScreen(p.x, p.y))));
       c.closePath();
-      c.strokeStyle = "rgba(255,255,255,.95)";
-      c.lineWidth = 1.2;
+      c.strokeStyle = "rgba(236,230,216,.6)";
+      c.lineWidth = 1;
       c.stroke();
       c.restore();
     }

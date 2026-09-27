@@ -19,6 +19,7 @@ export function refreshTimes(root: ParentNode): void {
   });
 }
 
+const ACRONYMS = new Set(["api", "qm", "sso", "ui", "db", "ci", "sla", "pii", "csv", "url", "id"]);
 const DIRS: Record<string, string> = { learnings: "", issues: "", components: "", rules: "", customers: "", people: "", concepts: "" };
 
 /** "learnings/lum-101-u3-1790547859718" -> "LUM-101 learning"; "rules/billing-idempotency" -> "Billing Idempotency". */
@@ -32,8 +33,10 @@ export function pageTitle(slug: string): string {
     const id = `${issue[1].toUpperCase()}-${issue[2]}`;
     return dir === "learnings" ? `${id} learning` : id;
   }
-  const words = last.split(/[-_]/).filter(Boolean).map((w) => (/^[a-z]{2,5}\d*$/i.test(w) && w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)));
-  return words.join(" ") || (dir in DIRS ? dir : slug);
+  const words = last.split(/[-_]/).filter(Boolean).map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)));
+  const title = words.join(" ");
+  if (dir === "learnings") return title ? `${title} learning` : "Learning";
+  return title || (dir in DIRS ? dir : slug);
 }
 
 /** Drops a leading "<name>:" the agent put in front of its own text ("Ada: plan ..." -> "plan ..."). */
@@ -54,6 +57,7 @@ const SLUG_IN_TEXT = /\b(?:rules|learnings|issues|components|customers|people|co
 export function humanize(text: string): string {
   return text
     .replace(/\s*\((?:engine )?fallback\)/gi, "")
+    .replace(/\b([A-Z][\w-]*):\s+\1:\s*/g, "$1: ") // "received from Ada: Ada: plan" -> "received from Ada: plan"
     .replace(SLUG_IN_TEXT, (m) => pageTitle(m));
 }
 

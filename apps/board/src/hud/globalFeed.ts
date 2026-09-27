@@ -20,8 +20,10 @@ export class GlobalFeed {
     const all = this.store.feed();
     if (all.at(-1) === this.last) return;
     this.last = all.at(-1);
-    // A handoff is logged on both units; show it once, from the sender. Thinking stays in the unit panel.
-    this.rows.set(all.filter((e) => e.kind !== "thinking" && !(e.kind === "handoff" && e.text.startsWith("received from"))).slice(-LINES));
+    // A handoff is logged on both units; show it once, from the sender. Thinking stays in the unit panel,
+    // proposals are on their own cards.
+    this.rows.set(all.filter((e) => e.kind !== "thinking" && !(e.kind === "handoff" && e.text.startsWith("received from"))
+      && !(e.kind === "order" && e.text.startsWith("order proposed"))).slice(-LINES));
     refreshTimes(this.root);
   }
 

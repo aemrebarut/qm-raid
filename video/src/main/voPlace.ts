@@ -38,6 +38,7 @@ export const placeVo = (tracks: VoTrack[], alts: VoTrack[]): Placed[] => {
   const bySection = new Map<string, VoTrack[]>();
   for (const t0 of tracks) {
     if (starts[t0.section] === undefined) continue; // section cut (failed clip)
+    if (planned[t0.section]?.voDrop?.includes(idOf(t0))) continue; // not shown in this capture
     const swap = planned[t0.section]?.voSwap?.[idOf(t0)];
     const t = (swap && alts.find((a) => idOf(a) === swap)) || t0;
     bySection.set(t0.section, [...(bySection.get(t0.section) ?? []), t]);

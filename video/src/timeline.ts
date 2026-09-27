@@ -46,6 +46,7 @@ export type Planned = {
   sfx?: { file: string; at: number }[];
   voSwap?: Record<string, string>;
   voAdd?: string[];
+  voDrop?: string[];
 };
 export const planned = edl as unknown as Record<string, Planned>;
 

@@ -19,6 +19,8 @@ type Rule = {
   vo: Record<string, string>;
   // event -> sfx file under audio/
   sfx?: Record<string, string>;
+  // cut the source after the first event matching this (plus its hold): long takes with repeated rounds
+  until?: string;
 };
 
 const TITLE = 1.0; // title card at the head of every clip
@@ -27,7 +29,7 @@ const CAP_DUR = 2.6;
 
 const RULES: Record<string, Rule> = {
   orders: {
-    target: 22,
+    target: 22, // plus the QM intercut when captured (INTERCUT.extra)
     hold: { select: [1.2, 1.2], order: [0.3, 2.2], recall_beam: [0.4, 2.4], reply: [0.4, 2.6], order_done: [0.2, 1], remember_orb: [0.4, 2.4], library: [0.2, 1.6] },
     fx: {
       select: { kind: "callout", text: "KNIGHT|a real QM agent" },
@@ -40,16 +42,18 @@ const RULES: Record<string, Rule> = {
     sfx: { recall_beam: "sfx_beam.wav", remember_orb: "sfx_orb.wav" },
   },
   teams: {
-    target: 20,
-    hold: { select3: [1, 1], form_team: [0.3, 1.2], trio: [0.3, 1.8], order: [0.3, 1.5], "handoff*": [0.4, 1.6], verdict_approved: [0.5, 2.6], verdict_changes: [0.5, 2], run_done: [0.2, 1.2], camp_resolved: [0.2, 1.4] },
+    target: 24, // three verdicts and the escalation; the QM intercut is skipped (--no-qm-teams) to stay under 2:00
+    // final take: the Rule Warden said CHANGES three times (49.1, 68.6, 90.4), then the run escalated (run_needs_human)
+    hold: { select3: [1, 0.8], form_team: [0.2, 1], trio: [0.3, 1.6], handoff_1: [0.4, 1.6], handoff_2: [0.4, 1.2], verdict_approved: [0.5, 2.6], verdict_changes: [0.4, 1.6], run_needs_human: [0.2, 3.6], run_done: [0.2, 1.2], camp_resolved: [0.2, 1.4] },
     fx: {
       trio: { kind: "callout", text: "TRIO|planner, implementer, reviewer" },
       "handoff*": { kind: "callout", text: "HANDOFF|the scroll flies" },
       verdict_approved: [{ kind: "punchIn" }, { kind: "approvedStamp", noXY: true }, { kind: "mascotCheer", text: "Approved!", lead: 1.2 }],
       verdict_changes: { kind: "mascotShock", text: "Changes!" },
+      run_needs_human: { kind: "callout", text: "NEEDS HUMAN|rejected 3x, escalated, not shipped", noXY: true },
     },
-    caps: { trio: "Form team: the Trio workflow", "handoff*": "Scrolls fly: plan, fix, review", verdict_approved: "The reviewer gives the verdict" },
-    vo: { vo_teams_1: "select3", vo_teams_2: "handoff*", vo_teams_2b: "handoff*", vo_teams_3: "verdict_approved", vo_teams_3b: "verdict_changes" },
+    caps: { trio: "Form team: the Trio workflow", "handoff*": "Scrolls fly: plan, fix, review", verdict_approved: "The reviewer gives the verdict", verdict_changes: "Rule Warden verdict: CHANGES", run_needs_human: "Rejected three times, so the team escalated to a human instead of shipping" },
+    vo: { vo_teams_1: "select3", vo_teams_2: "handoff*", vo_teams_2b: "handoff*", vo_teams_3: "verdict_approved", vo_teams_3b: "verdict_changes", vo_teams_4: "run_needs_human" },
     sfx: { "handoff*": "sfx_scroll.wav", verdict_approved: "sfx_chime.wav" },
   },
   forge: {
@@ -93,14 +97,16 @@ const RULES: Record<string, Rule> = {
 // QM web UI intercuts (Emre 16:10): the unit's own QM session, inserted into the map clip after an event.
 const QM_RULE: Rule = {
   target: 5,
+  until: "qm_reply",
   hold: { qm_open: [0.2, 0.8], qm_order: [0.3, 1.4], "qm_tool*": [0.3, 1.2], qm_reply: [0.3, 2.2] },
   fx: { qm_order: { kind: "callout", text: "QM WEB UI|the same agent's session" } },
   caps: { qm_open: "Meanwhile in QM: the order, its GBrain tool calls, the reply" },
   vo: {},
 };
-const INTERCUT: Record<string, { after: string; seconds: number }> = {
-  orders: { after: "recall_beam", seconds: 5 },
-  teams: { after: "handoff*", seconds: 4.5 },
+// seconds = intercut length; extra = seconds added to the clip's slot for it (Emre 16:29: up to 2:00, RTS <-> QM)
+const INTERCUT: Record<string, { after: string; seconds: number; extra: number }> = {
+  orders: { after: "recall_beam", seconds: 9, extra: 5 },
+  teams: { after: "handoff*", seconds: 7, extra: 3 },
 };
 
 const match = (table: Record<string, unknown>, name: string): string | undefined =>
@@ -109,6 +115,11 @@ const match = (table: Record<string, unknown>, name: string): string | undefined
 const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
 
 function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, ext: string, title = TITLE, target = rule.target) {
+  if (rule.until) {
+    const u = doc.events.find((e) => match({ [rule.until!]: 1 }, e.name));
+    const k = u && match(rule.hold, u.name);
+    if (u) doc = { ...doc, duration: Math.min(doc.duration, u.t + (k ? rule.hold[k][1] : 1)), events: doc.events.filter((e) => e.t <= u.t) };
+  }
   const D = doc.duration;
   // Events before the clip's own "ready" marker are stale SSE from earlier work (seen at t 0.01 in dry runs).
   const ready = doc.events.find((e) => e.name === "ready")?.t ?? 0.3;
@@ -210,8 +221,8 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   // --warden: the take shows the Rule Warden reviewing (checked on the frames), so the line may name it.
   if (id === "teams" && process.argv.includes("--warden")) voSwap.vo_teams_2 = "vo_teams_2b";
   // Optional alt lines, used only if their section still fits (voPlace): the veto line needs a confirmed cancel.
-  const voAdd: string[] = voAnchor.vo_auto_3 !== undefined ? ["vo_auto_3"] : [];
-  return { id, src, sfx, voSwap, voAdd, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
+  const voAdd: string[] = ["vo_auto_3", "vo_teams_4"].filter((v) => voAnchor[v] !== undefined);
+  return { id, src, sfx, voSwap, voAdd, voDrop: [] as string[], segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
 type Planned = NonNullable<ReturnType<typeof plan>>;
@@ -261,8 +272,10 @@ const LOADOUT_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/mock-l
 // --keep=forge,orders: take those clips from the preserved take1 captures (public/keep) instead of the new take.
 const KEEP_DIR = join(process.env.HOME ?? "", "Workspace/qm-raid-video/keep");
 const keep = new Set((process.argv.find((a) => a.startsWith("--keep="))?.slice(7) ?? "").split(",").filter(Boolean));
+// --real-loadout: the final take's real Loadout Apply instead of the mock close-up
+const realLoadout = process.argv.includes("--real-loadout");
 const dirFor = (id: string) =>
-  keep.has(id) ? KEEP_DIR : id === "loadout" && existsSync(LOADOUT_DIR) ? LOADOUT_DIR : dir;
+  keep.has(id) ? KEEP_DIR : id === "loadout" && !realLoadout && existsSync(LOADOUT_DIR) ? LOADOUT_DIR : dir;
 const publicOf = (d: string) => (d === KEEP_DIR ? "keep/" : d === LOADOUT_DIR ? "mock-loadout/" : "clips/");
 const loadoutCaptured = ["mp4", "webm"].some((x) => existsSync(join(dirFor("loadout"), `loadout.${x}`))) && existsSync(join(dirFor("loadout"), "loadout.markers.json"));
 for (const [id, rule] of Object.entries(RULES)) {
@@ -275,6 +288,7 @@ for (const [id, rule] of Object.entries(RULES)) {
     continue;
   }
   const doc = JSON.parse(readFileSync(f, "utf8"));
+  const noProposals = id === "autopilot" && !(doc.events as Ev[]).some((e) => e.name === "proposed" || e.name === "proposal");
   if (realOnly && doc.backend === "mock" && id !== "loadout") {
     console.log(`${id}: mock capture skipped (--real)`);
     delete edl[id];
@@ -283,7 +297,7 @@ for (const [id, rule] of Object.entries(RULES)) {
   const p =
     id === "loadout"
       ? plan(id, rule, doc, ext)
-      : plan(id, rule, doc, ext, TITLE, rule.target);
+      : plan(id, rule, doc, ext, TITLE, noProposals ? 7 : rule.target);
   if (!p) {
     console.log(`${id}: no usable events`);
     continue;
@@ -294,15 +308,19 @@ for (const [id, rule] of Object.entries(RULES)) {
   if (ic && qmExt && existsSync(join(d, `${id}-qm.markers.json`)) && !process.argv.includes(`--no-qm-${id}`)) {
     const qdoc = JSON.parse(readFileSync(join(d, `${id}-qm.markers.json`), "utf8"));
     const q = plan(`${id}-qm`, QM_RULE, qdoc, qmExt, 0, ic.seconds);
-    const m = q && plan(id, rule, doc, ext, TITLE, rule.target - q.seconds);
+    const m = q && plan(id, rule, doc, ext, TITLE, rule.target + ic.extra - q.seconds);
     if (q && m) {
       insertIntercut(m, q, ic.after);
       m.src = m.src.replace("clips/", publicOf(d));
       m.segments = m.segments.map((g) => ({ ...g, src: (g.src ?? m.src).replace("clips/", publicOf(d)) }));
       edl[id] = m;
-      console.log(`${id} [${doc.backend}] + QM intercut ${q.seconds}s after ${ic.after}: ${m.seconds}s (target ${rule.target})`);
+      console.log(`${id} [${doc.backend}] + QM intercut ${q.seconds}s (holds ${q.holdRate}x) after ${ic.after}: ${m.seconds}s (target ${rule.target + ic.extra})`);
       continue;
     }
+  }
+  if (noProposals) {
+    p.voDrop = ["vo_auto_2"];
+    console.log("  autopilot: no proposals in this capture, new-issue beat only (vo_auto_2 dropped)");
   }
   p.src = p.src.replace("clips/", publicOf(d));
   p.segments = p.segments.map((g) => ({ ...g, src: p.src }));

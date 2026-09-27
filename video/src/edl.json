@@ -1,157 +1,482 @@
 {
   "orders": {
     "id": "orders",
-    "src": "keep/orders.mp4",
+    "src": "clips/orders.mp4",
     "sfx": [
       {
         "file": "sfx_beam.wav",
-        "at": 6.67
+        "at": 6.7
       },
       {
         "file": "sfx_orb.wav",
-        "at": 14.34
+        "at": 19.6
       }
     ],
     "voSwap": {},
-    "voAdd": [],
+    "voAdd": [
+      "vo_orders_qm"
+    ],
+    "voDrop": [],
     "segments": [
       {
-        "from": 1.299,
-        "to": 4.699,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 0,
+        "to": 3.003,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
       },
       {
-        "from": 4.699,
-        "to": 7.967,
+        "from": 3.003,
+        "to": 5.818,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders.mp4"
       },
       {
-        "from": 7.967,
-        "to": 10.467,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 5.818,
+        "to": 8.318,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
       },
       {
-        "from": 10.467,
-        "to": 17.715,
+        "from": 8.318,
+        "to": 15.893,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders.mp4"
       },
       {
-        "from": 17.715,
-        "to": 20.515,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 15.893,
+        "to": 18.115,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
       },
       {
-        "from": 20.515,
-        "to": 28.532,
+        "from": 0.495,
+        "to": 1.495,
+        "rate": 1.21,
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
+      },
+      {
+        "from": 1.495,
+        "to": 2.281,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 28.532,
-        "to": 31.332,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 2.281,
+        "to": 3.981,
+        "rate": 1.21,
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 31.332,
-        "to": 53.11,
+        "from": 3.981,
+        "to": 12.446,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 53.11,
-        "to": 55.91,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 12.446,
+        "to": 14.831,
+        "rate": 1.21,
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 55.91,
-        "to": 63.129,
+        "from": 14.831,
+        "to": 19.571,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 63.129,
-        "to": 66.129,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 19.571,
+        "to": 21.071,
+        "rate": 1.21,
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 66.129,
-        "to": 69.621,
+        "from": 21.071,
+        "to": 24.744,
         "rate": 12,
-        "src": "keep/orders.mp4"
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
       },
       {
-        "from": 69.621,
-        "to": 71.421,
-        "rate": 1.08,
-        "src": "keep/orders.mp4"
+        "from": 24.744,
+        "to": 27.244,
+        "rate": 1.21,
+        "src": "clips/orders-qm.mp4",
+        "label": "QM web UI"
+      },
+      {
+        "from": 18.115,
+        "to": 19.578,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 19.578,
+        "to": 23.018,
+        "rate": 12,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 23.018,
+        "to": 25.818,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 25.818,
+        "to": 28.19,
+        "rate": 12,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 28.19,
+        "to": 31.19,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 31.19,
+        "to": 32.224,
+        "rate": 12,
+        "src": "clips/orders.mp4"
+      },
+      {
+        "from": 32.224,
+        "to": 34.024,
+        "rate": 1.01,
+        "src": "clips/orders.mp4"
       }
     ],
     "captions": [
       {
-        "at": 3.68,
+        "at": 3.5,
         "dur": 2.6,
         "text": "Right-click a camp: the knight marches"
       },
       {
-        "at": 6.67,
+        "at": 6.7,
         "dur": 2.6,
         "text": "Blue beam: recall from the Library (GBrain)"
       },
       {
-        "at": 14.34,
+        "at": 8.67,
+        "dur": 2.6,
+        "text": "Meanwhile in QM: the order, its GBrain tool calls, the reply"
+      },
+      {
+        "at": 19.6,
         "dur": 2.6,
         "text": "Gold orb: remembered for the whole army"
       }
     ],
     "fx": [
       {
-        "at": 2.04,
+        "at": 1.79,
         "kind": "callout",
         "text": "KNIGHT|a real QM agent",
-        "x": 824,
-        "y": 546
+        "x": 1425,
+        "y": 544
       },
       {
-        "at": 6.67,
+        "at": 6.7,
         "kind": "punchIn",
-        "x": 635,
-        "y": 451
+        "x": 884,
+        "y": 522
       },
       {
-        "at": 6.67,
+        "at": 6.7,
         "kind": "calloutRecall",
         "text": "RECALL|from GBrain, the Library",
-        "x": 635,
-        "y": 451
+        "x": 884,
+        "y": 522
       },
       {
-        "at": 14.34,
+        "at": 19.6,
         "kind": "pagePop",
         "text": "+1 page",
-        "x": 635,
-        "y": 451
+        "x": 884,
+        "y": 522
       },
       {
-        "at": 15.14,
+        "at": 20.4,
         "kind": "mascotCheer",
         "text": "One more page!",
-        "x": 635,
-        "y": 451
+        "x": 884,
+        "y": 522
       },
       {
-        "at": 17.54,
+        "at": 22.57,
         "kind": "callout",
         "text": "REAL QM REPLY|the issue, worked",
-        "x": 635,
-        "y": 451
+        "x": 884,
+        "y": 522
+      },
+      {
+        "at": 9.65,
+        "kind": "callout",
+        "text": "QM WEB UI|the same agent's session"
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 1.17
+      },
+      {
+        "name": "select",
+        "at": 1.79
+      },
+      {
+        "name": "order",
+        "at": 3.5
+      },
+      {
+        "name": "order_active",
+        "at": 3.51
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 6.7
+      },
+      {
+        "name": "recall_beam",
+        "at": 6.7
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 7.54
+      },
+      {
+        "name": "recall_beam",
+        "at": 7.54
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 7.57
+      },
+      {
+        "name": "recall_beam",
+        "at": 7.57
+      },
+      {
+        "name": "ready",
+        "at": 8.67
+      },
+      {
+        "name": "qm_open",
+        "at": 8.67
+      },
+      {
+        "name": "qm_order",
+        "at": 9.65
+      },
+      {
+        "name": "qm_tool",
+        "at": 11.75
+      },
+      {
+        "name": "qm_tool",
+        "at": 12.45
+      },
+      {
+        "name": "qm_tool",
+        "at": 12.48
+      },
+      {
+        "name": "qm_tool",
+        "at": 14.11
+      },
+      {
+        "name": "qm_reply",
+        "at": 15.65
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 19.6
+      },
+      {
+        "name": "remember_orb",
+        "at": 19.6
+      },
+      {
+        "name": "reply",
+        "at": 22.57
+      },
+      {
+        "name": "camp_resolved",
+        "at": 22.57
+      },
+      {
+        "name": "library",
+        "at": 25.43
+      },
+      {
+        "name": "end",
+        "at": 27
+      }
+    ],
+    "voAnchor": {
+      "vo_orders_1": 1.79,
+      "vo_orders_2": 6.7,
+      "vo_orders_3": 19.6,
+      "vo_orders_qm": 8.7
+    },
+    "seconds": 27,
+    "holdRate": 1.01,
+    "gapRate": 12
+  },
+  "teams": {
+    "id": "teams",
+    "src": "clips/teams.mp4",
+    "sfx": [
+      {
+        "file": "sfx_scroll.wav",
+        "at": 7.9
+      }
+    ],
+    "voSwap": {
+      "vo_teams_3": "vo_teams_3b",
+      "vo_teams_2": "vo_teams_2b"
+    },
+    "voAdd": [
+      "vo_teams_4"
+    ],
+    "voDrop": [],
+    "segments": [
+      {
+        "from": 2.177,
+        "to": 6.387,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 6.387,
+        "to": 8.101,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 8.101,
+        "to": 10.001,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 10.001,
+        "to": 25.034,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 25.034,
+        "to": 27.034,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 27.034,
+        "to": 43.479,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 43.479,
+        "to": 45.079,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 45.079,
+        "to": 48.705,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 48.705,
+        "to": 50.705,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 50.705,
+        "to": 68.229,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 68.229,
+        "to": 70.229,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 70.229,
+        "to": 90.012,
+        "rate": 11.8,
+        "src": "clips/teams.mp4"
+      },
+      {
+        "from": 90.012,
+        "to": 94.013,
+        "rate": 1,
+        "src": "clips/teams.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 4.63,
+        "dur": 2.6,
+        "text": "Form team: the Trio workflow"
+      },
+      {
+        "at": 7.9,
+        "dur": 2.6,
+        "text": "Scrolls fly: plan, fix, review"
+      },
+      {
+        "at": 13.2,
+        "dur": 2.6,
+        "text": "Rule Warden verdict: CHANGES"
+      },
+      {
+        "at": 20.37,
+        "dur": 2.6,
+        "text": "Rejected three times, so the team escalated to a human instead of shipping"
+      }
+    ],
+    "fx": [
+      {
+        "at": 4.63,
+        "kind": "callout",
+        "text": "TRIO|planner, implementer, reviewer",
+        "x": 1679,
+        "y": 417
+      },
+      {
+        "at": 7.9,
+        "kind": "callout",
+        "text": "HANDOFF|the scroll flies",
+        "x": 661,
+        "y": 389
+      },
+      {
+        "at": 13.2,
+        "kind": "mascotShock",
+        "text": "Changes!",
+        "x": 627,
+        "y": 410
+      },
+      {
+        "at": 20.37,
+        "kind": "callout",
+        "text": "NEEDS HUMAN|rejected 3x, escalated, not shipped"
       }
     ],
     "events": [
@@ -160,66 +485,280 @@
         "at": 0
       },
       {
-        "name": "select",
-        "at": 2.04
+        "name": "select3",
+        "at": 2
+      },
+      {
+        "name": "form_team",
+        "at": 3.21
+      },
+      {
+        "name": "trio",
+        "at": 4.63
       },
       {
         "name": "order",
-        "at": 3.68
+        "at": 6.49
       },
       {
         "name": "order_active",
-        "at": 3.69
+        "at": 6.49
       },
       {
         "name": "gbrain_tool",
-        "at": 6.67
+        "at": 6.91
       },
       {
         "name": "recall_beam",
-        "at": 6.67
+        "at": 6.91
       },
       {
         "name": "gbrain_tool",
-        "at": 9.94
-      },
-      {
-        "name": "recall_beam",
-        "at": 9.94
-      },
-      {
-        "name": "gbrain_tool",
-        "at": 14.34
+        "at": 7.27
       },
       {
         "name": "remember_orb",
-        "at": 14.34
+        "at": 7.27
       },
       {
         "name": "reply",
-        "at": 17.54
+        "at": 7.9
       },
       {
-        "name": "camp_resolved",
-        "at": 17.54
+        "name": "order_active",
+        "at": 7.9
       },
       {
-        "name": "library",
-        "at": 20.42
+        "name": "handoff",
+        "at": 7.9
+      },
+      {
+        "name": "handoff_1",
+        "at": 7.9
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 9.96
+      },
+      {
+        "name": "recall_beam",
+        "at": 9.96
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 10.16
+      },
+      {
+        "name": "recall_beam",
+        "at": 10.16
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 10.58
+      },
+      {
+        "name": "remember_orb",
+        "at": 10.58
+      },
+      {
+        "name": "reply",
+        "at": 11.3
+      },
+      {
+        "name": "order_active",
+        "at": 11.3
+      },
+      {
+        "name": "handoff",
+        "at": 11.3
+      },
+      {
+        "name": "handoff_2",
+        "at": 11.3
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 12.24
+      },
+      {
+        "name": "recall_beam",
+        "at": 12.24
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 13.2
+      },
+      {
+        "name": "remember_orb",
+        "at": 13.2
+      },
+      {
+        "name": "verdict_changes",
+        "at": 13.2
+      },
+      {
+        "name": "order_active",
+        "at": 13.2
+      },
+      {
+        "name": "handoff",
+        "at": 13.2
+      },
+      {
+        "name": "handoff_3",
+        "at": 13.2
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 15.1
+      },
+      {
+        "name": "recall_beam",
+        "at": 15.1
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 15.25
+      },
+      {
+        "name": "recall_beam",
+        "at": 15.25
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 15.61
+      },
+      {
+        "name": "remember_orb",
+        "at": 15.61
+      },
+      {
+        "name": "reply",
+        "at": 15.95
+      },
+      {
+        "name": "order_active",
+        "at": 15.95
+      },
+      {
+        "name": "handoff",
+        "at": 15.95
+      },
+      {
+        "name": "handoff_4",
+        "at": 15.95
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 15.96
+      },
+      {
+        "name": "recall_beam",
+        "at": 15.96
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 16.7
+      },
+      {
+        "name": "remember_orb",
+        "at": 16.7
+      },
+      {
+        "name": "verdict_changes",
+        "at": 16.7
+      },
+      {
+        "name": "order_active",
+        "at": 16.7
+      },
+      {
+        "name": "handoff",
+        "at": 16.7
+      },
+      {
+        "name": "handoff_5",
+        "at": 16.7
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 18.56
+      },
+      {
+        "name": "recall_beam",
+        "at": 18.56
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 18.81
+      },
+      {
+        "name": "recall_beam",
+        "at": 18.81
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 19.23
+      },
+      {
+        "name": "remember_orb",
+        "at": 19.23
+      },
+      {
+        "name": "reply",
+        "at": 19.63
+      },
+      {
+        "name": "order_active",
+        "at": 19.63
+      },
+      {
+        "name": "handoff",
+        "at": 19.63
+      },
+      {
+        "name": "handoff_6",
+        "at": 19.63
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 19.64
+      },
+      {
+        "name": "recall_beam",
+        "at": 19.64
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 20.37
+      },
+      {
+        "name": "remember_orb",
+        "at": 20.37
+      },
+      {
+        "name": "verdict_changes",
+        "at": 20.37
+      },
+      {
+        "name": "run_needs_human",
+        "at": 20.37
       },
       {
         "name": "end",
-        "at": 21.9
+        "at": 23.97
       }
     ],
     "voAnchor": {
-      "vo_orders_1": 2.04,
-      "vo_orders_2": 6.67,
-      "vo_orders_3": 14.34
+      "vo_teams_1": 2,
+      "vo_teams_2": 7.9,
+      "vo_teams_2b": 7.9,
+      "vo_teams_3b": 13.2,
+      "vo_teams_4": 20.37
     },
-    "seconds": 21.9,
-    "holdRate": 1.08,
-    "gapRate": 12
+    "seconds": 23.97,
+    "holdRate": 1,
+    "gapRate": 11.8
   },
   "forge": {
     "id": "forge",
@@ -232,6 +771,7 @@
     ],
     "voSwap": {},
     "voAdd": [],
+    "voDrop": [],
     "segments": [
       {
         "from": 1.119,
@@ -410,74 +950,255 @@
     "holdRate": 1.09,
     "gapRate": 12
   },
-  "loadout": {
-    "id": "loadout",
-    "src": "mock-loadout/loadout.mp4",
+  "autopilot": {
+    "id": "autopilot",
+    "src": "clips/autopilot.mp4",
     "sfx": [],
     "voSwap": {},
-    "voAdd": [],
+    "voAdd": [
+      "vo_auto_3"
+    ],
+    "voDrop": [],
     "segments": [
       {
-        "from": 0.213,
-        "to": 5.052,
+        "from": 1.403,
+        "to": 4.788,
         "rate": 1,
-        "src": "mock-loadout/loadout.mp4",
-        "zoom": {
-          "s": 1.6,
-          "x": 1910,
-          "y": 60
-        }
+        "src": "clips/autopilot.mp4"
       },
       {
-        "from": 5.052,
-        "to": 6.119,
-        "rate": 1,
-        "src": "mock-loadout/loadout.mp4",
-        "zoom": {
-          "s": 1.6,
-          "x": 1910,
-          "y": 60
-        }
+        "from": 4.788,
+        "to": 6.72,
+        "rate": 1.3,
+        "src": "clips/autopilot.mp4"
       },
       {
-        "from": 6.119,
-        "to": 8.759,
+        "from": 6.72,
+        "to": 10.653,
         "rate": 1,
-        "src": "mock-loadout/loadout.mp4",
-        "zoom": {
-          "s": 1.6,
-          "x": 1910,
-          "y": 60
-        }
+        "src": "clips/autopilot.mp4"
       },
       {
-        "from": 8.759,
-        "to": 12.213,
+        "from": 10.653,
+        "to": 15.263,
+        "rate": 1.3,
+        "src": "clips/autopilot.mp4"
+      },
+      {
+        "from": 15.263,
+        "to": 20.071,
         "rate": 1,
-        "src": "mock-loadout/loadout.mp4"
+        "src": "clips/autopilot.mp4"
       }
     ],
     "captions": [
       {
-        "at": 3.24,
+        "at": 1.79,
+        "dur": 2.6,
+        "text": "New issue: a camp appears"
+      },
+      {
+        "at": 7.03,
+        "dur": 2.6,
+        "text": "Autopilot proposes, 15 s veto ring"
+      },
+      {
+        "at": 12.77,
+        "dur": 2.6,
+        "text": "Vetoed: that order is cancelled"
+      }
+    ],
+    "fx": [
+      {
+        "at": 1.79,
+        "kind": "callout",
+        "text": "NEW ISSUE|a new camp",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 2.19,
+        "kind": "mascotShock",
+        "text": "More monsters!",
+        "x": 960,
+        "y": 135
+      },
+      {
+        "at": 7.03,
+        "kind": "callout",
+        "text": "AUTOPILOT|15 s veto ring",
+        "x": 1755,
+        "y": 18
+      },
+      {
+        "at": 12.77,
+        "kind": "punchIn",
+        "x": 886,
+        "y": 485
+      },
+      {
+        "at": 12.77,
+        "kind": "mascotSmug",
+        "text": "Not that one.",
+        "x": 886,
+        "y": 485
+      },
+      {
+        "at": 15.57,
+        "kind": "callout",
+        "text": "LET IT RIDE|order goes",
+        "x": 301,
+        "y": 1004
+      }
+    ],
+    "events": [
+      {
+        "name": "ready",
+        "at": 0
+      },
+      {
+        "name": "new_issue",
+        "at": 1.6
+      },
+      {
+        "name": "camp_spawned",
+        "at": 1.79
+      },
+      {
+        "name": "autopilot_on",
+        "at": 5.2
+      },
+      {
+        "name": "proposal",
+        "at": 7.03
+      },
+      {
+        "name": "proposal",
+        "at": 7.03
+      },
+      {
+        "name": "proposed",
+        "at": 7.03
+      },
+      {
+        "name": "order_cancelled",
+        "at": 12.77
+      },
+      {
+        "name": "veto",
+        "at": 12.77
+      },
+      {
+        "name": "proposal",
+        "at": 14.96
+      },
+      {
+        "name": "approve",
+        "at": 15.57
+      },
+      {
+        "name": "order_active",
+        "at": 15.57
+      },
+      {
+        "name": "autopilot_go",
+        "at": 15.57
+      },
+      {
+        "name": "autopilot_off",
+        "at": 17.17
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 17.17
+      },
+      {
+        "name": "recall_beam",
+        "at": 17.17
+      },
+      {
+        "name": "end",
+        "at": 17.17
+      }
+    ],
+    "voAnchor": {
+      "vo_auto_1": 1.6,
+      "vo_auto_2": 7.03,
+      "vo_auto_3": 12.77
+    },
+    "seconds": 17.17,
+    "holdRate": 1,
+    "gapRate": 1.3
+  },
+  "loadout": {
+    "id": "loadout",
+    "src": "clips/loadout.mp4",
+    "sfx": [],
+    "voSwap": {},
+    "voAdd": [],
+    "voDrop": [],
+    "segments": [
+      {
+        "from": 0.211,
+        "to": 5.218,
+        "rate": 1,
+        "src": "clips/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
+      },
+      {
+        "from": 5.218,
+        "to": 6.22,
+        "rate": 1,
+        "src": "clips/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
+      },
+      {
+        "from": 6.22,
+        "to": 8.743,
+        "rate": 1,
+        "src": "clips/loadout.mp4",
+        "zoom": {
+          "s": 1.6,
+          "x": 1910,
+          "y": 60
+        }
+      },
+      {
+        "from": 8.743,
+        "to": 12.211,
+        "rate": 1,
+        "src": "clips/loadout.mp4"
+      }
+    ],
+    "captions": [
+      {
+        "at": 3.41,
         "dur": 2.6,
         "text": "Loadout: the unit's standing orders"
       }
     ],
     "fx": [
       {
-        "at": 6.4,
+        "at": 6.5,
         "kind": "callout",
         "text": "LOADOUT|standing orders and skills",
         "x": 1488,
         "y": 174
       },
       {
-        "at": 9.44,
+        "at": 9.42,
         "kind": "mascotSmug",
         "text": "Custom kit.",
         "x": 1489,
-        "y": 1423
+        "y": 1398
       }
     ],
     "events": [
@@ -491,23 +1212,23 @@
       },
       {
         "name": "loadout_open",
-        "at": 3.24
+        "at": 3.41
       },
       {
         "name": "orders_chips",
-        "at": 6.4
+        "at": 6.5
       },
       {
         "name": "skill",
-        "at": 7.61
+        "at": 7.71
       },
       {
         "name": "save",
-        "at": 9.04
+        "at": 9.02
       },
       {
         "name": "applied",
-        "at": 9.04
+        "at": 9.02
       },
       {
         "name": "order",
@@ -542,11 +1263,23 @@
         "at": 12
       },
       {
-        "name": "remember_orb",
+        "name": "recall_beam",
         "at": 12
       },
       {
         "name": "gbrain_tool",
+        "at": 12
+      },
+      {
+        "name": "recall_beam",
+        "at": 12
+      },
+      {
+        "name": "gbrain_tool",
+        "at": 12
+      },
+      {
+        "name": "remember_orb",
         "at": 12
       },
       {
@@ -563,11 +1296,15 @@
       }
     ],
     "voAnchor": {
-      "vo_loadout_1": 3.24,
-      "vo_loadout_2": 9.04
+      "vo_loadout_1": 3.41,
+      "vo_loadout_2": 9.02
     },
     "seconds": 12,
     "holdRate": 1,
     "gapRate": 1
+  },
+  "hero": {
+    "src": "clips/hero.mp4",
+    "from": 10.334
   }
 }

@@ -3,7 +3,7 @@
 // and +x (toward the camera), tall parts sit at the back. Model only: no labels, rings or game state.
 import * as THREE from "three";
 import type { BuildingArt, BuildingKind, BuildingOpts } from "../types";
-import { Kit, cobbleTex, gable, mat, plankTex, roofTex, slabRoof, stoneTex } from "./kit";
+import { Kit, cobbleTex, gable, glassTex, mat, plankTex, roofTex, slabRoof, stoneTex } from "./kit";
 
 export type { BuildingArt, BuildingKind, BuildingOpts };
 type Model = Omit<BuildingArt, "dispose">;
@@ -123,6 +123,33 @@ function trees(kit: Kit, spots: [number, number, number][]) {
   }
 }
 
+/** Rose window: blue and gold stained glass with radial tracery around the GBrain node. */
+let roseT: THREE.CanvasTexture | null = null;
+function roseTex() {
+  if (roseT) return roseT;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(64, 64, 6, 64, 64, 64);
+  g.addColorStop(0, "#fff3c4"); g.addColorStop(0.35, "#7fc2ff"); g.addColorStop(1, "#2a62c8");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = "#1c1c26"; ctx.lineWidth = 4;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(64 + Math.cos(a) * 14, 64 + Math.sin(a) * 14); ctx.lineTo(64 + Math.cos(a) * 64, 64 + Math.sin(a) * 64); ctx.stroke();
+  }
+  for (const rad of [14, 38]) { ctx.beginPath(); ctx.arc(64, 64, rad, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.fillStyle = "#ffd966";
+  for (let i = 0; i < 8; i++) {
+    const a = ((i + 0.5) / 8) * Math.PI * 2;
+    ctx.beginPath(); ctx.arc(64 + Math.cos(a) * 51, 64 + Math.sin(a) * 51, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  roseT = new THREE.CanvasTexture(c);
+  roseT.colorSpace = THREE.SRGBColorSpace;
+  return roseT;
+}
+
 // ---------- Library ----------
 
 function library(): Model {
@@ -130,6 +157,7 @@ function library(): Model {
   const kit = new Kit();
   const stone = STONE(), stoneDark = STONE_DARK(), slate = TILES("#56688a"), wood = PLANK("#5a3a20");
   const win = glowMat("#bfe3ff", "#3d8fe8", 1.5);
+  win.map = win.emissiveMap = glassTex();
   const Y0 = 0.08;
 
   // Cobbled close with a darker kerb
@@ -148,7 +176,9 @@ function library(): Model {
   lancet(kit, stoneDark, "z", NX, Y0 + 0.32, FZ + 0.02, 0.46, 0.58, 0.05);
   lancet(kit, wood, "z", NX, Y0 + 0.3, FZ + 0.05, 0.32, 0.52, 0.03);
   kit.add(new THREE.TorusGeometry(0.2, 0.035, 6, 16), stoneDark, [NX, Y0 + NH + 0.22, FZ + 0.03]);
-  const rose = new THREE.Mesh(new THREE.CircleGeometry(0.19, 16), win);
+  const roseMat = glowMat("#ffffff", "#ffffff", 1.5);
+  roseMat.map = roseMat.emissiveMap = roseTex();
+  const rose = new THREE.Mesh(new THREE.CircleGeometry(0.19, 16), roseMat);
   rose.position.set(NX, Y0 + NH + 0.22, FZ + 0.025);
   root.add(rose);
   kit.add(new THREE.ConeGeometry(0.06, 0.22, 4), stoneDark, [NX, Y0 + NH + 0.92, FZ + 0.02]);
@@ -228,7 +258,7 @@ function library(): Model {
       halo.position.y = orb.position.y;
       halo.rotation.z += dt * 1.5;
       halo.scale.setScalar(1 + p * 1.5 + Math.sin(t * 2) * 0.05);
-      win.emissiveIntensity = (lit ? 2.4 : 1.5) + Math.sin(t * 1.3) * 0.15 + p * 2.5;
+      win.emissiveIntensity = roseMat.emissiveIntensity = (lit ? 2.4 : 1.5) + Math.sin(t * 1.3) * 0.15 + p * 2.5;
       light.intensity = 2.5 + Math.sin(t * 2) * 0.3 + p * 10;
       crestBanner.rotation.x = Math.sin(t * 1.7) * 0.06 - 0.04;
     },

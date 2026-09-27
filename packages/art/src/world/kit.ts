@@ -16,7 +16,7 @@ export function rng(seed: number) {
 // ---------- textures (drawn once, tinted by material colour) ----------
 
 const texCache = new Map<string, THREE.CanvasTexture>();
-function canvasTex(key: string, size: number, draw: (ctx: CanvasRenderingContext2D, r: () => number) => void) {
+function canvasTex(key: string, size: number, draw: (ctx: CanvasRenderingContext2D, r: () => number) => void, repeat = 1) {
   let t = texCache.get(key);
   if (t) return t;
   const c = document.createElement("canvas");
@@ -27,6 +27,7 @@ function canvasTex(key: string, size: number, draw: (ctx: CanvasRenderingContext
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
+  t.repeat.set(repeat, repeat);
   texCache.set(key, t);
   return t;
 }
@@ -42,7 +43,7 @@ function speckle(ctx: CanvasRenderingContext2D, r: () => number, size: number, n
   ctx.globalAlpha = 1;
 }
 
-/** Ashlar stone blocks: 1 texture repeat = 1 world unit (4 courses). */
+/** Ashlar stone blocks: 8 courses per world unit. */
 export function stoneTex() {
   return canvasTex("stone", 256, (ctx, r) => {
     ctx.fillStyle = grey(120);
@@ -68,7 +69,29 @@ export function stoneTex() {
       }
     }
     speckle(ctx, r, 256, 1800, 60, 255);
-  });
+  }, 2);
+}
+
+/** Leaded glass: diamond panes with dark cames, bright centres (use as map and emissiveMap). */
+export function glassTex() {
+  return canvasTex("glass", 128, (ctx, r) => {
+    const n = 8, s = 128 / n;
+    for (let i = -1; i <= n; i++) for (let j = -1; j <= n; j++) {
+      const cx = i * s + (j % 2 ? s / 2 : 0), cy = j * s / 2 * 2;
+      const v = 200 + r() * 55;
+      ctx.fillStyle = `rgb(${v * 0.85 | 0},${v * 0.95 | 0},${v | 0})`;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s / 2); ctx.lineTo(cx + s / 2, cy); ctx.lineTo(cx, cy + s / 2); ctx.lineTo(cx - s / 2, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = "rgb(40,40,50)";
+    ctx.lineWidth = 2;
+    for (let k = -128; k <= 256; k += s) {
+      ctx.beginPath(); ctx.moveTo(k, 0); ctx.lineTo(k + 128, 128); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(k, 128); ctx.lineTo(k + 128, 0); ctx.stroke();
+    }
+  }, 1.5);
 }
 
 /** Overlapping roof tiles (slate or clay); rows run along u. */

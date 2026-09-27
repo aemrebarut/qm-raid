@@ -83,7 +83,7 @@ async function until<T>(pick: () => T | undefined, ms: number): Promise<T | unde
 const state = async () => (await call(`${E}/api/state`)).d;
 const openTarget = async () => (await state()).targets.find((t: any) => t.status === "open");
 const runEnd = (id: string, ms: number) => until(() => events.filter((e) => e.type === "workflow.updated" && e.run.id === id && e.run.status !== "running").pop()?.run, ms);
-async function startTeamRun(preset: string): Promise<{ runId: string; target: any } | null> {
+async function startTeamRun(preset: string): Promise<{ runId: string; target: any; run: any } | null> {
   const put = await call(`${E}/api/teams/1/workflow`, "PUT", { preset });
   check(put.d?.ok === true && put.d.team?.workflow?.preset === preset, `PUT ${preset} preset`, put.d);
   const target = await openTarget();
@@ -92,9 +92,18 @@ async function startTeamRun(preset: string): Promise<{ runId: string; target: an
   check(res.d?.ok === true && typeof runId === "string", `${preset}: team order starts a run`, res.d);
   if (typeof runId !== "string") return null;
   console.log(`${preset}: run ${runId} on ${target.id} (${target.issue})`);
-  return { runId, target };
+  return { runId, target, run: res.d.run };
 }
 const steps = (run: any) => run.steps.map((s: any) => `${s.nodeId}:${s.status}:${s.unitId}`);
+// When a run ends unexpectedly: what else happened to its units meanwhile (another order, a team change, a retire).
+function explain(runId: string, unitIds: string[]): void {
+  const from = events.findIndex((e) => e.type === "workflow.updated" && e.run.id === runId);
+  for (const e of events.slice(Math.max(0, from))) {
+    const uid = e.order?.unitId ?? e.unitId ?? e.unit?.id;
+    if (["order.updated", "order.proposed", "team.updated", "unit.retired"].includes(e.type) && (e.type === "team.updated" || unitIds.includes(uid)))
+      console.log(`   ${e.type} ${JSON.stringify(e.order ?? e.team ?? { unitId: e.unitId })}`);
+  }
+}
 const handoffs = (runId: string) => events.filter((e) => e.type === "workflow.handoff" && e.runId === runId).map((e) => `${e.fromUnitId}>${e.toUnitId}:${e.nodeId}`);
 
 async function trio(m: string[]): Promise<void> {
@@ -102,7 +111,8 @@ async function trio(m: string[]): Promise<void> {
   const s = await startTeamRun("trio");
   if (!s) return;
   const final = await runEnd(s.runId, 60000);
-  check(final?.status === "done", "trio: run done", final && steps(final));
+  check(final?.status === "done", "trio: run done", final && `${final.status} ${steps(final).join(" ")}`);
+  if (final?.status !== "done") explain(s.runId, m);
   if (!final) return;
   check(final.loops === 1, "trio: one changes loop", final.loops);
   check(JSON.stringify(steps(final)) === JSON.stringify([`planner:done:${planner}`, `implementer:done:${implementer}`, `reviewer:changes:${reviewer}`, `implementer:done:${implementer}`, `reviewer:approved:${reviewer}`]), "trio: planner, implementer, reviewer (changes), implementer, reviewer (approved)", steps(final));
@@ -152,8 +162,8 @@ async function duel(m: string[]): Promise<void> {
   const [a, b, judge] = m;
   const s = await startTeamRun("duel");
   if (!s) return;
-  const first = events.find((e) => e.type === "workflow.updated" && e.run.id === s.runId);
-  check(JSON.stringify([...(first?.run.active ?? [])].sort()) === JSON.stringify(["implementer1", "implementer2"]), "duel: both implementers start at once", first?.run.active);
+  // The POST answer carries the run as it was right after startRun.
+  check(JSON.stringify([...(s.run.active ?? [])].sort()) === JSON.stringify(["implementer1", "implementer2"]), "duel: both implementers start at once", s.run.active);
   const final = await runEnd(s.runId, 60000);
   check(final?.status === "done", "duel: run done", final && steps(final));
   if (!final) return;

@@ -153,6 +153,7 @@ function releaseUnit(o: Order): void {
   u.orderId = null;
   u.status = "idle";
   emit("unit.updated", { unit: u });
+  emit("unit.status", { unitId: u.id, status: u.status });
 }
 
 function completeOrder(o: Order, reply: string): void {

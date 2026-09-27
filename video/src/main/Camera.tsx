@@ -24,6 +24,11 @@ const SPOT: Record<string, [number, number]> = {
   qm_reply: [960, 660],
   library: [900, 420],
 };
+// rev P1 on v2: the camera cropped the Forge card scores and Train controls, and the Autopilot proposal rows and Go
+// control (bottom left). Forge runs without the camera; Autopilot only punches on the new camp, before any proposal
+// shows, and does not drift.
+const OFF = new Set(["forge"]);
+const ONLY: Record<string, Set<string>> = { autopilot: new Set(["new_issue", "camp_spawned"]) };
 const PUNCH = 1.55;
 const IN = 10;
 const HOLD = 40;
@@ -49,6 +54,7 @@ const punches = (c: ClipDef): Punch[] => {
   let last = -Infinity;
   for (const e of planned[c.id]?.events ?? []) {
     if (!KEY.has(e.name) || e.at < 0.9) continue;
+    if (ONLY[c.id] && !ONLY[c.id].has(e.name)) continue;
     if (e.at - last < GAP) continue;
     // loadout's close-up is already zoomed before save; only punch in the wide view
     const seg = segAt(c, e.at);
@@ -83,13 +89,15 @@ const cuts = (c: ClipDef): number[] => {
 
 export const Camera: React.FC<{ c: ClipDef; children: React.ReactNode }> = ({ c, children }) => {
   const frame = useCurrentFrame();
+  if (OFF.has(c.id)) return <>{children}</>;
+  const still = Boolean(ONLY[c.id]);
   // drift: blend between framings every BLOCK frames
   const b = Math.floor(frame / BLOCK);
   const cur = DRIFT[b % DRIFT.length];
   const prev = DRIFT[(b + DRIFT.length - 1) % DRIFT.length];
   const m = b === 0 ? 1 : smooth((frame - b * BLOCK) / BLEND);
   const wob = 0.01 * Math.sin((frame / FPS) * 0.9);
-  const ds = prev.s + (cur.s - prev.s) * m + wob;
+  const ds = still ? 1 : prev.s + (cur.s - prev.s) * m + wob;
   const dx = prev.x + (cur.x - prev.x) * m;
   const dy = prev.y + (cur.y - prev.y) * m;
 

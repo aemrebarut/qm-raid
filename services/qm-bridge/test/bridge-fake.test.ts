@@ -10,11 +10,13 @@ import { join } from "node:path";
 
 import { NO_EDIT } from "../src/loadout.ts";
 
-type Turn = { text: string; threadRef: string; model?: string; thinkingLevel?: string; scopeId?: string; soulAtStart?: string };
+type Turn = { text: string; threadRef: string; model?: string; thinkingLevel?: string; scopeId?: string; soulAtStart?: string; at?: number };
 const turns: Turn[] = [];
 const soulPuts: string[] = [];
 const souls = new Map<string, string>();
 let projectsCreated = 0;
+let personalGets = 0;
+let baselineAt = 0; // first successful read of the personal SOUL
 
 const portal = Bun.serve({
   hostname: "127.0.0.1",
@@ -31,7 +33,7 @@ const portal = Bun.serve({
     }
     if (pathname === "/api/turn" && req.method === "POST") {
       const t = (await req.json()) as Turn;
-      turns.push({ ...t, ...(t.scopeId ? { soulAtStart: souls.get(t.scopeId) } : {}) });
+      turns.push({ ...t, at: Date.now(), ...(t.scopeId ? { soulAtStart: souls.get(t.scopeId) } : {}) });
       // Agents editing guidance during a turn (what QM's guidance tool does to the conversation scope's SOUL).
       if (t.scopeId && t.text.includes("already applied")) souls.set(t.scopeId, "DRIFTED");
       if (t.text.includes("DRIFT-ME")) souls.set("personal:emre", "HACKED");
@@ -48,6 +50,9 @@ const portal = Bun.serve({
     const scope = pathname.match(/^\/admin\/api\/scopes\/([^/]+)(\/soul)?$/);
     if (scope) {
       const id = decodeURIComponent(scope[1]!);
+      // Startup: the personal SOUL read fails at first (bridge GETs retry once), so the soul guard has to wait.
+      if (id === "personal:emre" && req.method === "GET" && ++personalGets <= 3) return j({ error: "unavailable" }, 503);
+      if (id === "personal:emre" && req.method === "GET") baselineAt ||= Date.now();
       if (req.method === "PUT") {
         soulPuts.push(id);
         souls.set(id, String(((await req.json()) as { content: string }).content));
@@ -85,7 +90,7 @@ beforeAll(async () => {
   writeFileSync(
     join(dir, "units.json"),
     JSON.stringify({
-      units: [unit("qmtest-a", "group:web-project-pa"), unit("u-old", "group:web-project-pb", [{ text: "OLD SOUL WRITE", intro: true, soul: true, key: "k-old" }]), unit("u-a", undefined)],
+      units: [unit("qmtest-a", "group:web-project-pa"), unit("u-old", "group:web-project-pb", [{ text: "OLD SOUL WRITE", intro: true, soul: true, key: "k-old" }]), unit("u-a", undefined, [{ text: "EARLY", orderId: "o-early", key: "k-early" }])],
       retired: [],
       undelivered: [],
       projects: { "qmtest-a": { projectId: "pa", scopeId: "group:web-project-pa" }, "u-old": { projectId: "pb", scopeId: "group:web-project-pb" } },
@@ -195,7 +200,11 @@ test("SOUL writes are gated by LOADOUT_SOUL for restored units: a non-matching u
 }, 15_000);
 
 test("soul guard: a plan A turn that changes the personal SOUL is followed by a restore of the startup baseline", async () => {
+  // The startup read failed, was retried, and u-a's restored order started only after the baseline was read.
+  expect(out).toContain("BRIDGE WARN soul guard waiting");
+  await until(() => turns.some((t) => t.text.includes("order o-early")));
   expect(out).toContain("soul guard on: personal:emre baseline SOUL null");
+  expect(turns.find((t) => t.text.includes("order o-early"))!.at!).toBeGreaterThanOrEqual(baselineAt);
   await call("POST", "/units/u-a/send", { text: "DRIFT-ME", orderId: "o-g1" });
   await until(() => soulPuts.includes("personal:emre"));
   expect(souls.get("personal:emre")).toBe(""); // a null baseline is restored as an empty SOUL (PUT needs a string)

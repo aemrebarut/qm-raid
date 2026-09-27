@@ -221,6 +221,7 @@ async function begin(u: Unit, s: Send): Promise<void> {
 
 function pump(u: Unit): void {
   if (!booted || u.active || u.queue.length === 0 || !alive(u) || soulChecks.has(u.id)) return;
+  if (!u.scopeId && !personalBase) return; // plan A turns wait for the soul guard baseline (captureBaseline pumps)
   const s = u.queue.shift()!;
   if (s.soul && !soulFor(u.id)) {
     // Restored agent SOUL write for a unit the flag no longer covers: dropped (plan A only).
@@ -486,18 +487,34 @@ async function keepSoul(u: Unit): Promise<void> {
 // Soul guard (Analyst) for plan A: every plan A turn runs in the personal scope, whose SOUL is the system prompt of every
 // unit and of Emre's own chats. Its SOUL is read once at startup as the baseline; after every plan A turn it is read
 // again and the baseline restored if it changed. A baseline (not per-turn snapshots), so parallel turns never capture
-// each other's change.
+// each other's change. Plan A turns do not start until the baseline is read (retried every second), so a late read can
+// never adopt an agent's change as the baseline.
 let personalScope = "";
-let personalBase: { soul: string | null } | null = null;
+let personalBase: { soul: string | null } | null = null; // null = not read yet (a null SOUL is { soul: null })
+let capturing = false;
+async function captureBaseline(): Promise<void> {
+  for (let attempt = 0; !personalBase; attempt++) {
+    try {
+      personalBase = { soul: await getScopeSoul(personalScope) };
+      console.log(`[qm-bridge] soul guard on: ${personalScope} baseline SOUL ${personalBase.soul === null ? "null" : `${personalBase.soul.length} chars`}`);
+      for (const u of units.values()) pump(u);
+    } catch (err) {
+      if (attempt === 0) console.warn(`[qm-bridge] BRIDGE WARN soul guard waiting: cannot read ${personalScope} SOUL, plan A turns wait until it is read: ${String((err as Error)?.message ?? err)}`);
+      await Bun.sleep(1_000);
+    }
+  }
+}
+const same = (a: string | null | undefined, b: string | null | undefined): boolean => (a ?? "") === (b ?? ""); // PUT stores "" for null
 let guardChain: Promise<void> = Promise.resolve();
 function guardPersonal(): Promise<void> {
   const run = async (): Promise<void> => {
-    if (!personalBase) return;
+    if (!personalBase) return; // cannot happen for a plan A turn: they wait for the baseline
     try {
       const now = await getScopeSoul(personalScope);
-      if ((now ?? "") === (personalBase.soul ?? "")) return;
+      if (same(now, personalBase.soul)) return;
       console.warn(`[qm-bridge] BRIDGE WARN soul restored: ${personalScope} SOUL changed during a turn (${now?.length ?? 0} chars), restoring the startup baseline`);
       await putScopeSoul(personalScope, personalBase.soul ?? ""); // a null baseline is restored as an empty SOUL
+      if (!same(await getScopeSoul(personalScope), personalBase.soul)) throw new Error("read-back after restore does not match the baseline");
     } catch (err) {
       console.warn(`[qm-bridge] BRIDGE WARN soul guard check failed: ${String((err as Error)?.message ?? err)}`);
     }
@@ -575,7 +592,8 @@ async function spawn(req: Request): Promise<Response> {
     u.sessionId = await findSessionId(u.threadRef); // throws when QM is down -> 502
     units.set(u.id, u);
     if (!u.sessionId) {
-      await begin(u, { text: introText(u), intro: true }); // new conversation: intro turn creates it
+      if (!u.scopeId && !personalBase) enqueue(u, { text: introText(u), intro: true }); // waits for the soul guard baseline
+      else await begin(u, { text: introText(u), intro: true }); // new conversation: intro turn creates it
     } else if (retired.has(u.id)) {
       u.roundMarker = roundLine(Date.now()); // back after a reset: the next order opens with the round line
     }
@@ -648,12 +666,10 @@ async function loadCatalog(): Promise<void> {
       const cfg = await runtimeConfig();
       codexModels = cfg.modelsByHarness?.codex ?? [];
       spendBase ??= await orgSpend().catch(() => null);
-      personalScope = `personal:${p}`;
-      try {
-        personalBase ??= { soul: await getScopeSoul(personalScope) };
-        console.log(`[qm-bridge] soul guard on: ${personalScope} baseline SOUL ${personalBase.soul === null ? "null" : `${personalBase.soul.length} chars`}`);
-      } catch (err) {
-        console.warn(`[qm-bridge] BRIDGE WARN soul guard off: cannot read ${personalScope} SOUL: ${String((err as Error)?.message ?? err)}`);
+      if (!capturing) {
+        capturing = true;
+        personalScope = `personal:${p}`;
+        await captureBaseline().catch(() => {}); // retries until read; boot's 15 s fallback does not skip it for plan A
       }
       console.log(`[qm-bridge] QM principal ${p}; harnesses ${cfg.approvedHarnesses?.join(",")}; codex models ${codexModels.join(",")}`);
       return;

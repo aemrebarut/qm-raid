@@ -36,6 +36,7 @@ Verdict: the world reads well; the HUD is what makes it look generated. Parchmen
 - hud 15. i1-target repeats the issue identity in bottom centre and side panel, like units: bottom = identity, side = customers, engaged units, report only.
 - hud 16. A handoff shows twice in the global feed (`handed off` and `received from`): one line `Ada handed off to Bram`.
 - hud 17. Run card wording `Needs you: loops used up · loop 3/2`: state as a coloured pip + `Needs you`, loops as `3/2` pips, no dot compound.
+- hud 18. Loadout (Emre 15:40, docs/lanes/flow.md): mount raid-ui-plan's `hud/loadout.ts` as a `Loadout` tab in the unit side panel (tabs `Orders | Loadout`, condensed caps, gold underline on the active tab) and style it: instructions text area as an inset well (mono off, body font), preset standing orders as small chips, skills and plugins as toggle rows (icon, name, one-line description in `--ink-3`, switch on the right), model and effort as segmented pickers, `Apply` primary with `Applying` spinner and `Applied` check states.
 - panels 9. Graph hover after idle never redraws (cursor changes, canvas does not) and resize leaves a stale backing size: redraw on hover while idle, resize the backing store on ResizeObserver with devicePixelRatio (exact repro from raid-look-rev).
 
 ### raid-look-panels (panels/*, panels.css)

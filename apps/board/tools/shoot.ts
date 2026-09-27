@@ -46,7 +46,7 @@ const js = (page: Page, code: string) => page.evaluate(code);
 // Each state starts from a clean selection. Steps run in the page through window.raid (see src/main.ts).
 const RESET = `(() => { raid.bus.clear(); raid.bus.selectBuilding(null); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); })()`;
 const firstIds = (n: number) => `raid.store.getState().units.slice(0, ${n}).map(u => u.id)`;
-const states: { name: string; setup: string; settle?: number; keys?: string[] }[] = [
+const states: { name: string; setup: string; settle?: number; keys?: string[]; click?: string }[] = [
   { name: "overview", setup: `1` },
   { name: "unit", setup: `raid.bus.select(${firstIds(1)})` },
   { name: "units", setup: `raid.bus.select(${firstIds(4)})` },
@@ -59,6 +59,8 @@ const states: { name: string; setup: string; settle?: number; keys?: string[] }[
   { name: "spawn", setup: `raid.bus.newIssue()`, settle: 700 },
   // Emre's formation flow: 2+ units selected, F opens the formation view (makes them a team first if needed).
   { name: "formation", setup: `raid.bus.select(raid.store.team(2)?.members?.length ? raid.store.team(2).members : ${firstIds(2)})`, keys: ["f"], settle: 1200 },
+  // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
+  { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500 },
   { name: "feed", setup: `(() => { const d = raid.dev; d.recall('u1'); d.remember('u2'); d.handoff('u1', 'u2'); d.recall('u3'); d.remember('u1'); raid.bus.select(['u1']); })()`, settle: 1200 },
 ];
 
@@ -89,6 +91,11 @@ try {
       }
       await page.mouse.move(w - 5, Math.round(h / 2)); // park the cursor off the HUD
       for (const k of st.keys ?? []) await page.keyboard.press(k);
+      if (st.click) {
+        await wait(400);
+        const hit = await js(page, `(() => { const want = ${JSON.stringify(st.click)}.toLowerCase(); const el = [...document.querySelectorAll('#hud button, #hud [role=tab], #hud a, #hud [data-tab]')].find(e => e.offsetParent && (e.textContent || e.getAttribute('title') || '').trim().toLowerCase().startsWith(want)); el?.click(); return !!el; })()`).catch(() => false);
+        if (!hit) console.warn(`  [${st.name}] no visible control labelled "${st.click}" yet`);
+      }
       await wait(st.settle ?? 900);
       const file = join(outDir, `${iteration}-${st.name}${w === 1512 ? "" : `-${w}`}.png`);
       await page.screenshot({ path: file });

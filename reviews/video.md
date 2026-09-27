@@ -143,3 +143,13 @@ VERDICT: APPROVED
 Script v3 `56d69aa`: independently counted 180 words and measured 79.941 seconds of active speech. All 25 active/alternate WAV durations match the manifest within rounding, no voice-file overlaps, and no em or en dashes. Jokes, held-out wording, knight Loadout scope and conditional QM/Warden/veto lines pass. One prose number needs correction: Loadout has 12 - 8.663 = 3.337 seconds without narration, so 'every clip keeps at least 4 s without narration' should read 'every capability clip keeps at least 3 s without narration'. No audio regeneration required. Sent to raid-video-vo and Analyst.
 
 VERDICT: CHANGES: correct the written breathing-room sentence to at least 3 seconds.
+
+## V12: script correction and end card (16:16-16:17 PDT)
+
+Verified script correction `52caa29`: every capability clip keeps at least 3 seconds without narration. Script v3 and measured WAV durations pass. Sent to raid-video-vo, raid-video and Analyst.
+
+VERDICT: APPROVED
+
+`intro/endcard.mp4`, SHA256 prefix `5c576494ea`, exactly 6 seconds, stable 1080p H.264 at 30 fps. Extracted frames at 0, 2 and 4 seconds; full-size inspection confirms clear title, supported historical 31-agent count, repository URL and tool credits. The first three frames are an intentional impact flash at the end-card transition. Scope: silent component. Evidence `/tmp/raid-video-rev/intro-endcard-5c576494ea/`. Sent to raid-video-intro, raid-video and Analyst. Editor requested skipping obsolete `dry/qm-raid-demo.mp4` because it uses the old 75-second plan, old VO and mock captures with no retained source manifest.
+
+VERDICT: APPROVED

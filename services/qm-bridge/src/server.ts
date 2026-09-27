@@ -2,10 +2,12 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BridgeEvent, CatalogItem, Loadout, SendRequest, SpawnRequest } from "../../../contract/types.ts";
-import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout, soulMarker, soulWritten } from "./loadout.ts";
+import { fetchCatalog, lastWebPost, loadoutLines, loadoutMarker, normalizeLoadout, sameLoadout, soulContent, soulMarker, soulWritten } from "./loadout.ts";
 import {
   PORTAL_URL,
   createProject,
+  getScopeSoul,
+  putScopeSoul,
   findSessionId,
   getRun,
   orgSpend,
@@ -407,12 +409,28 @@ function introText(u: Unit): string {
 }
 
 // Loadout change: one visible marker turn, queued behind any active order (never interrupts); no terminal event.
-function applyLoadout(u: Unit, next: Loadout | null): boolean {
+// Plan B units first get their scope SOUL replaced, so the new standing orders are in the system prompt of every turn.
+async function applyLoadout(u: Unit, next: Loadout | null): Promise<boolean> {
   if (!next || sameLoadout(u.loadout, next)) return false;
   u.loadout = next;
-  if (u.scopeId) enqueue(u, { text: soulMarker(next), intro: true, soul: true });
-  else enqueue(u, { text: loadoutMarker(next), intro: true });
+  if (u.scopeId) await writeSoul(u, next);
+  enqueue(u, { text: loadoutMarker(next), intro: true });
   return true;
+}
+
+// Plan B: SOUL through the admin relay (deterministic, no agent turn), applied only when a read-back matches; if
+// that fails, the agent writes it itself.
+async function writeSoul(u: Unit, l: Loadout): Promise<void> {
+  const content = soulContent(l);
+  try {
+    await putScopeSoul(u.scopeId!, content);
+    const back = await getScopeSoul(u.scopeId!);
+    if (back?.trim() !== content.trim()) throw new Error("read-back does not match");
+    activity(u, { text: "" }, "message", "Loadout applied: standing orders are now this unit's QM scope SOUL");
+  } catch (err) {
+    console.warn(`[qm-bridge] ${u.id} SOUL via admin failed, asking the agent: ${String((err as Error)?.message ?? err)}`);
+    enqueue(u, { text: soulMarker(l), intro: true, soul: true });
+  }
 }
 
 let catalogCache: { at: number; items: CatalogItem[] } | null = null;
@@ -461,7 +479,7 @@ async function spawn(req: Request): Promise<Response> {
     existing.effort = b.effort ?? existing.effort;
     existing.role = b.role ?? existing.role;
     if ("team" in b) existing.team = b.team ?? null;
-    applyLoadout(existing, loadout);
+    await applyLoadout(existing, loadout);
     existing.sessionId ??= await findSessionId(existing.threadRef).catch(() => null);
     saveUnits();
     return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
@@ -478,6 +496,7 @@ async function spawn(req: Request): Promise<Response> {
         projects.set(u.id, p);
       }
       u.scopeId = p.scopeId;
+      if (u.loadout) await writeSoul(u, u.loadout); // before the intro, so its first turn already runs with the SOUL
     }
     u.sessionId = await findSessionId(u.threadRef); // throws when QM is down -> 502
     units.set(u.id, u);
@@ -486,7 +505,6 @@ async function spawn(req: Request): Promise<Response> {
     } else if (retired.has(u.id)) {
       await begin(u, { text: ROUND_MARKER, intro: true }); // back after a reset: mark the new round
     }
-    if (u.scopeId && u.loadout) enqueue(u, { text: soulMarker(u.loadout), intro: true, soul: true }); // plan B: SOUL now
     retired.delete(u.id);
     saveUnits();
   } catch (err) {
@@ -631,7 +649,7 @@ const server = Bun.serve({
         if ("loadout" in b) {
           const next = normalizeLoadout(b.loadout);
           if (!next) return json({ ok: false, error: "loadout must be {instructions, skills, plugins}" }, 400);
-          applyLoadout(u, next);
+          await applyLoadout(u, next);
         }
         saveUnits();
         return json({

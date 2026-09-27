@@ -94,6 +94,17 @@ export async function createProject(name: string): Promise<{ projectId: string; 
   return { projectId, scopeId: String(b?.scopeId ?? b?.project?.scopeId ?? `group:web-project-${projectId}`) };
 }
 
+/** Replace a scope's SOUL (standing instructions in its system prompt) through the admin relay; the local portal
+ *  user is org admin. Used for a unit's own project scope (LOADOUT_SOUL). */
+export async function putScopeSoul(scopeId: string, content: string): Promise<void> {
+  await api("PUT", `/admin/api/scopes/${encodeURIComponent(scopeId)}/soul`, { content });
+}
+
+export async function getScopeSoul(scopeId: string): Promise<string | null> {
+  const d = await api<{ soul?: string | null }>("GET", `/admin/api/scopes/${encodeURIComponent(scopeId)}`);
+  return typeof d.soul === "string" ? d.soul : null;
+}
+
 export async function getRun(runId: string): Promise<RunState> {
   return api("GET", `/api/runs/${encodeURIComponent(runId)}`);
 }

@@ -2,7 +2,7 @@
 
 Reviewer: raid-ui-rev. Owner of this file only; implementation fixes go to the path owner.
 
-Current checkpoint: no open actionable findings in the reviewed submissions. Proposal dock P1, Library race, chimney coordinates, gate-routing teleport, and workflow run selection are verified fixed. Board smoke: 11 tests / 55 assertions; typecheck, production build, and test-board health pass. Independent headless Chrome verifies mock-board layout and interactions at 1200x600 and 1512x790; hardware GPU performance and the new W1/W2 engine workflow remain future milestone checks.
+Current checkpoint: two open P2s, run-card hidden-button CSS (raid-ui-hud) and spawn-dialog late-response draft loss (raid-ui-plan). Both Formation P2s are verified fixed in dad9896. Scene workflow, handoff, door-row visibility, and issue spawn animation checks pass. Board smoke: 14 tests / 80 assertions; typecheck and production build pass. Automated checks use isolated fixtures or the mock board only; full W1/W2 engine acceptance belongs to the lead.
 
 ## Review procedure
 
@@ -176,3 +176,22 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - Resize reframes before manual input. After wheel zoom, a subsequent resize preserves camera target and zoom. Read the Library 9x9 tree exclusion; no actionable finding.
 - c2529f9 accepted. Isolated hotkey checks pass current-selection resolution, visible key badges, Message/Order/Recall, input/textarea/select/contentEditable guards, modifier/repeat/reserved-key guards, two-press Retire, Barracks K/R/C, building V focus, and listener removal on dispose. Requests are mocked.
 - Board smoke remains 11 passed / 55 assertions; typecheck and production build pass. No new actionable findings in these submissions.
+
+## Workflow scene and Formation: a504d9b, 42670ce, 9845f3d, dad9896
+
+- a504d9b and 42670ce accepted. Isolated real-Three geometry checks pass role badges, following unit positions, active-node glow, changes-edge highlighting, removal of links at terminal status, custom role changes, and graph removal. Handoff events create one scroll, arrive once, normalize and truncate summary text to 52 characters, then dispose effects. Missing unit IDs are a no-op; transforms remain finite.
+- Headless Chrome on isolated 4619 fixture state shows the scroll and Formation during handoff (temporary workflow-handoff.png). Local trio simulation completes one changes loop, removes links and active glow, and keeps role badges, with no page errors. The extra completed-state screenshot timed out; no successful capture of that final state is claimed. This local simulation is not the full W1 engine acceptance.
+- 9845f3d had two P2s: a failed role assignment restored an old team's panel after selection changed; a finished fan-out branch did not refresh its run row while the final array step remained active. Both sent to HUD and lead, and both verified fixed in dad9896. Original race now leaves Blue's empty role slots and no Red diagram; the completed branch row now contains its new summary and done state.
+- Formation checks also pass persistent role selects, node click selection, current active order cancellation, diagram states, and preset member-count guards.
+- dad9896 run cards pass current active-order cancellation, selection using current team members, persistent DOM, live 8-second completion expiry, loaded-result expiry from last step time, 5-minute alert expiry, and dismissal persistence.
+- **P2 open, assigned to raid-ui-hud:** run buttons marked hidden remain visible because .hud-btn display overrides the browser's hidden style. Independent Chrome with the committed hud.css and workflow.css reports running Dismiss hidden=true but display=block and width=80px. The user can dismiss a running card, which returns on the next state and then suppresses its terminal result; terminal Cancel is also visible but inert. Add a scoped hidden display rule for run controls. Sent to owner and lead.
+
+## Unit visibility and issue spawn: 06786b5, 5d2403f, e31bdc0, d31400a
+
+- 06786b5 accepted. A synthetic forged unit at the Barracks center draws at the door row after walking, retains the authoritative engine position, ray-picks by unit ID, and sends the expected right-click order through mocked fetch.
+- 5d2403f accepted with the new core target.spawned reducer. An event creates the TargetView at y=-0.9 and scale=.3 with one portal; a following target.updated does not restart it. The animation ends at y=0 and scale=1; effects disappear and their geometry/materials dispose. Snapshot-added targets do not animate.
+- e31bdc0 core formation reviewed: exact-team reuse, lowest free group, role-holder swap, outsider join before graph PUT, and click command consumption pass the board regression. Requests remain mocked.
+- d31400a is the actual spawn-dialog commit (the supplied a3001a5 is an unrelated art review). Shared contract now makes the brain the sole issue ID allocator and returns 503 when unavailable. The UI uses POST /api/targets and the shared target.spawned event; no local fallback target is created by the production dialog.
+- Random and explicit form requests, N/typing/Escape handling, focus/toast result, and target upsert before subscribers pass board tests.
+- **P2 open, assigned to raid-ui-plan:** newIssue.ts clears and closes a newer draft when an older spawn request succeeds. Reproduced with delayed mocked fetch: submit First issue, close and reopen, type Next issue draft, then complete the first request. The newer dialog becomes hidden and the draft becomes empty. Preserve the opening/submission generation and changed fields, or prevent editing/reopening during a request. Same-opening edits while pending also need preserving.
+- Checkpoint: 14 tests pass / 80 assertions, typecheck and production build pass (66 modules). No reviewer orders, messages, or issue creations sent to the real-QM services. New issue HTTP integration remains the lead's mock-engine milestone check.

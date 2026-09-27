@@ -64,7 +64,9 @@ export class TargetView {
     this.engagedRing.rotation.x = -Math.PI / 2;
     this.engagedRing.position.y = 0.085;
     this.engagedRing.visible = false;
-    this.group.add(this.ring, this.engagedRing, mesh(G.hit, hitMat, 0, 0.5, 0, false));
+    const hit = mesh(G.hit, hitMat, 0, 0.5, 0, false);
+    hit.visible = false; // raycast only, never drawn
+    this.group.add(this.ring, this.engagedRing, hit);
 
     if (t.kind === "feature") {
       const [c, e] = CRYSTAL_COLORS[t.severity] ?? CRYSTAL_COLORS[1];

@@ -91,7 +91,10 @@ export class UnitView {
     this.selRing.position.y = 0.025;
     this.selRing.visible = false;
     this.group.add(this.selRing);
-    this.group.add(mesh(G.hit, hitMat, 0, 0.55, 0, false));
+    // Pick volume: invisible (no draw call) but still raycast, three's Raycaster ignores visibility.
+    const hit = mesh(G.hit, hitMat, 0, 0.55, 0, false);
+    hit.visible = false;
+    this.group.add(hit);
 
     this.build(unit.class, teamColor);
     this.dest.copy(this.worldOf(unit));

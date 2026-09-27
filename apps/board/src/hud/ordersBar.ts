@@ -2,6 +2,7 @@
 // (autopilot) order with a countdown ring to vetoDeadline and Cancel / Adjust / Go now.
 // Cards are diffed, not rebuilt, so the ticking ring never eats clicks.
 import { api, type Bus, type Order, type Reply, type State, type Team, type WorkflowRun } from "../core";
+import { icon } from "../theme/icons";
 import { h, safeColor } from "./dom";
 import { activeStep, columns, nodeStates } from "./formation";
 
@@ -48,7 +49,11 @@ export class OrdersBar {
       const t = s.targets.find((x) => x.id === o.targetId);
       const team = u ? s.teams.find((x) => x.id === u.team) : undefined;
       c.el.style.setProperty("--team", safeColor(team?.color));
-      c.title.textContent = `${u?.name ?? o.unitId} → ${t ? `${t.issue}: ${t.title}` : o.targetId}`;
+      const full = `${u?.name ?? o.unitId} to ${t ? `${t.issue}: ${t.title}` : o.targetId}`;
+      if (c.title.title !== full) {
+        c.title.title = full;
+        c.title.replaceChildren(h("span", { class: "hud-card-who" }, u?.name ?? o.unitId), icon("chevron", 12, "hud-card-to"), h("span", { class: "hud-card-issue" }, t?.issue ?? o.targetId));
+      }
       const reason = (o as Order & { reason?: string }).reason;
       c.reason.textContent = reason ?? "";
       c.reason.hidden = !reason;
@@ -96,10 +101,10 @@ export class OrdersBar {
     const title = h("div", { class: "hud-card-title" });
     const sub = h("div", { class: "hud-card-reason" });
     const chain = h("div", { class: "hud-run-chain" });
-    const cancel = h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel", type: "button", title: "Cancel this run (stops its active order)",
-      onclick: () => card.orderId && void this.act(api.cancelOrder(card.orderId), "Run cancelled") }, "Cancel");
-    const dismiss = h("button", { class: "hud-btn hud-btn-sm", type: "button", title: "Hide this card",
-      onclick: () => { this.dismissed.add(id); card.el.remove(); this.runs.delete(id); this.root.hidden = this.cards.size === 0 && this.runs.size === 0; } }, "Dismiss");
+    const cancel = h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel hud-btn-icon", type: "button", title: "Cancel run (stops its active order)", "aria-label": "Cancel run",
+      onclick: () => card.orderId && void this.act(api.cancelOrder(card.orderId), "Run cancelled") }, icon("close", 14));
+    const dismiss = h("button", { class: "hud-btn hud-btn-sm hud-btn-icon", type: "button", title: "Dismiss", "aria-label": "Dismiss",
+      onclick: () => { this.dismissed.add(id); card.el.remove(); this.runs.delete(id); this.root.hidden = this.cards.size === 0 && this.runs.size === 0; } }, icon("close", 14));
     const el = h("article", { class: "hud-card hud-run-card", "data-run": id },
       h("div", { class: "hud-card-body", title: "Select the team", onclick: () => this.selectTeam(card.teamId) }, title, chain, sub),
       h("div", { class: "hud-card-btns" }, cancel, dismiss));
@@ -117,17 +122,26 @@ export class OrdersBar {
     c.el.style.setProperty("--team", safeColor(team?.color));
     c.el.dataset.status = run.status;
     c.title.textContent = `${team?.name ?? `Team ${run.teamId}`} vs ${t ? `${t.issue}: ${t.title}` : run.targetId}`;
+    c.title.title = c.title.textContent; // the card clips it to one line
     const role = (nodeId: string) => wf?.nodes.find((n) => n.id === nodeId)?.role ?? nodeId;
     const name = (unitId: string) => s.units.find((u) => u.id === unitId)?.name ?? unitId;
-    const loops = `loop ${run.loops}/${wf?.maxLoops ?? "?"}`;
-    c.sub.textContent = run.status === "running"
-      ? `${run.active.map((n) => { const st = [...run.steps].reverse().find((x) => x.nodeId === n); return `${cap(role(n))} ${st ? name(st.unitId) : ""}`.trim(); }).join(", ") || "Starting"} working · ${loops}`
-      : `${STATUS_TEXT[run.status] ?? run.status} · ${loops}`;
+    const loops = `${run.loops}/${wf?.maxLoops ?? "?"}`;
+    const working = run.active.map((nd) => { const st = [...run.steps].reverse().find((x) => x.nodeId === nd); return `${cap(role(nd))} ${st ? name(st.unitId) : ""}`.trim(); }).join(", ") || "Starting";
+    const subSig = `${run.status}|${working}|${loops}`;
+    if (c.sub.dataset.sig !== subSig) {
+      c.sub.dataset.sig = subSig;
+      c.sub.replaceChildren(
+        run.status === "running" ? h("span", null, working) : h("span", { class: `hud-pill hud-run-${run.status}` }, STATUS_TEXT[run.status] ?? run.status),
+        h("span", { class: "hud-run-loops", title: "Review loops used / allowed" }, loops));
+    }
     c.cancel.hidden = run.status !== "running" || !c.orderId;
     c.dismiss.hidden = run.status === "running";
     // Node chain: one pip per node, columns in graph order, coloured by the node's latest state.
     const states = nodeStates(run);
-    const cols = wf ? columns(wf) : [];
+    // The team may have changed or dropped its formation since the run started (members moved):
+    // then chain the run's own nodes in the order they were reached.
+    const reached = [...new Set([...run.steps.map((st) => st.nodeId), ...run.active])];
+    const cols = wf && reached.every((id) => wf.nodes.some((nd) => nd.id === id)) ? columns(wf) : reached.map((id) => [id]);
     const sig = cols.map((col) => col.map((n) => `${n}:${states.get(n) ?? "idle"}`).join("+")).join(">");
     if (sig === c.chainSig) return;
     c.chainSig = sig;
@@ -165,9 +179,9 @@ export class OrdersBar {
           onmouseenter: () => this.bus.hover({ kind: "unit", id: card.unitId }), onmouseleave: () => this.bus.hover(null) },
         title, reason),
       h("div", { class: "hud-card-btns" },
-        h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel", type: "button", title: "Veto this order", onclick: () => this.act(api.cancelOrder(id), "Order vetoed") }, "Cancel"),
-        h("button", { class: "hud-btn hud-btn-sm", type: "button", title: "Pick another target or unit for this order",
-          onclick: () => this.bus.setCommand(this.bus.command?.kind === "adjust" && this.bus.command.orderId === id ? null : { kind: "adjust", orderId: id }) }, "Adjust"),
+        h("button", { class: "hud-btn hud-btn-sm hud-btn-cancel hud-btn-icon", type: "button", title: "Veto", "aria-label": "Veto", onclick: () => this.act(api.cancelOrder(id), "Order vetoed") }, icon("close", 14)),
+        h("button", { class: "hud-btn hud-btn-sm hud-btn-icon", type: "button", title: "Adjust", "aria-label": "Adjust",
+          onclick: () => this.bus.setCommand(this.bus.command?.kind === "adjust" && this.bus.command.orderId === id ? null : { kind: "adjust", orderId: id }) }, icon("adjust", 14)),
         h("button", { class: "hud-btn hud-btn-sm hud-btn-go", type: "button", title: "Approve now", onclick: () => this.act(api.goOrder(id), "Order approved") }, "Go"),
       ),
     );
@@ -202,7 +216,7 @@ export class OrdersBar {
   }
 }
 
-const STATUS_TEXT: Record<string, string> = { done: "Done", needs_human: "Needs you: loops used up", failed: "Failed", cancelled: "Cancelled" };
+const STATUS_TEXT: Record<string, string> = { done: "Done", needs_human: "Needs you", failed: "Failed", cancelled: "Cancelled" };
 
 function cap(s: string): string {
   return s ? s[0].toUpperCase() + s.slice(1) : s;

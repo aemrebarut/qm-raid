@@ -15,7 +15,7 @@ export function mountHud(el: HTMLElement, store: Store, bus: Bus): () => void {
   const top = new TopBar(bus);
   const side = new SidePanel(store, bus);
   const toasts = new Toasts();
-  const hint = new CommandHint(bus);
+  const hint = new CommandHint(bus, store);
   const bottom = new BottomPanel(store, bus, () => side.focusMessage());
   const gfeed = new GlobalFeed(store, bus);
   const orders = new OrdersBar(bus);

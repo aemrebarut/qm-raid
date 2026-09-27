@@ -6,7 +6,7 @@ import { IsoCamera, MAP_SIZE } from "./camera";
 import { buildTerrain, layoutKey, makeRouter } from "./terrain";
 import { buildZones } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
-import { UnitView, setRouter } from "./units";
+import { UnitView, setFootprints, setRouter } from "./units";
 import { TargetView } from "./targets";
 import { Fx } from "./fx";
 import { WorkflowLayer } from "./workflow";
@@ -68,6 +68,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       for (const c of [...world.children]) { world.remove(c); disposeTree(c); }
       world.add(buildTerrain(s.components, s.buildings, s.targets), buildZones(s.components, s.buildings));
       setRouter(makeRouter(s.components, s.buildings));
+      setFootprints(s.buildings.map((b) => ({ x: b.x, y: b.y })));
       for (const b of buildings.values()) { buildingsG.remove(b.group); disposeTree(b.group); }
       buildings.clear();
       for (const b of s.buildings) {

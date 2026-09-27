@@ -7,6 +7,9 @@ import type { Router } from "./terrain";
 let router: Router | null = null;
 /** Set by the scene when the layout changes: units then walk through zone gates. */
 export function setRouter(r: Router | null) { router = r; }
+let footprints: { x: number; y: number }[] = [];
+/** Building centre tiles (3 x 3 footprints). A unit the engine places inside one is drawn on the door row instead. */
+export function setFootprints(f: { x: number; y: number }[]) { footprints = f; }
 
 const NEUTRAL = "#8d8f96";
 const UNIT_SCALE = 1.5; // readable at whole-map zoom
@@ -111,7 +114,10 @@ export class UnitView {
   }
 
   private worldOf(u: Unit) {
-    return tileToWorld(u.pos.x, u.pos.y).add(this.jitter);
+    let { x, y } = u.pos;
+    const b = footprints.find((f) => Math.abs(f.x - x) <= 1 && Math.abs(f.y - y) <= 1);
+    if (b) { x = b.x - 1 + (hash(this.id) % 3); y = b.y + 2; } // in front of the door, visible and clickable
+    return tileToWorld(x, y).add(this.jitter);
   }
 
   private build(cls: string, teamColor: string | null) {

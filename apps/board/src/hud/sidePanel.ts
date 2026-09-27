@@ -8,6 +8,7 @@ import { BarracksPanel } from "./barracks";
 import { slugChips } from "./chips";
 import { h, put, RowList, safeColor, safeUrl } from "./dom";
 import { FormationPanel, roleOf, teamOfSelection } from "./formation";
+import { LoadoutView } from "./loadout";
 
 type FeedItem = Omit<FeedEntry, "kind" | "unitId"> & { kind: FeedEntry["kind"] | "you" | "link" };
 
@@ -27,13 +28,22 @@ export class SidePanel {
   private feedRows = new RowList<FeedItem>(this.feed, (it) => feedRow(it, this.bus, this.store.unit(this.feedFor ?? "")?.name));
   private msg = new MessageBox((text) => this.send(text));
   private sel: Selection = { units: [], target: null, building: null, focus: null };
+  // Unit view tabs: Activity (order, feed, message) and Loadout (hud/loadout.ts, raid-ui-plan).
+  private tab: "activity" | "loadout" = "activity";
+  private tabBtns = { activity: tabBtn("Activity"), loadout: tabBtn("Loadout") };
+  private tabs = h("div", { class: "hud-tabs", role: "tablist" }, this.tabBtns.activity, this.tabBtns.loadout);
+  private loadout: LoadoutView;
+  private loadoutFor: string | null = null;
   private state: State | null = null;
 
   constructor(private store: Store, private bus: Bus) {
     this.barracks = new BarracksPanel(bus);
     this.formation = new FormationPanel(store, bus);
-    // Feed and message box stay attached (only hidden) so typing focus survives re-renders.
-    this.root.append(this.body, this.formation.root, this.barracks.root, this.feedWrap, this.replySlot, this.msg.el);
+    this.loadout = new LoadoutView(store, bus);
+    this.tabBtns.activity.addEventListener("click", () => this.setTab("activity"));
+    this.tabBtns.loadout.addEventListener("click", () => this.setTab("loadout"));
+    // Feed, message box and loadout stay attached (only hidden) so typing focus survives re-renders.
+    this.root.append(this.tabs, this.body, this.formation.root, this.barracks.root, this.feedWrap, this.replySlot, this.msg.el, this.loadout.root);
     store.onEvent(() => {
       const id = this.focusUnitId();
       if (id && this.feedFor === id && store.feed(id).at(-1) !== this.feedLast) this.renderFeed();
@@ -77,11 +87,24 @@ export class SidePanel {
     swap(this.replySlot, this.outReply, this.replyHtml, (html) => (this.replyHtml = html));
   }
 
+  private setTab(tab: "activity" | "loadout"): void {
+    this.tab = tab;
+    this.render();
+  }
+
   private renderInto(): void {
     const s = this.state;
     const unitView = !!s && this.focusUnitId() !== null && s.units.some((u) => u.id === this.focusUnitId());
-    this.feedWrap.hidden = !unitView;
-    this.msg.el.hidden = !unitView;
+    const loadout = unitView && this.tab === "loadout";
+    this.tabs.hidden = !unitView;
+    for (const [k, b] of Object.entries(this.tabBtns)) b.setAttribute("aria-selected", String(k === this.tab));
+    this.body.hidden = loadout;
+    this.replySlot.hidden = loadout;
+    this.feedWrap.hidden = !unitView || loadout;
+    this.msg.el.hidden = !unitView || loadout;
+    this.loadout.root.hidden = !loadout;
+    const loFor = loadout ? this.focusUnitId() : null;
+    if (loFor !== this.loadoutFor) { this.loadoutFor = loFor; this.loadout.show(loFor); }
     if (!unitView) this.feedFor = null;
     const barracks = !!s && this.sel.focus === "building" && s.buildings.find((b) => b.id === this.sel.building)?.kind === "barracks";
     this.barracks.root.hidden = !barracks;
@@ -287,6 +310,10 @@ export function portraitStyle(cls: string, teamColor: string | null | undefined)
   let hash = 0;
   for (const ch of cls) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return `--team:${safeColor(teamColor)};--forge-hue:${hash % 360}`;
+}
+
+function tabBtn(label: string): HTMLButtonElement {
+  return h("button", { class: "hud-tab", type: "button", role: "tab", "aria-selected": "false" }, label);
 }
 
 function feedRow(it: FeedItem, bus?: Bus, name?: string) {

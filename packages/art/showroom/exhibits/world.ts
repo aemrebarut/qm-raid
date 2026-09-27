@@ -3,6 +3,7 @@ import * as THREE from "three";
 import type { Exhibit } from "../../src/types";
 import { makeBuilding, type BuildingKind } from "../../src/world/buildings";
 import { makeWorld } from "../../src/world/world";
+import { makeProps } from "../../src/world/props";
 import type { ZoneSpec } from "../../src/types";
 
 function building(kind: BuildingKind, title: string): Exhibit {
@@ -64,7 +65,22 @@ const terrain: Exhibit = {
   },
 };
 
+const props: Exhibit = {
+  name: "Props: farm, crates, barrels, hay, cart",
+  area: "world",
+  span: 5,
+  turntable: false,
+  make() {
+    const p = makeProps({ seed: 2, spots: [{ x: 0, y: 0, kind: "farm" }, { x: 3, y: 0, kind: "crates" }, { x: 3, y: 1, kind: "barrels" }, { x: 2, y: 3, kind: "hay" }, { x: 0, y: 3, kind: "cart" }] });
+    const wrap = new THREE.Group();
+    p.object3d.position.set(-2, 0.012, -2);
+    wrap.add(p.object3d);
+    return { object3d: wrap, dispose: () => p.dispose() };
+  },
+};
+
 const exhibits: Exhibit[] = [
+  props,
   terrain,
   building("library", "Library (GBrain)"),
   building("barracks", "Barracks"),

@@ -168,13 +168,14 @@ export function makeProps(spec: PropsSpec, layout: PropsLayout = {}): PropsArt {
       }
       return true;
     };
-    const cands: [number, number, number, number][] = [];
-    for (let x = 1; x < size - 2; x++) for (let y = 1; y < size - 2; y++) for (const [w, h] of [[3, 2], [2, 3]]) {
+    // Prefer the outskirts: candidates sorted by distance to the map edge (random among equals).
+    const cands: [number, number, number, number, number][] = [];
+    for (let x = 1; x < size - 2; x++) for (let y = 1; y < size - 2; y++) for (const [w, h] of [[3, 2], [2, 3], [2, 2]]) {
+      if (!clear(x, y, w, h)) continue;
       const edge = Math.min(x - 1, y - 1, size - 1 - (x + w), size - 1 - (y + h));
-      if (edge > 2 || !clear(x, y, w, h)) continue;
-      cands.push([x, y, w, h]);
+      cands.push([x, y, w, h, edge + (w * h < 6 ? 1.5 : 0) + r() * 0.9]);
     }
-    for (let k = cands.length - 1; k > 0; k--) { const j = Math.floor(r() * (k + 1)); [cands[k], cands[j]] = [cands[j], cands[k]]; }
+    cands.sort((a, b) => a[4] - b[4]);
     let n = 0;
     for (const [x, y, w, h] of cands) {
       if (n >= (layout.farms ?? 3)) break;

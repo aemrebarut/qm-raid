@@ -201,3 +201,11 @@ Markers support exact Trio roles u3/u5/u7, Rule Warden CHANGES three times then 
 P1 at output 92 seconds: AUTOPILOT callout is anchored at the top HUD, and the heading extends above the frame. Lower/clamp the callout or omit it because the main caption already explains the veto. Sent immediately to raid-video and Analyst for v2. Evidence `/tmp/raid-video-rev/final-qm-raid-demo-1161fb8d85/frame-047.jpg`; full sampled review in that directory and audio in `/tmp/raid-video-rev/final-audio-1161fb8d85/`. Snapshots `/tmp/raid-video-rev/final-v1-*`. v2 camera review pending, due 16:51.
 
 VERDICT: CHANGES: keep the Autopilot callout title inside the frame.
+
+## V18: fixed final fallback (16:42-16:43 PDT)
+
+`final/qm-raid-demo.mp4`, SHA256 `aac1154494959f7fb27b859b9c93461eaf515c4d04dfa91e6c0f694028c43c45`: stable 119.125 second 1080p/30 H.264 and stereo 48 kHz AAC. Re-extracted and inspected all 60 samples every 2 seconds. The 88-96 second section has no cropped Autopilot callout and retains its readable caption. Orders/QM returns to the map before `vo_orders_3` at 32.4 seconds, aligned to remember; the extra `vo_orders_qm` is absent. All 21 active voice files match saved placements within 43 ms, with no overlap, missing line or clipped tail. No unexplained black frames or mock footage presented as real. Approved as a ship-capable fallback; v2 camera pass remains separate. Sent to raid-video and Analyst.
+
+Evidence `/tmp/raid-video-rev/final-qm-raid-demo-aac1154494/`, `/tmp/raid-video-rev/final-audio-aac1154494/`, snapshots `/tmp/raid-video-rev/final-fixed-*`.
+
+VERDICT: APPROVED

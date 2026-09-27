@@ -3,7 +3,7 @@ import type { BridgeEvent, Customer, MemoryOp, Order, Pos, Proposal, Target, Tea
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { AUTOPILOT_EVERY_MS, BRAIN_RESET, BRAIN_URL, BRIDGE_URL, CLASS_MODELS, FORGE_URL, GRID, MEMORY_ANIM_MS, MEMORY_RECENT_MAX, PROPOSER_URL, TILES_PER_SEC, VETO_LOG, VETO_WINDOW_MS } from "./config.ts";
-import { fixtureState, fixtureUnits } from "./fixture.ts";
+import { defaultLoadout, fixtureState, fixtureUnits } from "./fixture.ts";
 import { emit, store } from "./store.ts";
 import { getJson, logOnce, sendJson } from "./http.ts";
 import { forgeType, pollForge, startForge } from "./forge.ts";
@@ -119,8 +119,11 @@ function resyncUnits(base: string): void {
 function orderPrompt(u: Unit, o: Order, t: Target, learningSlug: string): string {
   const issue = t.issue.toLowerCase();
   const pages = [`components/${t.component}`, `issues/${issue}`, ...t.customers.map((c) => `companies/${c}`)];
+  // The unit's standing orders ride in every order header, so they hold even if QM keeps an older session prompt.
+  const standing = u.loadout?.instructions?.trim();
   return [
     `Order ${o.id}: work on issue ${t.issue} "${t.title}" (${t.kind}, severity ${t.severity}).`,
+    ...(standing ? [`Standing orders: ${standing}`] : []),
     `Component: ${t.component}`,
     `Customers: ${t.customers.join(", ")}`,
     `GBrain pages: ${pages.join(", ")}`,
@@ -674,7 +677,7 @@ export function spawnUnit(body: any): Result {
   const u: Unit = {
     id, name: typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 40) : `${c.name} ${id.slice(1)}`,
     class: cls, model: c.model, effort: c.effort, role: "worker", team: null, status: "idle",
-    pos: spawnTile(!!forged), orderId: null, qm: { sessionId: null, sessionUrl: null },
+    pos: spawnTile(!!forged), orderId: null, qm: { sessionId: null, sessionUrl: null }, loadout: defaultLoadout(),
   };
   S().units.push(u);
   const changed = new Set<Team>();

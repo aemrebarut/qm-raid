@@ -1,5 +1,5 @@
 // Local demo world used when the brain service is down; mirrors the brain world (world/layout.json). Synthetic data only.
-import type { State, Unit, Target, UnitType } from "../../../contract/types.ts";
+import type { Loadout, State, Unit, Target, UnitType } from "../../../contract/types.ts";
 import { CLASS_MODELS } from "./config.ts";
 
 export function builtinUnitTypes(): UnitType[] {
@@ -8,11 +8,16 @@ export function builtinUnitTypes(): UnitType[] {
   }));
 }
 
+// Every unit starts with no standing orders, no extra skills and GBrain as its one plugin (PATCH /api/units/:id changes it).
+export function defaultLoadout(): Loadout {
+  return { instructions: "", skills: [], plugins: ["gbrain"] };
+}
+
 function unit(id: string, name: string, cls: string, team: number | null, x: number, y: number): Unit {
   const c = CLASS_MODELS[cls]!;
   return {
     id, name, class: cls, model: c.model, effort: c.effort, role: "worker",
-    team, status: "idle", pos: { x, y }, orderId: null, qm: { sessionId: null, sessionUrl: null },
+    team, status: "idle", pos: { x, y }, orderId: null, qm: { sessionId: null, sessionUrl: null }, loadout: defaultLoadout(),
   };
 }
 

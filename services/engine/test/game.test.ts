@@ -467,3 +467,20 @@ test("spawn tiles: builtins at the Barracks door, forged at the Forge door, neve
     game.cancelOrder(o.id);
   }
 });
+
+test("order header restates the unit's standing orders (loadout.instructions) only when set", async () => {
+  expect(unit("u1").loadout).toEqual({ instructions: "", skills: [], plugins: ["gbrain"] });
+  expect((game.spawnUnit({ class: "scout" }) as any).unit.loadout).toEqual({ instructions: "", skills: [], plugins: ["gbrain"] });
+  const sent = async (id: string, target: string) => {
+    calls.length = 0;
+    orderFor([id], target);
+    for (let i = 0; i < 60 && unit(id).status === "moving"; i++) tick();
+    await Bun.sleep(20);
+    return calls.find((c) => c.url.endsWith(`/units/${id}/send`))!.body.text as string;
+  };
+  unit("u1").loadout!.instructions = "  Answer customers in two sentences.\nQuote the house rule slug.  ";
+  const a = await sent("u1", "t101");
+  expect(a.split("\n")[1]).toBe("Standing orders: Answer customers in two sentences.");
+  expect(a).toContain("\nQuote the house rule slug.\n");
+  expect(await sent("u2", "t102")).not.toContain("Standing orders:");
+});

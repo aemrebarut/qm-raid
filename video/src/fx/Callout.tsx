@@ -3,6 +3,10 @@
 import React from "react";
 import { AbsoluteFill, interpolate } from "remotion";
 import { FX, FxColor, HEAD, TONE, fadeOut, plate, useLocal, usePop } from "./theme";
+import edl from "../edl.json";
+
+// Emre 16:48: "keep the arrows but take out the lasso": edl.ring === false draws the arrow only, its tip on (x, y)
+const RING = (edl as { ring?: boolean }).ring !== false;
 
 export type CalloutProps = {
   from: number;
@@ -25,8 +29,9 @@ export const Callout: React.FC<CalloutProps> = ({ from, duration = 60, x, y, r =
   const alpha = fadeOut(f, duration);
   const dir = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] }[side];
   const gap = 150; // arrow length
-  const ax0 = x + dir[0] * (r + gap), ay0 = y + dir[1] * (r + gap);
-  const ax1 = x + dir[0] * (r + 14), ay1 = y + dir[1] * (r + 14);
+  const off = RING ? r + 14 : 4;
+  const ax0 = x + dir[0] * (off + gap), ay0 = y + dir[1] * (off + gap);
+  const ax1 = x + dir[0] * off, ay1 = y + dir[1] * off;
   const draw = interpolate(f, [3, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   const hx = ax0 + (ax1 - ax0) * draw, hy = ay0 + (ay1 - ay0) * draw;
   const ang = Math.atan2(ay1 - ay0, ax1 - ax0);
@@ -39,9 +44,11 @@ export const Callout: React.FC<CalloutProps> = ({ from, duration = 60, x, y, r =
   return (
     <AbsoluteFill style={{ opacity: alpha, pointerEvents: "none" }}>
       <svg width={1920} height={1080} style={{ position: "absolute", overflow: "visible" }}>
+        {RING ? (<>
         <circle cx={x} cy={y} r={r * (1 + pulse * 0.5)} fill="none" stroke={t.hi} strokeWidth={4} opacity={(1 - pulse) * 0.8 * pop} />
         <circle cx={x} cy={y} r={r * pop} fill="none" stroke={FX.outline} strokeWidth={14} />
         <circle cx={x} cy={y} r={r * pop} fill="none" stroke={t.main} strokeWidth={8} strokeDasharray="22 12" transform={`rotate(${f * 3} ${x} ${y})`} />
+        </>) : null}
         {draw > 0 ? (
           <g transform={`translate(${dir[0] * bob}, ${dir[1] * bob})`}>
             <line x1={ax0} y1={ay0} x2={hx} y2={hy} stroke={FX.outline} strokeWidth={18} strokeLinecap="round" />

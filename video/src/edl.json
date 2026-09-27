@@ -177,6 +177,13 @@
     ],
     "fx": [
       {
+        "at": 1.79,
+        "kind": "callout",
+        "text": "KNIGHT|a real QM agent",
+        "x": 1425,
+        "y": 544
+      },
+      {
         "at": 6.7,
         "kind": "punchIn",
         "x": 884,
@@ -193,6 +200,13 @@
         "at": 20.4,
         "kind": "mascotCheer",
         "text": "One more page!",
+        "x": 884,
+        "y": 522
+      },
+      {
+        "at": 22.57,
+        "kind": "callout",
+        "text": "REAL QM REPLY|the issue, worked",
         "x": 884,
         "y": 522
       }
@@ -425,6 +439,20 @@
       }
     ],
     "fx": [
+      {
+        "at": 4.63,
+        "kind": "callout",
+        "text": "TRIO|planner, implementer, reviewer",
+        "x": 1679,
+        "y": 417
+      },
+      {
+        "at": 7.9,
+        "kind": "callout",
+        "text": "HANDOFF|the scroll flies",
+        "x": 661,
+        "y": 389
+      },
       {
         "at": 13.2,
         "kind": "mascotShock",
@@ -813,6 +841,13 @@
     ],
     "fx": [
       {
+        "at": 1.65,
+        "kind": "calloutRiver",
+        "text": "THE FORGE|River AI",
+        "x": 291,
+        "y": 483
+      },
+      {
         "at": 8.51,
         "kind": "scoreRace",
         "text": "Refund Ranger 0.82 vs 0.42; Rule Warden 0.917 vs 0.557|Held-out orders",
@@ -957,6 +992,13 @@
     ],
     "fx": [
       {
+        "at": 1.79,
+        "kind": "callout",
+        "text": "NEW ISSUE|a new camp",
+        "x": 960,
+        "y": 135
+      },
+      {
         "at": 2.19,
         "kind": "mascotShock",
         "text": "More monsters!",
@@ -975,6 +1017,13 @@
         "text": "Not that one.",
         "x": 886,
         "y": 485
+      },
+      {
+        "at": 15.57,
+        "kind": "callout",
+        "text": "LET IT RIDE|order goes",
+        "x": 301,
+        "y": 1004
       }
     ],
     "events": [
@@ -1113,6 +1162,13 @@
     ],
     "fx": [
       {
+        "at": 6.5,
+        "kind": "callout",
+        "text": "LOADOUT|standing orders and skills",
+        "x": 1488,
+        "y": 174
+      },
+      {
         "at": 9.42,
         "kind": "mascotSmug",
         "text": "Custom kit.",
@@ -1225,5 +1281,6 @@
   "hero": {
     "src": "clips/hero.mp4",
     "from": 10.334
-  }
+  },
+  "ring": false
 }

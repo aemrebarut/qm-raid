@@ -1,0 +1,10 @@
+{
+  "name": "qm-bridge",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --env-file=.env src/server.ts",
+    "smoke": "bun --env-file=.env test/smoke.ts",
+    "bridge-smoke": "bun --env-file=.env test/bridge-smoke.ts"
+  }
+}

@@ -4,6 +4,7 @@ import { join } from "node:path";
 export interface AskRequest {
   typeId: string; name: string; description: string; model: string; baseModel: string | null;
   order: string; context: string; targetId?: string;
+  followup?: string; previous?: string; // second turn on the same order (reviewer verdict)
 }
 
 type Pending = { resolve: (t: string) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> };

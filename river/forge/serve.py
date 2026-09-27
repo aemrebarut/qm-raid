@@ -37,13 +37,18 @@ def world() -> dict:
 
 def messages(req: dict) -> list[dict]:
     spec = datagen.TypeSpec(req["typeId"], req["name"], req["description"])
-    return [{"role": "system", "content": datagen.system_prompt(spec)},
+    msgs = [{"role": "system", "content": datagen.system_prompt(spec)},
             {"role": "user", "content": datagen.user_message(req["order"], req.get("context") or "")}]
+    if req.get("followup"):  # a second turn on the same order, e.g. the reviewer verdict line
+        msgs += [{"role": "assistant", "content": req.get("previous", "")}, {"role": "user", "content": req["followup"]}]
+    return msgs
 
 
 def dry_answer(req: dict) -> str:
     spec = datagen.TypeSpec(req["typeId"], req["name"], req["description"])
     w = world()
+    if req.get("followup"):
+        return "VERDICT: APPROVED"
     t = next((x for x in w["targets"] if x["id"] == req.get("targetId")), None)
     if t is None:
         return f"{spec.name}: understood. Give me an issue to work and I will recall, fix and report back."

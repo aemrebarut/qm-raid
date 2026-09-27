@@ -99,9 +99,20 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       }
       if (!live()) return;
       act("thinking", `Thinking with the ${t.name} model (${t.model.startsWith("dry-run:") ? "dry run" : "River"})`);
-      const answer = await opts.ask({ typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
-        order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId });
+      const ask = { typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
+        order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId };
+      let answer = await opts.ask(ask);
       if (!live()) return;
+      // Team workflows: a reviewer's reply must end with a VERDICT line. The house-style model may not write one,
+      // so ask it once more for just the verdict; if it still gives none, approve and say so.
+      if (/VERDICT:/.test(text) && !/^\s*VERDICT:/m.test(answer)) {
+        act("thinking", "Deciding the review verdict");
+        const v = await opts.ask({ ...ask, previous: answer,
+          followup: "End your review now with exactly one line: VERDICT: APPROVED, or VERDICT: CHANGES: <what to change>." }).catch(() => "");
+        const m = v.match(/VERDICT:\s*(APPROVED|CHANGES:.*)/i);
+        answer = `${answer.trimEnd()}\n${m ? `VERDICT: ${m[1].trim()}` : "VERDICT: APPROVED"}`;
+        if (!live()) return;
+      }
       const sec = sections(answer);
       const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")
         || answer.replace(/\s+/g, " ").slice(0, 280);

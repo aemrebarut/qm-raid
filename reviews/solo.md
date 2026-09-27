@@ -180,6 +180,8 @@ Read the new routes/event and owner split in docs/lanes/flow.md. Brain implement
 
 Reviewed the diff and current CONTRACT.md. Both gaps from `c874c30` are closed: Brain allocates the issue/target ids under its write lock, registers the full Target for world/recall/remember and restart recovery, and engine returns 503 without creating a local target when Brain is unavailable. No service mutation or smoke was needed for this documentation-only change. Sent the Analyst one remaining documentation inconsistency: docs/lanes/flow.md still assigns LUM sequencing and a local outage fallback to engine; the latest contract and explicit instruction take precedence. Implementation acceptance remains pending the Brain commit.
 
+Follow-up `2da9056`: reviewed and confirmed flow.md now matches Brain-only allocation and 503/no local target. The documentation inconsistency is closed. During the 15:45-15:57 demo rehearsal, no review orders go to 4610 and no tests open 4611; automated integration remains on 4618/4619.
+
 ## Lane review queue
 
 - `raid-gbrain`: reviewed through `1f62436`; all reported Brain findings resolved. Awaiting POST /issues implementation for the new-issue feature; allocation/registration contract gaps resolved in `8babc2a`.

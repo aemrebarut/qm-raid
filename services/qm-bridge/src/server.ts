@@ -352,12 +352,14 @@ async function spawn(req: Request): Promise<Response> {
 }
 
 // ---------- usage ----------
-// QM exposes only org-wide spend, so each 5 s tick splits the token delta across units that were working in that window.
+// QM exposes only org-wide spend, so each 5 s tick splits the token delta across units that worked recently.
+// QM records spend some seconds after a run ends, hence the wide window.
+const USAGE_WINDOW_MS = 90_000;
 let spendBase: { tokens: number; costUsd: number } | null = null;
 setInterval(async () => {
   const now = Date.now();
   for (const u of units.values()) if (u.active) lastWork.set(u.id, now);
-  const working = [...lastWork].filter(([, t]) => now - t < 15_000).map(([id]) => id);
+  const working = [...lastWork].filter(([, t]) => now - t < USAGE_WINDOW_MS).map(([id]) => id);
   if (spendBase && working.length === 0) return;
   try {
     const cur = await orgSpend();

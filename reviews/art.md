@@ -373,3 +373,25 @@ It was not in the captured source, so this PASS must not be represented as a
 review of that later visual change or as a claim the current entire tree is
 clean. Sent the explicit PASS and this source boundary to raid-art-plan and
 raid-look-dir. Analyst retains the final default-on decision.
+
+## 2026-09-27 16:05 PDT: A4 floor polish and isolated monster test
+
+- **602fc68 PASS.** Reviewed the two-line zones.ts diff and the supplied
+  /tmp/a4-floor-before.png and /tmp/a4-floor-after.png. The warmer, lighter
+  earth and lower wear coverage produce visible grass patches across the
+  yards at full-map zoom. Cobbled routes and coloured gates remain distinct.
+  Only floor vertex-colour inputs change; geometry, transforms, instancing,
+  tick, disposal and API paths are unchanged. Both captures report 193 draws
+  and 132.6k triangles for the whole showroom; the composed map is still 37
+  meshes. Different displayed FPS values are not evidence of a speedup.
+- **14c5922 PASS.** The monster test now creates its own happy-dom canvas
+  context before makeTarget constructs a contact-shadow texture. Independently
+  ran bun test test/monsters.test.ts: one test passes, 77 assertions. The full
+  package suite also passes: five tests, 164 assertions; typecheck passes.
+  No runtime source or visual changes in this test-only commit.
+
+Both reviewed files were clean at HEAD 254b8c1. No blocking findings in this
+batch. These are scoped A4 polish reviews, not a new sustained performance
+measurement or acceptance of unrelated later scene edits. No browser or server
+was started for this comparison. A2/A3 PASS remains in force for its recorded
+source set, with this floor-colour change accepted in addition.

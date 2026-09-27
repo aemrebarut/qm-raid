@@ -147,10 +147,21 @@ function header(u: Unit, s: Send): string {
   return `[${tags.join(" | ")}]\n${s.text}`;
 }
 
+const warned = new Set<string>();
+function warnOnce(msg: string): void {
+  if (warned.has(msg)) return;
+  warned.add(msg);
+  console.warn(`[qm-bridge] ${msg}`);
+}
+
 function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string; idempotencyKey?: string } {
+  // Allowed Codex models pass; with the catalog still unloaded (15 s boot fallback), gpt-* names pass too and QM
+  // refuses a bad one (error terminal). Anything else (claude-* etc.) runs on QM's default model, with a warning.
+  const model = codexModels.includes(u.model) || (!codexModels.length && /^gpt-/.test(u.model)) ? u.model : undefined;
+  if (u.model && !model) warnOnce(`unit ${u.id}: model ${u.model} is not an allowed Codex model, QM default used`);
   return {
     ...(s.key ? { idempotencyKey: s.key } : {}),
-    ...(codexModels.includes(u.model) ? { model: u.model } : {}),
+    ...(model ? { model } : {}),
     ...(CODEX_EFFORTS.includes(u.effort) ? { thinkingLevel: u.effort } : {}),
   };
 }
@@ -438,8 +449,9 @@ setInterval(async () => {
     const now = Date.now();
     for (const u of units.values()) if (u.active) lastWork.set(u.id, now);
     for (const id of lastWork.keys()) if (!units.has(id)) lastWork.delete(id); // deleted units get no usage
-    const working = [...lastWork].filter(([, t]) => now - t < USAGE_WINDOW_MS).map(([id]) => id);
+    const recent = [...lastWork].filter(([, t]) => now - t < USAGE_WINDOW_MS).map(([id]) => id);
     const cur = await orgSpend();
+    const working = recent.filter((id) => units.has(id)); // re-check after the await: a unit deleted meanwhile gets no share
     const base = spendBase;
     const tokens = base ? cur.tokens - base.tokens : 0;
     const usd = base ? cur.costUsd - base.costUsd : 0;

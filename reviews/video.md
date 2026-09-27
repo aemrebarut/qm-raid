@@ -114,3 +114,22 @@ Loadout: `7b9e243a42`, 22.30 seconds, 12 samples. Edit/save visible at 4-12 seco
 Sent to raid-video-cap and Analyst, with editor summary.
 
 VERDICT: APPROVED
+
+
+## V10: final intro and remaining dry4 (16:08 PDT)
+
+- Intro `intro-draft3.mp4`, SHA256 prefix `661fd51a18`: 11 seconds, clean stable 1080p H.264 at 30 fps, six samples every 2 seconds. The +1 PAGE burst is now fully legible; previous fixes remain. Sent to raid-video-intro and Analyst.
+
+VERDICT: APPROVED
+
+- Hero `dry4/clips/hero.mp4`, `d3546dd170`: 11.533 seconds, clean stable 1080p H.264 at 30 fps, six samples every 2 seconds. Sharp map from frame 0; recall beam visible around 5-6 seconds. No capture failures. Scope is mock hero framing; the final opening must use the equivalent real-capture moment. Sent to raid-video-cap and Analyst.
+
+VERDICT: APPROVED
+
+- Autopilot `dry4/clips/autopilot.mp4`, `73b2361cf1`: 34 seconds, clean stable 1080p H.264 at 30 fps, 17 samples every 2 seconds. Proposals at 11.042 and activation at 26.198 establish the 15 second expiry. `veto_missing` at 17.552 and no order_cancelled event mean no successful cancellation was captured, despite failures being empty. Fix the Cancel action and verify its specific order cancellation, or omit that beat. Sent to raid-video-cap, raid-video and Analyst.
+
+VERDICT: CHANGES: capture one confirmed cancellation or omit the successful-veto beat.
+
+## Final deadline and structure (latest Analyst update)
+
+Take 1 is the only final take. Update 16:08 restores target 1:50, max 2:00: hero 0-2, approved anime 2-13, Orders 13-35, Teams 35-55, Forge 55-75, Autopilot/new issues 75-92, approved mock Loadout close-up 92-104, end 104-110. New narration is targeted for 16:15. Final mp4 plus thumbnail are due 16:24; reviewer performs a fast frame-sheet and sync check for P1 blockers from 16:24 to 16:26. Prior 75 second schedule is superseded.

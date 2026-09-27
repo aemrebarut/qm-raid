@@ -2,6 +2,16 @@
 
 Emre: "Make it fun, add voice over." Emre 15:50: a 15 second fun intro that introduces our approach, anime style, like the first 15 seconds of a good YouTube video; then 90 seconds of 15 to 20 second clips, one per capability; the team makes the video itself, with Remotion. Target 1:45 to 1:55, hard max 2:00, 1920x1080 mp4, H.264 + AAC.
 
+## Update 16:08 (Emre): length up to 2 minutes; target 1:50 total. This overrides the 16:03 structure.
+- 0:00 to 0:02 gameplay hero, 0:02 to 0:13 the approved 11 s anime intro (unchanged).
+- 0:13 to 0:35 Orders and memory (22 s, include the QM web UI cut if captured).
+- 0:35 to 0:55 Teams with the Rule Warden reviewer (20 s).
+- 0:55 to 1:15 The Forge, both River types (20 s).
+- 1:15 to 1:32 Autopilot and new issues (17 s).
+- 1:32 to 1:44 Loadout (12 s, the approved mock close-up).
+- 1:44 to 1:50 End card.
+- VO about 180 words at George's pace, with breathing room. Final mp4 and thumbnail by 16:24; reviewer P1 check 16:24 to 16:26.
+
 ## Update 16:03 (Emre): total length 75 seconds. This overrides the structure below.
 - 0:00 to 0:02 real gameplay hero shot (thumbnail frame), then 0:02 to 0:13 the anime intro (11 s: the four claims at about 2.2 s each, short title drop).
 - 0:13 to 0:28 Clip 1 Orders and memory (GBrain recall and remember, the real QM reply).

@@ -105,8 +105,9 @@ export async function waitRun(runId: string, timeoutMs = 180_000, everyMs = 1500
   }
 }
 
+/** The unit's conversation in QM's normal web UI (chats view deep link). */
 export function sessionUrl(sessionId: string): string {
-  return `${PORTAL_URL}/admin/history/s/${encodeURIComponent(sessionId)}`;
+  return `${PORTAL_URL}/s/${encodeURIComponent(sessionId)}`;
 }
 
 /** The QM session id for a thread, once QM has created it (null before). */

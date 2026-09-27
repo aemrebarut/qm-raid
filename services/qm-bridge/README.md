@@ -7,8 +7,8 @@ QM access goes through the dev portal (`QM_PORTAL_URL`, default http://localhost
 Run: QM up first (`cd qm && HARNESS=codex bash scripts/dev-instance.sh up --surface web`), then `bun run dev`. Smoke: `bun run smoke` (one QM turn, prints status, sessionId, reply), `bun run bridge-smoke` (Bridge API end to end).
 
 Files:
-- `src/server.ts`: Bridge API on 127.0.0.1:4614 (health, units, send, patch, delete, SSE /events). One QM session per unit (threadRef `web:<principal>:raid-<unitId>-<boot>`), one active run per unit with a FIFO queue, an intro turn at spawn (streamed as chat, never terminal), exactly one terminal `reply` or `error` per send, decided from GET /api/runs/:id (never from RUN_FINISHED alone).
-- `src/qm.ts`: QM client over the portal (principal, startTurn, getRun, waitRun, findSessionId, archiveSession, sessionUrl).
+- `src/server.ts`: Bridge API on 127.0.0.1:4614 (health, units, send, patch, delete, SSE /events). One stable QM conversation per unit (threadRef `web:<principal>:raid-<QM_THREAD_NS>-<unitId>`, kept across respawn, engine reset and bridge restart; DELETE keeps it), one active run per unit with a FIFO queue, an intro turn when the conversation is new and a "New round" marker turn when a deleted unit is spawned again (both streamed as chat, never terminal), exactly one terminal `reply` or `error` per send, decided from GET /api/runs/:id (never from RUN_FINISHED alone).
+- `src/qm.ts`: QM client over the portal (principal, startTurn, getRun, waitRun, findSessionId, archiveSession, sessionUrl = QM web UI `/s/<sessionId>`).
 - `src/tools.ts`: tool name normalization (`gbrain_search` -> `gbrain.search`; built-ins as `skills.read`, `memory.rewrite`).
 - `test/smoke.ts`: M1 smoke, one turn "Say hello in five words".
 - `test/bridge-smoke.ts`: spawn, one order, wait for its terminal event, delete.

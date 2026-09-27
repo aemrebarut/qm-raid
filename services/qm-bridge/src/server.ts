@@ -1,10 +1,9 @@
-// qm-bridge: Bridge API (docs/CONTRACT.md) on 127.0.0.1:4614 backed by real QM agents, one QM session per unit.
+// qm-bridge: Bridge API (docs/CONTRACT.md) on 127.0.0.1:4614 backed by real QM agents, one QM conversation per unit.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { BridgeEvent, SendRequest, SpawnRequest } from "../../../contract/types.ts";
 import {
   PORTAL_URL,
-  archiveSession,
   findSessionId,
   getRun,
   orgSpend,
@@ -22,6 +21,10 @@ const PORT = Number(process.env.PORT ?? 4614);
 const HOST = "127.0.0.1";
 // Unit map survives bridge restarts so in-flight units keep their QM sessions (gitignored).
 const STATE_FILE = join(import.meta.dir, "..", ".state", "units.json");
+// One stable QM conversation per unit: threadRef web:<principal>:raid-<ns>-<unitId>, across respawns, resets and restarts.
+// Change QM_THREAD_NS to start every unit in a fresh conversation.
+const THREAD_NS = process.env.QM_THREAD_NS ?? "r1";
+const ROUND_MARKER = "New round: the board was reset. Recall from GBrain before each order. Reply with one short line.";
 
 interface Send extends SendRequest {
   intro?: boolean;
@@ -35,13 +38,14 @@ interface Unit extends SpawnRequest {
 }
 
 const units = new Map<string, Unit>();
+const retired = new Set<string>(); // deleted unit ids; their next spawn opens a new round in the same conversation
 const lastWork = new Map<string, number>(); // unitId -> last time it had a run (usage attribution)
 const alive = (u: Unit): boolean => units.get(u.id) === u;
 
 function saveUnits(): void {
   try {
     mkdirSync(dirname(STATE_FILE), { recursive: true });
-    writeFileSync(STATE_FILE, JSON.stringify([...units.values()], null, 1));
+    writeFileSync(STATE_FILE, JSON.stringify({ units: [...units.values()], retired: [...retired] }, null, 1));
   } catch (err) {
     console.warn(`[qm-bridge] cannot save unit map: ${String((err as Error)?.message ?? err)}`);
   }
@@ -49,8 +53,16 @@ function saveUnits(): void {
 
 function loadUnits(): void {
   try {
-    const rows = JSON.parse(readFileSync(STATE_FILE, "utf8")) as Unit[];
-    for (const r of rows) if (r?.id && r.threadRef) units.set(r.id, { ...r, queue: r.queue ?? [], active: r.active ?? null });
+    const saved = JSON.parse(readFileSync(STATE_FILE, "utf8")) as { units?: Unit[]; retired?: string[] } | Unit[];
+    const rows = Array.isArray(saved) ? saved : (saved.units ?? []);
+    for (const id of Array.isArray(saved) ? [] : (saved.retired ?? [])) retired.add(id);
+    for (const r of rows) {
+      if (!r?.id || !r.threadRef) continue;
+      const busy = r.active || r.queue?.length;
+      // Idle units on an old per-spawn thread are dropped: the engine's next send gets 404 and re-spawns on the stable thread.
+      if (!busy && !r.threadRef.endsWith(`:raid-${THREAD_NS}-${r.id}`)) continue;
+      units.set(r.id, { ...r, queue: r.queue ?? [], active: r.active ?? null });
+    }
     if (units.size) console.log(`[qm-bridge] restored ${units.size} unit(s) from ${STATE_FILE}`);
     for (const u of units.values()) {
       const a = u.active;
@@ -128,6 +140,7 @@ function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string
 }
 
 function enqueue(u: Unit, s: Send): void {
+  s.key ??= `raid-${crypto.randomUUID()}`; // on disk before any dispatch, so a re-send after a crash is deduped by QM
   u.queue.push(s);
   pump(u);
   saveUnits();
@@ -137,6 +150,7 @@ function enqueue(u: Unit, s: Send): void {
 async function begin(u: Unit, s: Send): Promise<void> {
   s.key ??= `raid-${crypto.randomUUID()}`;
   u.active = { runId: "", send: s };
+  if (alive(u)) saveUnits(); // persist key + active marker before QM sees the turn (crash-safe, no double execution)
   const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u, s));
   if (!u.active || u.active.send !== s) return;
   u.active.runId = runId;
@@ -299,7 +313,7 @@ async function body<T>(req: Request): Promise<Partial<T>> {
 function introText(u: Unit): string {
   return (
     `You are ${u.name}, a ${u.role} agent${u.team != null ? ` on team ${u.team}` : ""} on the QM Raid board. ` +
-    `You will get orders to work product issues; each order starts with a [order | target | component] header. ` +
+    `You will get orders to work product issues; each order starts with a [unit | order | target | component | team] header. ` +
     `Use the gbrain tools, when you have them, to recall before you work and to remember what you learn. ` +
     `Reply to this message with one short line saying you are ready.`
   );
@@ -313,43 +327,60 @@ async function createUnit(b: Partial<SpawnRequest> & { id: string }): Promise<Un
     effort: b.effort ?? "",
     role: b.role ?? "worker",
     team: b.team ?? null,
-    // Every spawn gets a fresh QM session (the epoch suffix), so a reset demo never continues old conversations.
-    threadRef: await threadRefFor(`${b.id}-${Date.now().toString(36)}`),
+    threadRef: await threadRefFor(`${THREAD_NS}-${b.id}`),
     sessionId: null,
     queue: [],
     active: null,
   };
-  units.set(u.id, u);
-  saveUnits();
   return u;
 }
 
 function retire(u: Unit): void {
   units.delete(u.id);
+  retired.add(u.id);
   u.queue = [];
   u.active = null;
-  saveUnits();
-  if (u.sessionId) archiveSession(u.sessionId).catch(() => {});
+  saveUnits(); // the QM conversation stays: the unit's next spawn continues it with a round marker
 }
 
 async function spawn(req: Request): Promise<Response> {
   const b = await body<SpawnRequest>(req);
   if (!b.id) return json({ ok: false, error: "id required" }, 400);
   const existing = units.get(b.id);
-  if (existing) retire(existing); // re-spawn after an engine reset: fresh session, old one archived
+  if (existing) {
+    // Same unit again (engine restart, re-spawn without delete): keep the conversation, refresh settings, no extra turn.
+    existing.name = b.name ?? existing.name;
+    existing.model = b.model ?? existing.model;
+    existing.effort = b.effort ?? existing.effort;
+    existing.role = b.role ?? existing.role;
+    if ("team" in b) existing.team = b.team ?? null;
+    existing.sessionId ??= await findSessionId(existing.threadRef).catch(() => null);
+    saveUnits();
+    return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
+  }
   let u: Unit | null = null;
   try {
     u = await createUnit({ ...b, id: b.id });
-    await begin(u, { text: introText(u), intro: true }); // fails fast when QM is down
+    u.sessionId = await findSessionId(u.threadRef); // throws when QM is down -> 502
+    units.set(u.id, u);
+    if (!u.sessionId) {
+      await begin(u, { text: introText(u), intro: true }); // new conversation: intro turn creates it
+    } else if (retired.has(u.id)) {
+      await begin(u, { text: ROUND_MARKER, intro: true }); // back after a reset: mark the new round
+    }
+    retired.delete(u.id);
+    saveUnits();
   } catch (err) {
-    if (u && alive(u)) retire(u);
+    if (u && alive(u)) units.delete(u.id);
+    saveUnits();
     return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
   }
-  // The session exists as soon as QM accepts the turn; look it up briefly so "Open in QM" works at once.
+  // A new conversation exists as soon as QM accepts the turn; look it up briefly so "Open in QM" works at once.
   for (let i = 0; i < 8 && !u.sessionId; i++) {
     await Bun.sleep(250);
     u.sessionId = await findSessionId(u.threadRef).catch(() => null);
   }
+  if (u.sessionId) saveUnits();
   return json({ sessionId: u.sessionId, sessionUrl: u.sessionId ? sessionUrl(u.sessionId) : null });
 }
 

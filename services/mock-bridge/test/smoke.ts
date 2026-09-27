@@ -84,6 +84,16 @@ await post(`/units/${N}/send`, { text: flow("oN", REVIEW, [pPlan, pImpl, pChange
 await setConfig({ review: "changes" });
 await post(`/units/${O}/send`, { text: flow("oO", REVIEW, [pPlan, pImpl, pChanges, pImpl]), orderId: "oO", targetId: "t12", componentId: "billing" });
 await setConfig({ review: saved.review ?? "loop" });
+// loadout: catalog, PATCH merge and validation, marker activity; T loses the gbrain plugin before its order
+const T = `smokeT-${run}`;
+const catalog = (await (await fetch(URL_ + "/catalog")).json()).items as Array<{ id: string; kind: string; name: string; description: string }>;
+check(Array.isArray(catalog) && catalog.some((c) => c.id === "gbrain" && c.kind === "plugin") && catalog.filter((c) => c.kind === "skill").length >= 5 && catalog.every((c) => c.id && c.name && c.description), `GET /catalog: ${catalog?.length} items, gbrain plugin included`);
+await post("/units", { id: T, name: T, model: "mock", effort: "low", role: "worker", team: 1 });
+const lo1 = await (await post(`/units/${T}`, { loadout: { instructions: "Always write the regression test first.", skills: ["write-tests", "debug"], plugins: [] }, model: "gpt-6-sol", effort: "high" }, "PATCH")).json();
+const lo2 = await post(`/units/${T}`, { loadout: { skills: ["no-such-skill"] } }, "PATCH");
+const tView = await (await fetch(`${URL_}/units/${T}`)).json();
+check(lo1.ok === true && lo1.applied === "live" && lo1.loadout?.skills?.join(",") === "write-tests,debug" && lo1.loadout?.plugins?.length === 0 && lo1.model === "gpt-6-sol" && lo1.effort === "high" && lo2.status === 400 && tView.loadout?.skills?.length === 2, "PATCH /units/:id {loadout, model, effort} -> {ok, loadout, model, effort, applied}; unknown skill -> 400");
+await post(`/units/${T}/send`, { text: prompt("oT"), orderId: "oT", targetId: "t12", componentId: "billing" });
 // more presets (recon, testfirst, herald, duel): scout, tester, herald, judge
 const P = `smokeP-${run}`, Q = `smokeQ-${run}`, R = `smokeR-${run}`, S = `smokeS-${run}`;
 const pDuel = [`- implementer (${M}): ${M}: fixed LUM-12. I made the retry reuse inv_<invoiceId>, added a regression test, and saved learnings/lum-12-x-1.`, `- implementer (${N}): ${N}: fixed LUM-12.\nI patched the retry loop.`];
@@ -119,7 +129,7 @@ const deadline = Date.now() + 12000 / SPEED + 1000;
 const done = (id: string) => events.some((e) => e.ev.unitId === id && (e.ev.type === "reply" || e.ev.type === "error"));
 const orderDone = (id: string, oid: string) => events.some((e) => e.ev.unitId === id && e.ev.type === "reply" && (e.ev as any).orderId === oid);
 const deadline2 = deadline + 8000 / SPEED;
-while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J) && [K, L, M, N, O, P, Q, R, S].every(done))) {
+while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J) && [K, L, M, N, O, P, Q, R, S, T].every(done))) {
   if (!jSent && done(I)) await sendJ();
   await Bun.sleep(100);
 }
@@ -173,12 +183,15 @@ check(/^VERDICT: CHANGES: /.test(lastLine(replyOf(O))), "review: changes forces 
 const pEv = of(P), qEv = of(Q), rReply = replyOf(R) ?? "", sReply = replyOf(S) ?? "";
 check(/recon for LUM-12/.test(replyOf(P) ?? "") && /rules\/billing-idempotency/.test(replyOf(P) ?? "") && !pEv.some((x) => x.type === "activity" && x.tool === "edit_file") && pEv.some((x) => x.type === "activity" && x.tool === "run_tests"), "workflow scout: reproduces, names the code and rules, no edits");
 check(/failing test for LUM-12/.test(replyOf(Q) ?? "") && /Acceptance check: /.test(replyOf(Q) ?? "") && qEv.some((x) => x.type === "activity" && x.tool === "edit_file" && /test/.test((x as any).args?.path ?? "")) && !qEv.some((x) => x.type === "activity" && x.tool === "edit_file" && !/test/.test((x as any).args?.path ?? "")), "workflow tester: failing test and acceptance check, edits only the test file");
-check(/Acme Robotics/.test(rReply) && /What broke: /.test(rReply) && /What we fixed: /.test(rReply) && /What you need to do: /.test(rReply) && !/VERDICT/.test(rReply) && of(R).some((x) => x.type === "activity" && x.tool === "gbrain.get_page" && (x as any).args?.slug === "companies/acme-robotics"), "workflow herald: customer update (what broke, what we fixed, what to do), reads the company page");
+check(rReply.startsWith("Subject: Fixed: ") && /Acme Robotics/.test(rReply) && /What broke: /.test(rReply) && /What we fixed: /.test(rReply) && /What you need to do: /.test(rReply) && !/VERDICT/.test(rReply) && of(R).some((x) => x.type === "activity" && x.tool === "gbrain.get_page" && (x as any).args?.slug === "companies/acme-robotics"), "workflow herald: customer update (what broke, what we fixed, what to do), reads the company page");
 check(lastLine(sReply) === `VERDICT: APPROVED (winner: ${M})` && sReply.includes(N), `workflow judge: ${lastLine(sReply)}`);
+const tEv = of(T);
+check(tEv.some((x) => x.type === "activity" && /^Loadout changed: model gpt-6-sol \(high\); skills: Write tests, Debug; plugins: none; standing orders/.test(x.text) && (x as any).orderId === undefined), "loadout change emits the 'Loadout changed' marker activity");
+check(orderDone(T, "oT") && !tEv.some((x) => x.type === "activity" && /gbrain/.test(x.tool ?? "")) && tEv.some((x) => x.type === "activity" && (x as any).orderId === "oT" && /^Loadout: skills write-tests, debug; standing orders "Always write/.test(x.text)), "loadout without gbrain: no gbrain calls; the order opens with the loadout note");
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;
 check(JSON.stringify(restored) === JSON.stringify(saved), "config restored");
 
-for (const id of [A, B, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
+for (const id of [A, B, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
 ac.abort();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

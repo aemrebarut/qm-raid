@@ -1,5 +1,5 @@
 // mock-bridge: fake agents behind the Bridge API (docs/CONTRACT.md). No dependencies.
-import type { BridgeEvent, SendRequest, SpawnRequest, SpawnResponse } from "../../../contract/types.ts";
+import type { BridgeEvent, CatalogItem, Loadout, SendRequest, SpawnRequest, SpawnResponse } from "../../../contract/types.ts";
 import { buildScript, isOrderSend, learningFrom, type Learning } from "./script.ts";
 
 const HOST = "127.0.0.1";
@@ -21,8 +21,49 @@ const config = {
 // Demo memory: learnings the mock agents remembered, oldest first. Cleared by POST /debug/reset or when the last unit is deleted.
 let learnings: Learning[] = [];
 
+// Loadout catalog (GET /catalog): a fixed, plausible list of QM skills and plugins. GBrain is the default plugin.
+const CATALOG: CatalogItem[] = [
+  { id: "debug", name: "Debug", description: "Reproduce first, bisect, then fix the root cause", kind: "skill" },
+  { id: "write-tests", name: "Write tests", description: "Regression test first, then the fix", kind: "skill" },
+  { id: "code-review", name: "Code review", description: "Review a diff against the house rules and flag risks", kind: "skill" },
+  { id: "security-review", name: "Security review", description: "Check auth, tenancy and secrets handling in a change", kind: "skill" },
+  { id: "plan", name: "Plan", description: "Break a task into short numbered steps before coding", kind: "skill" },
+  { id: "customer-reply", name: "Customer reply", description: "Write customer updates in the house tone", kind: "skill" },
+  { id: "refactor", name: "Refactor", description: "Small safe refactors with tests kept green", kind: "skill" },
+  { id: "gbrain", name: "GBrain", description: "Team memory: recall pages and learnings, remember what you learned", kind: "plugin" },
+  { id: "github", name: "GitHub", description: "Read issues and pull requests, open draft PRs", kind: "plugin" },
+  { id: "linear", name: "Linear", description: "Read and update tickets", kind: "plugin" },
+  { id: "sentry", name: "Sentry", description: "Look up error events and stack traces", kind: "plugin" },
+  { id: "browser", name: "Browser", description: "Headless browser to check a page by hand", kind: "plugin" },
+];
+const DEFAULT_LOADOUT = (): Loadout => ({ instructions: "", skills: [], plugins: ["gbrain"] });
+const catalogIds = (kind: CatalogItem["kind"]) => new Set(CATALOG.filter((c) => c.kind === kind).map((c) => c.id));
+const nameOf = (id: string) => CATALOG.find((c) => c.id === id)?.name ?? id;
+
+// Merge a loadout patch over the current one. Unknown skill or plugin ids are an error (the UI offers GET /catalog ids).
+function mergeLoadout(cur: Loadout, p: unknown): Loadout | string {
+  if (!p || typeof p !== "object" || Array.isArray(p)) return "loadout must be an object";
+  const b = p as Partial<Record<keyof Loadout, unknown>>;
+  const next = { ...cur, skills: [...cur.skills], plugins: [...cur.plugins] };
+  if (b.instructions !== undefined) {
+    if (typeof b.instructions !== "string" || b.instructions.length > 4000) return "instructions must be a string of at most 4000 characters";
+    next.instructions = b.instructions;
+  }
+  for (const k of ["skills", "plugins"] as const) {
+    if (b[k] === undefined) continue;
+    const v = b[k];
+    if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) return `${k} must be an array of ids`;
+    const known = catalogIds(k === "skills" ? "skill" : "plugin");
+    const bad = (v as string[]).find((x) => !known.has(x));
+    if (bad) return `unknown ${k === "skills" ? "skill" : "plugin"} ${bad}`;
+    next[k] = [...new Set(v as string[])];
+  }
+  return next;
+}
+
 interface MockUnit extends SpawnRequest {
   sessionId: string;
+  loadout: Loadout;
   createdAt: number;
   orderId: string | null;               // order whose script is playing
   timers: { order: Timer[]; chat: Timer[] };
@@ -70,7 +111,7 @@ function ensureUnit(id: string, spec?: Partial<SpawnRequest>): MockUnit {
     u = {
       id, name: spec?.name ?? id, model: spec?.model ?? "mock", effort: spec?.effort ?? "medium",
       role: spec?.role ?? "worker", team: spec?.team ?? null,
-      sessionId: `mock-${id}`, createdAt: Date.now(), orderId: null,
+      sessionId: `mock-${id}`, createdAt: Date.now(), orderId: null, loadout: DEFAULT_LOADOUT(),
       timers: { order: [], chat: [] }, log: [],
     };
     units.set(id, u);
@@ -92,7 +133,8 @@ function play(u: MockUnit, req: SendRequest) {
   const slot = order ? u.timers.order : u.timers.chat;
   if (order) u.orderId = req.orderId ?? null;
   const demo = config.script === "demo";
-  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames, demo, learnings, review: config.review });
+  // loadout: without the gbrain plugin the unit makes no gbrain calls; skills and standing orders show up in the script
+  const steps = buildScript(u.id, u.name, req, { loadout: u.loadout, errorRate: config.fail, noGbrain: config.noGbrain || !u.loadout.plugins.includes("gbrain"), mcpRate: config.mcpNames, demo, learnings, review: config.review });
   const speed = config.speed;
   for (const s of steps) {
     const t = setTimeout(() => {
@@ -131,6 +173,7 @@ const server = Bun.serve({
       if (m === "GET" && url.pathname === "/events") return sse(req, srv);
       if (m === "POST" && url.pathname === "/debug/reset") { const n = learnings.length; learnings = []; console.log(`demo memory cleared (${n})`); return json({ ok: true, cleared: n }); }
       if (m === "GET" && url.pathname === "/debug/learnings") return json(learnings);
+      if (m === "GET" && url.pathname === "/catalog") return json({ items: CATALOG });
       if (url.pathname === "/debug/config") {
         if (m === "GET") return json({ ok: true, config, learnings: learnings.length });
         if (m === "POST") {
@@ -164,9 +207,25 @@ const server = Bun.serve({
           if (m === "PATCH") {
             const u = units.get(id);
             if (!u) return fail("unknown unit", 404);
-            const b = await body<{ team?: number | null }>(req);
+            const b = await body<{ team?: number | null; loadout?: unknown; model?: unknown; effort?: unknown }>(req);
             if (!b) return fail("json body required");
+            const next = b.loadout !== undefined ? mergeLoadout(u.loadout, b.loadout) : u.loadout;
+            if (typeof next === "string") return fail(next);
+            if (b.model !== undefined && (typeof b.model !== "string" || !b.model.trim())) return fail("model must be a non-empty string");
+            if (b.effort !== undefined && !["low", "medium", "high"].includes(b.effort as string)) return fail("effort must be low, medium or high");
             if (b.team !== undefined) u.team = b.team;
+            const changed = b.loadout !== undefined || b.model !== undefined || b.effort !== undefined;
+            if (changed) {
+              u.loadout = next;
+              if (b.model !== undefined) u.model = (b.model as string).trim();
+              if (b.effort !== undefined) u.effort = b.effort as string;
+              // the visible marker a real bridge shows after re-applying a session config
+              const bits = [`model ${u.model} (${u.effort})`, `skills: ${u.loadout.skills.map(nameOf).join(", ") || "none"}`, `plugins: ${u.loadout.plugins.map(nameOf).join(", ") || "none"}`];
+              if (u.loadout.instructions) bits.push(`standing orders: "${u.loadout.instructions.replace(/\s+/g, " ").slice(0, 80)}"`);
+              emit({ type: "activity", unitId: u.id, kind: "message", text: `Loadout changed: ${bits.join("; ")}.` });
+              console.log(`loadout ${u.id} ${JSON.stringify({ model: u.model, effort: u.effort, ...u.loadout, instructions: u.loadout.instructions.length })}`);
+              return json({ ok: true, loadout: u.loadout, model: u.model, effort: u.effort, applied: "live" });
+            }
             return json({ ok: true });
           }
           if (m === "DELETE") {

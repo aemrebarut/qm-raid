@@ -85,6 +85,7 @@ export interface ScriptOpts {
   review?: "loop" | "approve" | "changes"; // reviewer verdict; loop (default): CHANGES on the first review of a run
                                            // (no verdict in the previous work yet), APPROVED after that
   now?: number;
+  loadout?: { instructions: string; skills: string[] }; // the unit's loadout: orders open with a note on skills and standing orders
 }
 
 export interface Learning { slug: string; component: string; unitId: string; unitName: string; text: string }
@@ -133,6 +134,12 @@ export function buildScript(unitId: string, unitName: string, req: SendRequest, 
     : opts.demo && !failed && !opts.noGbrain
       ? demoScript(unitId, unitName, o, req.orderId!, opts.learnings ?? [], opts.now ?? Date.now(), rand)
       : orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
+  const lo = opts.loadout;
+  if (isOrderSend(req) && lo && (lo.skills.length || lo.instructions.trim()) && steps.length) {
+    const bits = [...(lo.skills.length ? [`skills ${lo.skills.join(", ")}`] : []), ...(lo.instructions.trim() ? [`standing orders "${lo.instructions.replace(/\s+/g, " ").trim().slice(0, 60)}"`] : [])];
+    steps.splice(1, 0, { at: Math.max(1, Math.round(steps[0]!.at / 2 + 150)), event: { type: "activity", unitId, orderId: req.orderId, kind: "thinking", text: `Loadout: ${bits.join("; ")}.` } });
+    steps.sort((a, b) => a.at - b.at);
+  }
   const gb = (e: BridgeEvent) => e.type === "activity" && !!e.tool?.startsWith("gbrain.");
   if (opts.noGbrain) return steps.filter((s) => !gb(s.event));
   if (rand() < (opts.mcpRate ?? 0)) {
@@ -305,14 +312,16 @@ function heraldScript(unitId: string, unitName: string, o: OrderInfo, orderId: s
     [0.62, a("tool", "Searching GBrain for the house tone for customer updates", "gbrain.search", { query: "house tone customer update", slugs: [] })],
     [0.80, a("message", `Update drafted for ${to}: plain words, no blame, one clear next step.`)],
   ];
+  // the reply starts with the update itself (the board shows it as the customer message)
   const text = [
-    `${unitName}: customer update for ${issue}, to ${to}.`,
     `Subject: Fixed: ${o.title ?? `${comp} issue ${issue}`}`,
+    `To: ${to}`,
     names.length === 1 ? `Hi ${names[0]} team,` : "Hi there,",
     `What broke: ${c.broke}.`,
     `What we fixed: ${c.fixed}.`,
     `What you need to do: ${c.action}`,
     "Thanks for your patience; reply to this email if anything still looks off.",
+    `${unitName}, for the Lumen team (${issue})`,
   ].join("\n");
   return finish(seq, unitId, orderId, text, 5000 + Math.floor(rand() * 1500), 1200 + Math.floor(rand() * 1800));
 }

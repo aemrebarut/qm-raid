@@ -174,6 +174,32 @@ function addRow(ex: Exhibit, err?: string, p?: Placed) {
   box.appendChild(d);
 }
 
+/** Frame every exhibit: project the bounds into the camera, zoom to fit the area right of the sidebar. */
+function fitAll() {
+  const box = new THREE.Box3();
+  // cells, not object bounds (particle pools and beams have huge or stale bounds)
+  for (const p of placed) {
+    const h = (p.ex.span ?? 3) / 2;
+    box.expandByPoint(p.center.clone().add(new THREE.Vector3(-h, 0, -h))).expandByPoint(p.center.clone().add(new THREE.Vector3(h, Math.min(h * 1.6, 3), h)));
+  }
+  const c = box.getCenter(new THREE.Vector3()).setY(0);
+  lookAt(c, 1);
+  camera.updateMatrixWorld();
+  const v = new THREE.Vector3(), lo = new THREE.Vector2(Infinity, Infinity), hi = new THREE.Vector2(-Infinity, -Infinity);
+  for (let i = 0; i < 8; i++) {
+    v.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).applyMatrix4(camera.matrixWorldInverse);
+    lo.min(new THREE.Vector2(v.x, v.y)); hi.max(new THREE.Vector2(v.x, v.y));
+  }
+  const W = window.innerWidth, a = W / window.innerHeight, side = Math.min(300, W * 0.3);
+  const zoom = Math.min((VIEW_H * a * ((W - side) / W) * 0.92) / (hi.x - lo.x), (VIEW_H * 0.9) / (hi.y - lo.y), 3);
+  // centre the bounds in the area right of the sidebar
+  const midX = (lo.x + hi.x) / 2, midY = (lo.y + hi.y) / 2;
+  const shiftX = midX - ((side / 2) / W) * ((VIEW_H * a) / zoom);
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  lookAt(c.clone().addScaledVector(right, shiftX).addScaledVector(up, midY), zoom);
+}
+
 async function load() {
   const all: Exhibit[] = [];
   for (const path of Object.keys(mods).sort()) {
@@ -205,15 +231,8 @@ async function load() {
   }
   const f = focusName ? placed.find((p) => p.ex.name.toLowerCase() === focusName.toLowerCase()) : undefined;
   if (f) lookAt(f.center, 2.4);
-  else if (placed.length) {
-    const box = new THREE.Box3();
-    for (const p of placed) box.expandByObject(p.pivot);
-    const size = box.getSize(new THREE.Vector3());
-    // iso footprint: ground diagonal across the screen, height adds half
-    const wide = (size.x + size.z) * Math.SQRT1_2 + 2, tall = (size.x + size.z) * 0.36 + size.y + 2;
-    const a = window.innerWidth / window.innerHeight;
-    lookAt(box.getCenter(new THREE.Vector3()).setY(0), Math.min((VIEW_H * a * 0.8) / wide, VIEW_H / tall, 2.4));
-  } else lookAt(new THREE.Vector3(), 1);
+  else if (placed.length) fitAll();
+  else lookAt(new THREE.Vector3(), 1);
   (window as any).showroom = { placed, scene, camera, renderer, lookAt };
 }
 load();

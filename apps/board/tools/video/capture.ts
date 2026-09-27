@@ -124,13 +124,16 @@ class Clip {
 
   named: { t: number; name: string; x?: number; y?: number; [k: string]: unknown }[] = [];
   failures: { t: number; text: string }[] = [];
+  /** Units and camps this clip drives: only their engine events become named editor events (others stay raw). */
+  focus = new Set<string>();
+  clickAt = 0;
   /** A failure note for the reviewer and editor (timeouts, API fallbacks, errors). */
   note_(text: string) { this.failures.push({ t: (Date.now() - this.t0) / 1000, text }); say(`[${this.name}] NOTE ${text}`); }
   lastXY: { x: number; y: number } | null = null;
 
   /** A scripted action: goes to the raw marks and, under the same name, to the editor's named events at the cursor. */
-  mark(label: string, extra: Record<string, unknown> = {}, xy: { x: number; y: number } | null = this.lastXY) {
-    const t = Date.now() - this.t0;
+  mark(label: string, extra: Record<string, unknown> = {}, xy: { x: number; y: number } | null = this.lastXY, atMs = Date.now()) {
+    const t = atMs - this.t0;
     this.marks.push({ t, label, ...extra });
     this.named.push({ t: t / 1000, ...extra, name: label.replace(/-/g, "_"), ...(xy ? { x: xy.x, y: xy.y } : {}) });
     say(`[${this.name}] ${(t / 1000).toFixed(1)}s ${label}${Object.keys(extra).length ? " " + JSON.stringify(extra) : ""}`);
@@ -155,6 +158,8 @@ class Clip {
 
   private named_(e: Ev, t: number) {
     const uid = e.unitId ?? e.order?.unitId;
+    const ids = [uid, e.order?.targetId, e.run?.targetId, e.target?.id, e.fromUnitId, e.toUnitId].filter(Boolean);
+    if (!ids.some((id) => this.focus.has(id))) return;
     switch (e.type) {
       case "memory.recall": return this.note(t, "recall_beam", { unitId: uid, slugs: e.slugs }, ["unit", uid]);
       case "memory.remember": return this.note(t, "remember_orb", { unitId: uid, slug: e.slug }, ["unit", uid]);
@@ -167,9 +172,9 @@ class Clip {
           const lines = [...reply.matchAll(/^[\s*>_#-]*VERDICT:\s*(APPROVED|CHANGES)\b.*$/gim)];
           const last = lines.at(-1);
           const v = last ? (last[1].toUpperCase() === "APPROVED" ? "verdict_approved" : "verdict_changes") : "reply";
-          const extra: Record<string, unknown> = { orderId: e.order.id, unitId: uid, source: e.order.source, text: reply.slice(0, 600) };
+          const extra: Record<string, unknown> = { orderId: e.order.id, unitId: uid, source: e.order.source, nodeId: e.order.nodeId, text: reply.slice(0, 600) };
           if (last) extra.verdictLine = last[0].trim().slice(0, 200);
-          else if (e.order.source === "workflow") extra.verdictNote = "no VERDICT line: if this was the reviewer step the engine counts it as approved by default";
+          else if (e.order.source === "workflow" && /review|judge/i.test(String(e.order.nodeId ?? ""))) extra.verdictNote = "no VERDICT line: if this was the reviewer step the engine counts it as approved by default";
           return this.note(t, v, extra, ["unit", uid]);
         }
         if (st === "failed" || st === "cancelled") return this.note(t, `order_${st}`, { orderId: e.order.id, unitId: uid }, ["unit", uid]);
@@ -265,6 +270,7 @@ async function clickAt(c: Clip, p: { x: number; y: number }, button: "left" | "r
   c.lastXY = p;
   await glide(c, p.x, p.y);
   await wait(120);
+  c.clickAt = Date.now();
   for (const m of mods) await c.page.keyboard.down(m);
   await c.page.mouse.click(p.x, p.y, { button });
   for (const m of mods) await c.page.keyboard.up(m);
@@ -309,11 +315,11 @@ async function orderCamp(c: Clip, unitIds: string[], near?: { x: number; y: numb
   for (const t of openTargets(s, near).slice(0, 6)) {
     const p = await posOf(c, "target", t.id, t.pos);
     if (!p) continue;
-    claimed.add(t.id);
+    claimed.add(t.id); c.focus.add(t.id);
     await glide(c, p.x, p.y, 30);
     await wait(350); // crosshair hover
     await clickAt(c, p, "right");
-    c.mark("order", { targetId: t.id, issue: t.issue, title: t.title, unitIds }, p);
+    c.mark("order", { targetId: t.id, issue: t.issue, title: t.title, unitIds }, p, c.clickAt);
     if (has("debug")) await c.page.screenshot({ path: join(archiveDir, `${c.name}-rightclick.png`) });
     // The click must have produced an order within 3 s, else order through the API (same engine call the board makes).
     let ok = false;
@@ -330,7 +336,7 @@ async function orderCamp(c: Clip, unitIds: string[], near?: { x: number; y: numb
   }
   const t = openTargets(s, near)[0];
   if (!t) { c.mark("no-open-camp"); return null; }
-  claimed.add(t.id);
+  claimed.add(t.id); c.focus.add(t.id);
   await js(c.page, `raid.api.order(${JSON.stringify(teamId != null ? { teamId, targetId: t.id } : { unitIds, targetId: t.id })})`);
   c.mark("order-api", { targetId: t.id, issue: t.issue, unitIds });
   return t.id;
@@ -355,7 +361,7 @@ const clips: Record<string, Script> = {
     const s = await state(c.page);
     const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s)[0];
     if (!u) return c.mark("no-idle-unit");
-    claimed.add(u.id);
+    claimed.add(u.id); c.focus.add(u.id);
     const pages0 = s.memory?.pages;
     await selectUnit(c, u);
     c.mark("select", { unitId: u.id, unitName: u.name, class: u.class, model: u.model });
@@ -388,15 +394,17 @@ const clips: Record<string, Script> = {
       const sp = c.waitFor((e) => e.type === "unit.spawned" && e.unit?.class === RW, 20000, "warden spawned");
       await js(c.page, `raid.api.spawn({ class: ${JSON.stringify(RW)} })`);
       const e = await sp;
-      if (e) { c.mark("warden-trained", { unitId: e.unit.id, unitName: e.unit.name }, null); await wait(4500); s = await state(c.page); warden = s.units.find((u: any) => u.id === e.unit.id); }
+      if (e) { c.focus.add(e.unit.id); c.mark("warden-trained", { unitId: e.unit.id, unitName: e.unit.name }, null); await wait(4500); s = await state(c.page); warden = s.units.find((u: any) => u.id === e.unit.id); }
     }
     let pool = idleUnits(s, (x) => x.team == null && x.id !== warden?.id && x.class !== RW);
     if (pool.length < (warden ? 2 : 3)) pool = idleUnits(s, (x) => x.id !== warden?.id && x.class !== RW);
     const three = warden ? [...pool.slice(0, 2), warden] : pool.slice(0, 3); // member order = planner, implementer, reviewer
     if (three.length < 3) return c.mark("need-3-idle-units");
-    three.forEach((u: any) => claimed.add(u.id));
+    three.forEach((u: any) => { claimed.add(u.id); c.focus.add(u.id); });
     for (let i = 0; i < 3; i++) { await selectUnit(c, three[i], i > 0); await wait(350); }
     c.mark("select3", { unitIds: three.map((u: any) => u.id), unitNames: three.map((u: any) => u.name), reviewer: three[2].id, reviewerClass: three[2].class });
+    // Overlapping sprites can add a neighbour on shift-click: pin the selection to exactly these three, in role order.
+    await js(c.page, `raid.bus.select(${JSON.stringify(three.map((u: any) => u.id))})`);
     await wait(900);
     if (!(await clickHud(c, ".hud-wf-form"))) await js(c.page, "document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f' }))");
     c.mark("form-team");
@@ -404,8 +412,20 @@ const clips: Record<string, Script> = {
     const sel: string[] = await js(c.page, "raid.bus.selection.units");
     const teamId: number | undefined = await js(c.page, `raid.store.unit(${JSON.stringify(three[0].id)})?.team`);
     await clickHud(c, ".hud-wf-card", "Trio");
-    c.mark("trio", { teamId, selected: sel });
-    await wait(2200);
+    await wait(1200);
+    // The Rule Warden must hold the reviewer node; if the preset bound someone else, set the trio graph explicitly.
+    const wf = teamId != null ? await js(c.page, `raid.store.team(${teamId})?.workflow`) : null;
+    const rev = wf?.nodes?.find((n: any) => n.role === "reviewer");
+    if (teamId != null && (!rev || rev.unitId !== three[2].id)) {
+      c.note_(`trio reviewer was ${rev?.unitId ?? "none"}, rebinding to ${three[2].id}`);
+      const nodes = [{ id: "planner", role: "planner", unitId: three[0].id }, { id: "implementer", role: "implementer", unitId: three[1].id }, { id: "reviewer", role: "reviewer", unitId: three[2].id }];
+      const edges = [{ from: "planner", to: "implementer", on: "done" }, { from: "implementer", to: "reviewer", on: "done" }, { from: "reviewer", to: "implementer", on: "changes" }];
+      await js(c.page, `raid.api.setWorkflow(${teamId}, { workflow: ${JSON.stringify({ preset: "trio", entry: "planner", nodes, edges, maxLoops: 2 })} })`);
+      await wait(800);
+    }
+    const bound = teamId != null ? await js(c.page, `raid.store.team(${teamId})?.workflow?.nodes?.map(n => n.role + ':' + n.unitId)`) : null;
+    c.mark("trio", { teamId, selected: sel, roles: bound }, c.lastXY);
+    await wait(1200);
     const cx = Math.round(three.reduce((a: number, u: any) => a + u.pos.x, 0) / 3), cy = Math.round(three.reduce((a: number, u: any) => a + u.pos.y, 0) / 3);
     const tid = await orderCamp(c, three.map((u: any) => u.id), { x: cx, y: cy }, teamId);
     if (!tid) return;
@@ -469,7 +489,7 @@ const clips: Record<string, Script> = {
     const sp = await spawned;
     if (!sp) return;
     const uid = sp.unit.id;
-    claimed.add(uid);
+    claimed.add(uid); c.focus.add(uid);
     c.mark("spawned", { unitId: uid, unitName: sp.unit.name });
     await wait(1000);
     await js(c.page, "raid.bus.clear()");
@@ -495,7 +515,7 @@ const clips: Record<string, Script> = {
     if (!(await clickHud(c, "button.nix-btn"))) await js(c.page, "raid.api.spawnTarget({})");
     c.mark("new-issue");
     const sp = await spawned;
-    if (sp) { claimed.add(sp.target.id); c.mark("camp-spawned", { targetId: sp.target.id, issue: sp.target.issue, title: sp.target.title }); }
+    if (sp) { claimed.add(sp.target.id); c.focus.add(sp.target.id); c.mark("camp-spawned", { targetId: sp.target.id, issue: sp.target.issue, title: sp.target.title }); }
     await js(c.page, `(() => { const t = raid.store.getState().targets.find(x => x.id === ${JSON.stringify(sp?.target?.id ?? "")}); if (t) raid.bus.focusTile(t.pos.x, t.pos.y); })()`);
     await wait(3500);
     await js(c.page, "raid.bus.clear()");
@@ -505,7 +525,7 @@ const clips: Record<string, Script> = {
     const team = s.teams.filter((t: any) => !t.workflow && t.members.filter((m: string) => idle.has(m)).length >= 1)
       .sort((a: any, b: any) => b.members.filter((m: string) => idle.has(m)).length - a.members.filter((m: string) => idle.has(m)).length)[0];
     if (!team) return c.mark("no-team-for-autopilot");
-    team.members.forEach((m: string) => claimed.add(m));
+    team.members.forEach((m: string) => { claimed.add(m); c.focus.add(m); });
     const proposals: Ev[] = [];
     const firstProp = c.waitFor((e) => { if (e.type === "order.proposed") proposals.push(e); return e.type === "order.proposed"; }, 40000, "order.proposed");
     const toggled = await clickHud(c, `button.hud-team[title^=${JSON.stringify(`${team.name}, group ${team.id}`)}]`);
@@ -540,7 +560,7 @@ const clips: Record<string, Script> = {
   async loadout(c) {
     const s = await state(c.page);
     const u = idleUnits(s, (x) => x.class === "knight")[0] ?? idleUnits(s)[0] ?? s.units[0];
-    claimed.add(u.id);
+    claimed.add(u.id); c.focus.add(u.id);
     await selectUnit(c, u);
     c.mark("select", { unitId: u.id, unitName: u.name });
     await wait(1200);
@@ -578,6 +598,29 @@ const clips: Record<string, Script> = {
 // Recording: a CDP screencast (JPEG frames with swap timestamps) re-timed by ffmpeg into a 30 fps H.264 mp4.
 // (Playwright recordVideo hung on close under Bun and is capped near 1 Mbit/s VP8.) The clip starts once the board is
 // loaded, so t = 0 is a ready board; marker times are shifted to the first frame.
+// Hero (Emre 15:58): the first 2 s of the video, sharp gameplay for the thumbnail. No cursor; several units march at
+// once while the others still work; recording runs until the first recall beam plus 5 s (the editor picks 2 s).
+clips.hero = async (c) => {
+  await c.page.mouse.move(W + 50, H + 50); // cursor off screen
+  await js(c.page, "raid.bus.clear()");
+  await wait(1500);
+  const s = await state(c.page);
+  const us = idleUnits(s).slice(0, Number(flag("hero-units", "3")));
+  const used = new Set<string>();
+  for (const u of us) {
+    const t = openTargets(s, u.pos).find((x: any) => !used.has(x.id));
+    if (!t) break;
+    used.add(t.id); claimed.add(t.id); claimed.add(u.id); c.focus.add(t.id); c.focus.add(u.id);
+    await js(c.page, `raid.api.order(${JSON.stringify({ unitIds: [u.id], targetId: t.id })})`);
+    c.mark("hero-order", { unitId: u.id, targetId: t.id, issue: t.issue }, null);
+    await wait(250);
+  }
+  // Any unit's recall counts (units busy from the earlier clips too).
+  const beam = await c.waitFor((e) => e.type === "memory.recall", Number(flag("hero-wait", "60000")), "hero recall beam");
+  if (beam) c.mark("hero-beam", { unitId: beam.unitId }, null);
+  await wait(5000);
+};
+
 async function run(name: string, script: Script) {
   const c = new Clip(name);
   const frameDir = join(tmpdir(), `raid-cap-${take}-${name}-${process.pid}`);
@@ -585,6 +628,7 @@ async function run(name: string, script: Script) {
   mkdirSync(frameDir, { recursive: true });
   c.ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   await c.ctx.addInitScript(CURSOR);
+  await c.ctx.addInitScript(HELPERS); // survives a dev-server reload mid-clip
   c.page = await c.ctx.newPage();
   c.page.on("pageerror", (e: Error) => { if (c.t0) c.note_("pageerror: " + e.message.slice(0, 200)); });
   await c.page.goto(url, { waitUntil: "load" });
@@ -647,7 +691,7 @@ async function run(name: string, script: Script) {
   return doc;
 }
 
-const order = ["orders", "teams", "forge", "autopilot", "loadout"].filter((n) => !only.length || only.includes(n));
+const order = ["orders", "teams", "forge", "autopilot", "loadout", "hero"].filter((n) => !only.length || only.includes(n));
 const results: any[] = [];
 try {
   if (has("parallel") && order.includes("teams")) {

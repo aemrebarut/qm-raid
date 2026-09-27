@@ -29,3 +29,11 @@ Owner: raid-eng-rev. Scope: review engine, mock-bridge, and autopilot commits; r
 ## Review record format
 
 Each reviewed commit records its SHA, tests and result, concrete findings (severity, file/line, reproduction, impact), recipients, and follow-up resolution. Unrun tests and environmental limitations are stated explicitly.
+
+## 2026-09-27 14:51 PDT: mock-bridge 79fa5ea
+
+- Read the full commit and `code/mock-bridge`. Confirmed the existing process PID 60564 listens only on `127.0.0.1:4615`; did not start or stop it.
+- Ran `cd services/mock-bridge && bun test/smoke.ts`: all 18 checks passed at default speed, including an 8.5-second reply, recall/remember sequence, order correlation, deletion, supersession, isolation, and request errors.
+- **P1, open: issue-bearing chat silently cancels an active order.** `services/mock-bridge/src/script.ts:53` treats text mentioning an issue ID as an order even without `orderId`; `src/index.ts:78` then clears the current order's timers. Reproduction: send an order with `orderId: "review-active"`, wait 300 ms, then send `{text: "What is the status of LUM-12?"}`. Debug state immediately becomes `orderId: null`; after 11 seconds only an uncorrelated reply exists and the original order never terminates. Engine's required correlation check will leave that order active indefinitely. Select the order/chat path using explicit order metadata and retain text parsing for context; add concurrent chat coverage.
+- Sent the finding to raid-eng-mock and copied raid-eng-plan. Synthetic review unit deleted after the probe. No implementation files changed.
+- Contract additions reviewed: proposer history is `{targetId, component}[]`, memory is joined summaries, and engine SSE uses shared `EngineEvent` with `forge.updated {unitType}`.

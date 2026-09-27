@@ -103,3 +103,20 @@ test("loadout: GBrain is locked on, and plugins sent always include it", async (
     expect(patches[0].body).toEqual({ plugins: ["gbrain", "linear"] });
   } finally { (globalThis as any).fetch = orig; }
 });
+
+test("loadout: Apply is held on the real-QM backend (Analyst HOLD)", async () => {
+  const orig = (globalThis as any).fetch;
+  try {
+    const { store, view, patches, tick } = await setup();
+    store.getState().backend = "qm";
+    view.show("u1");
+    await tick();
+    (view.root.querySelector('[data-effort="low"]') as any).click();
+    expect(view.dirty).toBe(true);
+    const apply = [...view.root.querySelectorAll("button")].find((b) => b.textContent === "Apply") as any;
+    expect(apply.disabled).toBe(true);
+    expect(view.root.querySelector(".ldo-status")!.textContent).toBe("Loadout edits on live agents return in a few minutes");
+    expect(await view.apply()).toBe(false);
+    expect(patches.length).toBe(0);
+  } finally { (globalThis as any).fetch = orig; }
+});

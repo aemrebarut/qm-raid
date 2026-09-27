@@ -20,6 +20,9 @@ const MODEL_LABEL = (m: string) => m.replace(/^gpt-/, "").replace("-", " ");
 const EFFORT_LABEL: Record<string, string> = { auto: "Auto", low: "Low", medium: "Med", high: "High", xhigh: "Max" };
 /** GBrain is the Library, the core of the game: always on for every unit (Analyst, 15:5x). */
 const LOCKED_PLUGIN = "gbrain";
+/** Analyst HOLD (16:03): no loadout PATCH on live QM agents until raid-qm-impl's all clear. Set to false then. */
+const LIVE_HOLD = true;
+const LIVE_HOLD_HINT = "Loadout edits on live agents return in a few minutes";
 
 interface Draft { instructions: string; skills: string[]; plugins: string[]; model: string; effort: string }
 
@@ -126,6 +129,9 @@ export class LoadoutView {
     this.show(null);
   }
 
+  /** Apply is held on the real-QM backend (see LIVE_HOLD). */
+  get held(): boolean { return LIVE_HOLD && this.store.getState().backend === "qm"; }
+
   get dirty(): boolean { return !!this.base && !!this.draft && Object.keys(loadoutPatch(this.base, this.draft)).length > 0; }
 
   show(unitId: string | null): void {
@@ -149,7 +155,7 @@ export class LoadoutView {
 
   /** Sends the changed fields. Resolves true when the engine accepted them. */
   async apply(): Promise<boolean> {
-    if (!this.unitId || !this.base || !this.draft) return false;
+    if (!this.unitId || !this.base || !this.draft || this.held) return false;
     const body = loadoutPatch(this.base, this.draft);
     if (!Object.keys(body).length) return false;
     const id = this.unitId, gen = ++this.applyGen;
@@ -309,10 +315,12 @@ export class LoadoutView {
   private refreshFoot(): void {
     if (!this.applyBtn) return;
     const applying = this.state === "applying";
-    this.applyBtn.disabled = applying || !this.dirty;
+    this.applyBtn.disabled = applying || !this.dirty || this.held;
     this.applyBtn.textContent = applying ? "Applying" : "Apply";
     this.revertBtn.disabled = applying || !this.dirty;
     this.status.dataset.state = this.state;
+    if (this.held && !applying) { this.applyBtn.title = LIVE_HOLD_HINT; this.status.textContent = LIVE_HOLD_HINT; return; }
+    this.applyBtn.title = "Send the changes to this agent";
     this.status.textContent = this.state === "applying" ? "Sending to the agent"
       : this.state === "applied" ? "Applied"
       : this.state === "error" ? this.errText || "Not applied"

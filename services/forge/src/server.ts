@@ -130,6 +130,7 @@ const modelServer = createModelServer(RIVER_DIR);
 const units = createUnits({
   types: () => [...types.values()].map((t) => ({ id: t.id, name: t.name, description: t.description, status: t.status, model: t.model, baseModel: t.baseModel ?? null })),
   ask: (r) => modelServer.ask(r),
+  store: join(RUNS_DIR, "units.json"),
 });
 
 Bun.serve({

@@ -1,6 +1,7 @@
 // Forge units: the Bridge API (docs/CONTRACT.md) on the forge port. Each unit runs a small agent loop on its
 // type's trained model: recall from the brain, answer, remember the learning, reply. The gbrain steps are
 // emitted as gbrain.recall / gbrain.remember tool activity so the engine animates them like QM agents.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import type { AskRequest } from "./model";
 
 export interface UnitTypeView { id: string; name: string; description: string; status: string; model: string | null; baseModel: string | null }
@@ -22,8 +23,24 @@ export function sections(text: string): Record<string, string> {
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.join(" ").replace(/\s+/g, " ").trim()]));
 }
 
-export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string> }) {
+// The engine's order prompt is written for QM agents (tool-call instructions, page lists). A forge unit's loop does
+// recall and remember itself, so the model only sees the order facts, like its training orders.
+export function orderFacts(text: string): string {
+  const keep = text.split("\n").filter((l) => !/^\s*(GBrain pages:|Lumen is a synthetic product)/i.test(l));
+  return keep.join("\n").trim() || text;
+}
+
+export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string>; store: string }) {
   const units = new Map<string, ForgeUnit>();
+  // Persisted so a forge restart keeps each unit bound to its type (the engine spawns a unit only once).
+  const persist = () => {
+    try { writeFileSync(opts.store, JSON.stringify([...units.values()].map(({ id, name, typeId, team }) => ({ id, name, typeId, team })))); }
+    catch (e) { console.error("[forge] units save failed", e); }
+  };
+  if (existsSync(opts.store)) {
+    try { for (const u of JSON.parse(readFileSync(opts.store, "utf8"))) units.set(u.id, { ...u, orderId: null, gen: 0 }); }
+    catch (e) { console.error("[forge] units load failed", e); }
+  }
   const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
   const enc = new TextEncoder();
 
@@ -43,6 +60,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
     if (!u) {
       u = { id, name: b.name ?? id, typeId: pickType(b.model, b.typeId ?? b.class)?.id ?? null, team: b.team ?? null, orderId: null, gen: 0 };
       units.set(id, u);
+      persist();
     }
     return u;
   }
@@ -82,7 +100,7 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
       if (!live()) return;
       act("thinking", `Thinking with the ${t.name} model (${t.model.startsWith("dry-run:") ? "dry run" : "River"})`);
       const answer = await opts.ask({ typeId: t.id, name: t.name, description: t.description, model: t.model, baseModel: t.baseModel,
-        order: text, context, targetId: b.targetId });
+        order: isOrder ? orderFacts(text) : text, context, targetId: b.targetId });
       if (!live()) return;
       const sec = sections(answer);
       const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")
@@ -138,10 +156,10 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         const u = units.get(id);
         if (!u) return json({ ok: false, error: "unknown unit" }, 404);
         const b = await body();
-        if (b && b.team !== undefined) u.team = b.team;
+        if (b && b.team !== undefined) { u.team = b.team; persist(); }
         return json({ ok: true });
       }
-      if (m === "DELETE") { const u = units.get(id); if (u) { u.gen++; units.delete(id); } return json({ ok: true }); }
+      if (m === "DELETE") { const u = units.get(id); if (u) { u.gen++; units.delete(id); persist(); } return json({ ok: true }); }
     } else if (parts.length === 3 && parts[2] === "send" && m === "POST") {
       const b = (await body()) as SendBody | null;
       if (!b || typeof b.text !== "string" || !b.text.trim()) return json({ ok: false, error: "text required" }, 400);

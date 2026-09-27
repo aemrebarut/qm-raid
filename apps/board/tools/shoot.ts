@@ -61,7 +61,7 @@ const states: { name: string; setup: string; settle?: number; keys?: string[]; c
   // Emre's formation flow (routes from raid-ui-hud). All local: team changes go through store.apply, never the engine.
   { name: "formation", setup: `raid.bus.select(['u1', 'u4'])`, keys: ["f"], settle: 1200 },
   { name: "presets", setup: `(() => { const t = raid.store.team(1); raid.store.apply({ seq: 1e9, ts: Date.now(), type: 'team.updated', team: { ...t, workflow: null } }); raid.bus.select(t.members); })()`, settle: 1200 },
-  { name: "rolepick", setup: `raid.bus.select(raid.store.team(1).members)`, click: "Planner", settle: 900 },
+  { name: "rolepick", setup: `(() => { const t = raid.store.team(1); raid.bus.select(t.members); if (t.workflow) setTimeout(() => raid.bus.setCommand({ kind: 'role', teamId: t.id, nodeId: t.workflow.entry }), 300); })()`, settle: 1200 },
   // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
   { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500 },
   // --live only: real orders and a forged unit on the mock test engine 4618 (art gate: units selectable and movable).

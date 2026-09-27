@@ -66,3 +66,7 @@
 .pnl-steps span.now { background: rgba(230,140,40,.35); color: #5a2c00; font-weight: 700; }
 .pnl-bar { height: 8px; background: rgba(90,60,20,.18); border: 1px solid rgba(90,60,20,.35); }
 .pnl-bar i { display: block; height: 100%; background: linear-gradient(90deg, #e07a1f, #ffcc55); transition: width .6s ease; }
+.pnl-type-failed { opacity: .7; }
+.pnl-type-failed .pnl-bar i { background: #b34a3a; }
+.pnl-failed summary { cursor: pointer; margin: 2px 0 4px; }
+.pnl-failed { display: flex; flex-direction: column; gap: 6px; }

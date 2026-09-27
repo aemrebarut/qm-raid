@@ -42,30 +42,40 @@ export class ForgePanel {
   show(): void { this.render(); }
 
   render(): void {
-    const types = this.store.getState().unitTypes.filter((t) => t.source === "forge");
+    const all = this.store.getState().unitTypes.filter((t) => t.source === "forge");
+    const rank = (t: UnitType) => (t.status === "ready" ? 0 : t.status === "failed" ? 2 : 1);
+    const types = all.filter((t) => t.status !== "failed").sort((a, b) => rank(a) - rank(b));
+    const failed = all.filter((t) => t.status === "failed");
     this.list.replaceChildren();
-    if (!types.length) { this.list.append(h("p", { class: "pnl-hint" }, "None yet. Forge one on the left.")); return; }
-    for (const t of types) {
-      const extra = t as UnitType & { evalScore?: number | null; examples?: number; description?: string };
-      const pct = Math.round((t.status === "ready" ? 1 : t.progress) * 100);
-      const stageIdx = STAGES.indexOf(t.status);
-      const train = h("button", {
-        class: "pnl-btn", disabled: t.status !== "ready",
-        onclick: async () => {
-          const r = await api.spawn({ class: t.id });
-          this.bus.toast(r.ok ? `A ${t.name} walks out of the Forge` : r.error, r.ok ? "info" : "error");
-        },
-      }, "Train unit");
-      this.list.append(h("div", { class: `pnl-type pnl-type-${t.status}` },
-        h("div", { class: "pnl-row" }, h("b", {}, t.name), h("span", { class: "pnl-sub" }, ` ${t.status}`), h("span", { style: "flex:1" }), train),
-        h("div", { class: "pnl-steps" }, ...STAGES.map((s, i) => h("span", { class: i < stageIdx || t.status === "ready" ? "done" : i === stageIdx ? "now" : "" }, s))),
-        h("div", { class: "pnl-bar" }, h("i", { style: `width:${pct}%` })),
-        h("div", { class: "pnl-sub" },
-          t.stage || "",
-          extra.examples != null ? ` · ${extra.examples} examples` : "",
-          extra.evalScore != null ? ` · eval ${(extra.evalScore * 100).toFixed(0)}%` : "",
-          t.model ? ` · ${t.model}` : ""),
-        t.status === "failed" ? h("div", { class: "pnl-err" }, "Training failed.") : null));
+    if (!all.length) { this.list.append(h("p", { class: "pnl-hint" }, "None yet. Forge one on the left.")); return; }
+    for (const t of types) this.list.append(this.card(t));
+    if (failed.length) {
+      const box = h("details", { class: "pnl-failed" }, h("summary", { class: "pnl-sub" }, `Failed (${failed.length})`));
+      for (const t of failed) box.append(this.card(t));
+      this.list.append(box);
     }
+  }
+
+  private card(t: UnitType): HTMLElement {
+    const extra = t as UnitType & { evalScore?: number | null; examples?: number; description?: string };
+    const pct = Math.round((t.status === "ready" ? 1 : t.progress) * 100);
+    const stageIdx = STAGES.indexOf(t.status);
+    const train = h("button", {
+      class: "pnl-btn", disabled: t.status !== "ready",
+      onclick: async () => {
+        const r = await api.spawn({ class: t.id });
+        this.bus.toast(r.ok ? `A ${t.name} walks out of the Forge` : r.error, r.ok ? "info" : "error");
+      },
+    }, "Train unit");
+    return h("div", { class: `pnl-type pnl-type-${t.status}` },
+      h("div", { class: "pnl-row" }, h("b", {}, t.name), h("span", { class: "pnl-sub" }, ` ${t.status}`), h("span", { style: "flex:1" }), train),
+      h("div", { class: "pnl-steps" }, ...STAGES.map((s, i) => h("span", { class: i < stageIdx || t.status === "ready" ? "done" : i === stageIdx ? "now" : "" }, s))),
+      h("div", { class: "pnl-bar" }, h("i", { style: `width:${pct}%` })),
+      h("div", { class: "pnl-sub" },
+        t.stage || "",
+        extra.examples != null ? ` · ${extra.examples} examples` : "",
+        extra.evalScore != null ? ` · eval ${(extra.evalScore * 100).toFixed(0)}%` : "",
+        t.model ? ` · ${t.model}` : ""),
+      t.status === "failed" ? h("div", { class: "pnl-err" }, "Training failed.") : null);
   }
 }

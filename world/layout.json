@@ -1,0 +1,25 @@
+{
+  "grid": {"w": 24, "h": 24},
+  "components": [
+    {"id": "billing", "name": "Billing", "zone": {"x": 1, "y": 1, "w": 8, "h": 7}},
+    {"id": "auth", "name": "Auth", "zone": {"x": 15, "y": 1, "w": 8, "h": 7}},
+    {"id": "onboarding", "name": "Onboarding", "zone": {"x": 1, "y": 10, "w": 7, "h": 7}},
+    {"id": "search", "name": "Search", "zone": {"x": 16, "y": 10, "w": 7, "h": 7}}
+  ],
+  "buildings": [
+    {"id": "library", "kind": "gbrain", "x": 11, "y": 11},
+    {"id": "barracks", "kind": "barracks", "x": 20, "y": 20},
+    {"id": "forge", "kind": "river", "x": 3, "y": 20}
+  ],
+  "targets": [
+    {"id": "t101", "issue": "LUM-101", "pos": {"x": 3, "y": 3}},
+    {"id": "t102", "issue": "LUM-102", "pos": {"x": 6, "y": 3}},
+    {"id": "t103", "issue": "LUM-103", "pos": {"x": 4, "y": 6}},
+    {"id": "t104", "issue": "LUM-104", "pos": {"x": 17, "y": 3}},
+    {"id": "t105", "issue": "LUM-105", "pos": {"x": 20, "y": 5}},
+    {"id": "t106", "issue": "LUM-106", "pos": {"x": 3, "y": 12}},
+    {"id": "t107", "issue": "LUM-107", "pos": {"x": 5, "y": 15}},
+    {"id": "t108", "issue": "LUM-108", "pos": {"x": 18, "y": 12}},
+    {"id": "t109", "issue": "LUM-109", "pos": {"x": 20, "y": 15}}
+  ]
+}

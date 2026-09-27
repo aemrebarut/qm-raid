@@ -26,6 +26,10 @@ test("recall, remember, page and scroll finish and call back once", () => {
   fx.page(a, b, 0.2, () => calls.page++);
   fx.scroll(b, a, { color: "#c0392b" }, () => calls.scroll++);
   fx.handoffScroll(a, b, { verdict: "changes", label: "changes requested" });
+  fx.portal(new THREE.Vector3(1, 0, 1));
+  fx.orderPing(new THREE.Vector3(), "#ff0000");
+  fx.burst(new THREE.Vector3(), "#ffffff");
+  fx.text(a, "hello");
   run(fx, 10);
   expect(calls).toEqual({ orb: 1, page: 1, scroll: 1 });
   expect(fx.active).toBe(0);

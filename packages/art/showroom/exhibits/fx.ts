@@ -125,6 +125,7 @@ const orders: Exhibit = {
       actions: {
         "order ping": ping,
         "invalid ping": bad,
+        "spawn portal": () => s.fx.portal(s.at(-1.2, 0, -1.0)),
         "toggle select": () => { sel = !sel; rings[0].set({ selected: sel, color: RED }); rings[1].set({ selected: sel, color: RED }); },
         "hover blue": () => rings[2].set({ hovered: true, selected: false }),
         "select blue": () => rings[2].set({ selected: true, color: BLUE }),

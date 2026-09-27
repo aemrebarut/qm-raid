@@ -318,6 +318,89 @@ export class ArtFx {
     this.glow.emit(p, n, { color, speed: 1.8, life: 0.45, gravity: 5, up: 1.2, size: 0.08 });
   }
 
+  /**
+   * Ground portal for a newly spawned issue (board parity): cracks run out, a dark rift opens with a turning violet
+   * rune ring, dirt is thrown up and motes rise while the camp climbs out.
+   */
+  portal(p: THREE.Vector3, color: THREE.ColorRepresentation = "#9a5cff", dur = 1.8) {
+    const g = new THREE.Group();
+    g.position.copy(p).setY(p.y + 0.03);
+    const riftM = new THREE.MeshBasicMaterial({ map: this.riftTex(), color: "#ffffff", transparent: true, depthWrite: false, toneMapped: false });
+    const rift = new THREE.Mesh(flatGeo(), riftM);
+    const runes = new THREE.Mesh(flatGeo(), additive(color, runeCircleTexture()));
+    const rim = new THREE.Mesh(flatGeo(), additive(color, softRingTexture()));
+    rift.renderOrder = 3; runes.renderOrder = rim.renderOrder = 4;
+    runes.position.y = rim.position.y = 0.01;
+    g.add(rift, runes, rim);
+    const crackMat = new THREE.MeshBasicMaterial({ color: "#1b1208", transparent: true, depthWrite: false, toneMapped: false });
+    const crackGeo = new THREE.BoxGeometry(0.05, 0.01, 1);
+    const cracks: THREE.Mesh[] = [];
+    for (let i = 0; i < 8; i++) {
+      const c = new THREE.Mesh(crackGeo, crackMat);
+      c.userData.a = (i / 8) * Math.PI * 2 + Math.sin(i * 12.9) * 0.3;
+      c.userData.len = 0.9 + ((i * 37) % 10) / 18;
+      c.rotation.y = c.userData.a;
+      cracks.push(c);
+      g.add(c);
+    }
+    const glow = glowSprite(color, 2);
+    glow.position.y = 0.35;
+    g.add(glow);
+    this.group.add(g);
+    this.glow.emit(this.tmp.copy(p).setY(p.y + 0.2), 26, { color, speed: 1.2, life: 1.1, gravity: -0.8, up: 2, size: 0.1, spread: 0.3 });
+    this.puff.emit(this.tmp.copy(p).setY(p.y + 0.1), 14, { color: "#8f7552", speed: 1.6, up: 0.9, gravity: 1.5, life: 0.9, size: 0.2, grow: 2, drag: 2, spread: 0.3 });
+    let moteAcc = 0;
+    this.add({
+      t: 0, dur,
+      update: (k, dt) => {
+        const open = easeOut(Math.min(1, k / 0.35));
+        const fade = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4;
+        for (const c of cracks) {
+          const len = c.userData.len * open;
+          c.scale.set(1, 1, len);
+          c.position.set(Math.sin(c.userData.a) * len / 2, 0.005, Math.cos(c.userData.a) * len / 2);
+        }
+        crackMat.opacity = 0.85 * fade;
+        rift.scale.setScalar(0.2 + 1.4 * open);
+        riftM.opacity = 0.9 * fade;
+        runes.scale.setScalar(0.3 + 1.5 * open);
+        runes.rotation.y = -k * 5;
+        (runes.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade;
+        rim.scale.setScalar(0.3 + 1.8 * open + k * 0.4);
+        (rim.material as THREE.MeshBasicMaterial).opacity = fade;
+        glow.material.opacity = fade * (0.7 + Math.sin(k * 30) * 0.15);
+        if (k < 0.7 && (moteAcc += dt) > 0.05) {
+          moteAcc = 0;
+          this.glow.emit(this.tmp.copy(g.position), 2, { color, speed: 0.3, life: 1, gravity: -1.2, up: 2, size: 0.08, spread: 0.5 });
+        }
+      },
+      done: () => {
+        this.group.remove(g);
+        crackGeo.dispose(); crackMat.dispose(); riftM.dispose();
+        (runes.material as THREE.Material).dispose(); (rim.material as THREE.Material).dispose(); glow.material.dispose();
+      },
+    });
+  }
+
+  /** Dark rift disc with a violet inner glow (soft edge). */
+  private riftTex() {
+    if (this._riftTex) return this._riftTex;
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(40,10,70,1)");
+    g.addColorStop(0.55, "rgba(18,8,30,0.95)");
+    g.addColorStop(0.8, "rgba(18,8,30,0.6)");
+    g.addColorStop(1, "rgba(18,8,30,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 64, 64);
+    this._riftTex = new THREE.CanvasTexture(c);
+    this._riftTex.colorSpace = THREE.SRGBColorSpace;
+    return this._riftTex;
+  }
+  private _riftTex: THREE.CanvasTexture | null = null;
+
   // =====================================================================================
   // Art effects
   // =====================================================================================

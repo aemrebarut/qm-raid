@@ -1,4 +1,6 @@
 // qm-bridge: Bridge API (docs/CONTRACT.md) on 127.0.0.1:4614 backed by real QM agents, one QM session per unit.
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { BridgeEvent, SendRequest, SpawnRequest } from "../../../contract/types.ts";
 import {
   PORTAL_URL,
@@ -17,8 +19,8 @@ import { normalizeTool, toolArgs, toolText } from "./tools.ts";
 
 const PORT = Number(process.env.PORT ?? 4614);
 const HOST = "127.0.0.1";
-// A fresh thread namespace per bridge start, so a reset demo does not continue old conversations.
-const BOOT = Date.now().toString(36);
+// Unit map survives bridge restarts so in-flight units keep their QM sessions (gitignored).
+const STATE_FILE = join(import.meta.dir, "..", ".state", "units.json");
 
 interface Send extends SendRequest {
   intro?: boolean;
@@ -31,6 +33,35 @@ interface Unit extends SpawnRequest {
 }
 
 const units = new Map<string, Unit>();
+const alive = (u: Unit): boolean => units.get(u.id) === u;
+
+function saveUnits(): void {
+  try {
+    mkdirSync(dirname(STATE_FILE), { recursive: true });
+    writeFileSync(STATE_FILE, JSON.stringify([...units.values()], null, 1));
+  } catch (err) {
+    console.warn(`[qm-bridge] cannot save unit map: ${String((err as Error)?.message ?? err)}`);
+  }
+}
+
+function loadUnits(): void {
+  try {
+    const rows = JSON.parse(readFileSync(STATE_FILE, "utf8")) as Unit[];
+    for (const r of rows) if (r?.id && r.threadRef) units.set(r.id, { ...r, queue: r.queue ?? [], active: r.active ?? null });
+    if (units.size) console.log(`[qm-bridge] restored ${units.size} unit(s) from ${STATE_FILE}`);
+    for (const u of units.values()) {
+      const a = u.active;
+      if (a?.runId) void follow(u, a.send, a.runId); // resume the in-flight run: its terminal event still arrives
+      else if (a) {
+        u.active = null; // crashed before QM accepted the turn: send it again
+        u.queue.unshift(a.send);
+      }
+      pump(u);
+    }
+  } catch {
+    // no saved state yet
+  }
+}
 let codexModels: string[] = [];
 const CODEX_EFFORTS = ["auto", "low", "medium", "high", "xhigh"];
 
@@ -38,8 +69,16 @@ const CODEX_EFFORTS = ["auto", "low", "medium", "high", "xhigh"];
 const clients = new Set<ReadableStreamDefaultController<Uint8Array>>();
 const enc = new TextEncoder();
 
+// Events emitted while no client is connected (engine restarting, bridge just restarted) are replayed to the next client.
+const backlog: Uint8Array[] = [];
+
 function emit(ev: BridgeEvent): void {
   const line = enc.encode(`data: ${JSON.stringify(ev)}\n\n`);
+  if (clients.size === 0) {
+    backlog.push(line);
+    if (backlog.length > 500) backlog.shift();
+    return;
+  }
   for (const c of clients) {
     try {
       c.enqueue(line);
@@ -60,6 +99,7 @@ setInterval(() => {
 }, 15_000);
 
 function activity(u: Unit, send: Send, kind: "message" | "tool" | "thinking" | "error", text: string, extra: { tool?: string; args?: unknown } = {}): void {
+  if (!alive(u)) return; // deleted or replaced units stay silent
   emit({ type: "activity", unitId: u.id, ...(send.orderId ? { orderId: send.orderId } : {}), kind, text, ...extra });
 }
 
@@ -86,25 +126,31 @@ function turnOptions(u: Unit): { model?: string; thinkingLevel?: string } {
 function enqueue(u: Unit, s: Send): void {
   u.queue.push(s);
   pump(u);
+  saveUnits();
+}
+
+/** Start a send as the unit's active run; rejects if QM does not accept the turn. */
+async function begin(u: Unit, s: Send): Promise<void> {
+  u.active = { runId: "", send: s };
+  const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u));
+  if (!u.active || u.active.send !== s) return;
+  u.active.runId = runId;
+  if (alive(u)) saveUnits();
+  void follow(u, s, runId);
 }
 
 function pump(u: Unit): void {
-  if (u.active || u.queue.length === 0 || !units.has(u.id)) return;
+  if (u.active || u.queue.length === 0 || !alive(u)) return;
   const s = u.queue.shift()!;
-  u.active = { runId: "", send: s };
-  startTurn(u.threadRef, header(u, s), turnOptions(u))
-    .then(({ runId }) => {
-      if (!u.active || u.active.send !== s) return;
-      u.active.runId = runId;
-      void follow(u, s, runId);
-    })
-    .catch((err) => finish(u, s, { ok: false, text: `QM unavailable: ${String(err?.message ?? err)}` }));
+  begin(u, s).catch((err) => finish(u, s, { ok: false, text: `QM unavailable: ${String(err?.message ?? err)}` }));
 }
 
 // Exactly one terminal event per send.
 function finish(u: Unit, s: Send, outcome: { ok: boolean; text: string }): void {
   if (!u.active || u.active.send !== s) return;
   u.active = null;
+  if (!alive(u)) return;
+  saveUnits();
   if (s.intro) {
     // The intro is not an order: its text was streamed as chat; never a terminal event.
     if (!outcome.ok) activity(u, s, "error", outcome.text);
@@ -142,7 +188,7 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
 
   const seenTools = new Set<string>();
   for (let attempt = 0; attempt < 5; attempt++) {
-    if (!u.active || u.active.send !== s) return;
+    if (!alive(u) || !u.active || u.active.send !== s) return;
     let finished = false;
     try {
       const res = await fetch(`${PORTAL_URL}/api/runs/${encodeURIComponent(runId)}/events`, {
@@ -211,7 +257,10 @@ async function follow(u: Unit, s: Send, runId: string): Promise<void> {
         const out = outcomeOf(run);
         if (out.ok && out.text.length > text.length) text = out.text;
         flush(true);
-        if (!u.sessionId && run.result?.sessionId) u.sessionId = run.result.sessionId;
+        if (!u.sessionId && run.result?.sessionId) {
+          u.sessionId = run.result.sessionId;
+          if (alive(u)) saveUnits();
+        }
         finish(u, s, out);
         return;
       }
@@ -253,27 +302,38 @@ async function createUnit(b: Partial<SpawnRequest> & { id: string }): Promise<Un
     effort: b.effort ?? "",
     role: b.role ?? "worker",
     team: b.team ?? null,
-    threadRef: await threadRefFor(`${b.id}-${BOOT}`),
+    // Every spawn gets a fresh QM session (the epoch suffix), so a reset demo never continues old conversations.
+    threadRef: await threadRefFor(`${b.id}-${Date.now().toString(36)}`),
     sessionId: null,
     queue: [],
     active: null,
   };
   units.set(u.id, u);
+  saveUnits();
   return u;
+}
+
+function retire(u: Unit): void {
+  units.delete(u.id);
+  u.queue = [];
+  u.active = null;
+  saveUnits();
+  if (u.sessionId) archiveSession(u.sessionId).catch(() => {});
 }
 
 async function spawn(req: Request): Promise<Response> {
   const b = await body<SpawnRequest>(req);
   if (!b.id) return json({ ok: false, error: "id required" }, 400);
   const existing = units.get(b.id);
-  if (existing) return json({ sessionId: existing.sessionId, sessionUrl: existing.sessionId ? sessionUrl(existing.sessionId) : null });
-  let u: Unit;
+  if (existing) retire(existing); // re-spawn after an engine reset: fresh session, old one archived
+  let u: Unit | null = null;
   try {
     u = await createUnit({ ...b, id: b.id });
+    await begin(u, { text: introText(u), intro: true }); // fails fast when QM is down
   } catch (err) {
+    if (u && alive(u)) retire(u);
     return json({ ok: false, error: `QM unavailable: ${String((err as Error)?.message ?? err)}` }, 502);
   }
-  enqueue(u, { text: introText(u), intro: true });
   // The session exists as soon as QM accepts the turn; look it up briefly so "Open in QM" works at once.
   for (let i = 0; i < 8 && !u.sessionId; i++) {
     await Bun.sleep(250);
@@ -281,6 +341,8 @@ async function spawn(req: Request): Promise<Response> {
   }
   return json({ sessionId: u.sessionId, sessionUrl: u.sessionId ? sessionUrl(u.sessionId) : null });
 }
+
+loadUnits();
 
 const server = Bun.serve({
   hostname: HOST,
@@ -301,6 +363,9 @@ const server = Bun.serve({
           ctl = c;
           clients.add(c);
           c.enqueue(enc.encode(": open\n\n"));
+          const replay = backlog.splice(0);
+          for (const line of replay) c.enqueue(line);
+          if (replay.length) console.log(`[qm-bridge] replayed ${replay.length} buffered event(s) to a new /events client`);
         },
         cancel() {
           clients.delete(ctl);
@@ -333,14 +398,14 @@ const server = Bun.serve({
       }
       if (m === "PATCH" && !parts[2]) {
         const b = await body<{ team: number | null }>(req);
-        if ("team" in b) u.team = b.team ?? null;
+        if ("team" in b) {
+          u.team = b.team ?? null;
+          saveUnits();
+        }
         return json({ ok: true });
       }
       if (m === "DELETE" && !parts[2]) {
-        units.delete(u.id);
-        u.queue = [];
-        u.active = null;
-        if (u.sessionId) archiveSession(u.sessionId).catch(() => {});
+        retire(u);
         return json({ ok: true });
       }
     }

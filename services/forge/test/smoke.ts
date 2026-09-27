@@ -11,7 +11,8 @@ if (bad.status !== 400) fail(`empty POST /types should be 400, got ${bad.status}
 
 const created = await fetch(`${BASE}/types`, {
   method: "POST", headers: { "content-type": "application/json" },
-  body: JSON.stringify({ name: "Smoke Ranger", description: "triages billing refund bugs and replies in the house tone" }),
+  // dryRun: never start real River training from a smoke test
+  body: JSON.stringify({ name: "Smoke Ranger", description: "triages billing refund bugs and replies in the house tone", dryRun: true }),
 }).then((r) => r.json());
 if (!created.ok || !created.typeId) fail(`POST /types: ${JSON.stringify(created)}`);
 console.log("created", created.typeId);

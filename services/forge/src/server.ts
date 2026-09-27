@@ -11,6 +11,7 @@ interface ForgeType {
   id: string; name: string; description: string; status: Status; progress: number; stage: string;
   examples: number; evalScore: number | null; model: string | null; createdAt: number;
   baseModel: string | null; // internal: River base model of the checkpoint, used to serve forge units
+  dryRun: boolean; // internal: forced dry run (smoke tests), never touches River
 }
 
 const PORT = Number(process.env.FORGE_PORT ?? 4612);
@@ -52,14 +53,14 @@ function slugify(name: string): string {
 }
 
 function publicType(t: ForgeType) {
-  const { createdAt, baseModel, ...rest } = t;
+  const { createdAt, baseModel, dryRun, ...rest } = t;
   return rest;
 }
 
 async function runPipeline(t: ForgeType) {
   const args = [PYTHON, "-m", "forge.pipeline", "--type-id", t.id, "--name", t.name, "--description", t.description,
     "--out", join(RUNS_DIR, t.id)];
-  if (MODE === "dry") args.push("--dry-run", "--dry-seconds", String(DRY_SECONDS));
+  if (MODE === "dry" || t.dryRun) args.push("--dry-run", "--dry-seconds", String(DRY_SECONDS));
   let proc;
   try {
     proc = Bun.spawn(args, { cwd: RIVER_DIR, stdout: "pipe", stderr: "inherit", env: process.env });
@@ -118,13 +119,13 @@ Bun.serve({
       if (req.method === "GET" && path === "/health") return json({ ok: true, service: "forge", mode: MODE });
       if (req.method === "GET" && path === "/types") return json([...types.values()].map(publicType));
       if (req.method === "POST" && path === "/types") {
-        const body = (await req.json().catch(() => ({}))) as { name?: string; description?: string };
+        const body = (await req.json().catch(() => ({}))) as { name?: string; description?: string; dryRun?: boolean };
         const name = String(body.name ?? "").trim();
         const description = String(body.description ?? "").trim();
         if (!name || !description) return json({ ok: false, error: "name and description are required" }, 400);
         const t: ForgeType = { id: slugify(name), name: name.slice(0, 60), description: description.slice(0, 600),
           status: "generating", progress: 0, stage: "queued", examples: 0, evalScore: null, model: null, createdAt: Date.now(),
-          baseModel: null };
+          baseModel: null, dryRun: body.dryRun === true };
         types.set(t.id, t);
         save();
         runPipeline(t).catch((e) => { Object.assign(t, { status: "failed", stage: String(e).slice(0, 160) }); save(); });

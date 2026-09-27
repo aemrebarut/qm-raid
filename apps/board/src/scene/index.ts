@@ -3,17 +3,17 @@
 import * as THREE from "three";
 import { commandTarget, commandUnit, type Bus, type Store, type State, type HoverRef } from "../core";
 import { IsoCamera, MAP_SIZE } from "./camera";
-import { buildTerrain, layoutKey, makeRouter } from "./terrain";
-import { buildZones } from "./zones";
+import { buildTerrain, layoutKey, makeRouter, zoneGate } from "./terrain";
+import { buildZones, zoneColor } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView, setFootprints, setRouter } from "./units";
 import { TargetView } from "./targets";
 import { Fx, type FxApi } from "./fx";
-import { ArtFx, lighting } from "../../../../packages/art/src";
+import { ArtFx, lighting, makeWorld, type WorldArt } from "../../../../packages/art/src";
 import { artOn } from "./art";
 import { WorkflowLayer } from "./workflow";
 import { ArrowLayer } from "./arrows";
-import { disposeTree, tileToWorld } from "./util";
+import { disposeTree, hash, makeEngraved, tileToWorld } from "./util";
 
 export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -58,6 +58,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
   const targets = new Map<string, TargetView>();
   const buildings = new Map<string, BuildingView>();
   let layout = "";
+  let artWorld: WorldArt | null = null; // packages/art terrain, zones and props (flag 'terrain')
   let userCamera = false; // once the user pans or zooms, stop auto framing
   const justSpawned = new Set<string>(); // ids from unit.spawned events, consumed by reconcile
   const spawnedTargets = new Set<string>(); // ids from target.spawned events: the camp rises out of a portal
@@ -71,8 +72,20 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     const key = layoutKey(s.components, s.buildings);
     if (key !== layout) {
       layout = key;
-      for (const c of [...world.children]) { world.remove(c); disposeTree(c); }
-      world.add(buildTerrain(s.components, s.buildings, s.targets), buildZones(s.components, s.buildings));
+      for (const c of [...world.children]) { if (c !== artWorld?.object3d) disposeTree(c); world.remove(c); }
+      artWorld?.dispose();
+      artWorld = null;
+      if (artOn("terrain")) {
+        artWorld = buildArtWorld(s, key);
+        world.add(artWorld.object3d);
+        s.components.forEach((c) => {
+          const label = makeEngraved(c.name, 0.44);
+          label.position.set(c.zone.x + c.zone.w / 2, 0.55, c.zone.y + 0.1);
+          world.add(label);
+        });
+      } else {
+        world.add(buildTerrain(s.components, s.buildings, s.targets), buildZones(s.components, s.buildings));
+      }
       setRouter(makeRouter(s.components, s.buildings));
       setFootprints(s.buildings.map((b) => ({ x: b.x, y: b.y })));
       for (const b of buildings.values()) { buildingsG.remove(b.group); disposeTree(b.group); }
@@ -527,6 +540,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       rig?.follow(iso.target);
       bus.emit("view", { corners: iso.viewCorners() }); // minimap view frame, at most once per frame
     }
+    artWorld?.tick(t, dt);
     for (const v of units.values()) v.tick(t, dt);
     for (const v of targets.values()) v.tick(t, dt);
     for (const v of buildings.values()) v.tick(t, dt);
@@ -578,4 +592,22 @@ function artFx(): FxApi {
     scroll: (from, to, opts, onArrive) => { a.scroll(from, to, opts, onArrive); },
     portal: (p, color, dur) => { a.portal(p, color, dur); },
   };
+}
+
+/** packages/art world for the layout: roads to the Library, walled zones with gates, props, clear staging plaza. */
+function buildArtWorld(s: State, key: string) {
+  const lib = s.buildings.find((b) => b.kind === "gbrain") ?? { x: 11, y: 11 };
+  const blocked: [number, number][] = [];
+  for (const t of s.targets) blocked.push([t.pos.x, t.pos.y]);
+  for (const u of s.units) blocked.push([u.pos.x, u.pos.y]);
+  for (let i = -4; i <= 4; i++) for (let j = -4; j <= 4; j++) blocked.push([lib.x + i, lib.y + j]); // idle staging plaza
+  for (const b of s.buildings) for (let i = -1; i <= 1; i++) blocked.push([b.x + i, b.y + 2]); // door rows
+  return makeWorld({
+    size: MAP_SIZE,
+    seed: hash(key),
+    library: { x: lib.x, y: lib.y },
+    buildings: s.buildings.filter((b) => b.kind !== "gbrain").map((b) => ({ x: b.x, y: b.y })),
+    zones: s.components.map((c, i) => ({ ...c.zone, color: zoneColor(i), name: c.name, gate: zoneGate(c, lib) })),
+    blocked,
+  });
 }

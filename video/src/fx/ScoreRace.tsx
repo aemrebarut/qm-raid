@@ -27,7 +27,7 @@ export const ScoreRace: React.FC<ScoreRaceProps> = ({
   const pop = usePop(f ?? 0, 0, 13, 220);
   if (f === null) return null;
   const grow = 28; // frames per bar
-  const barW = width - 260;
+  const barW = width - 300;
   const best = Math.max(...rows.map((r) => r.value));
   const done = 6 + grow;
   return (
@@ -62,7 +62,7 @@ export const ScoreRace: React.FC<ScoreRaceProps> = ({
                   </div>
                 ) : null}
               </div>
-              <div style={{ width: 90, textAlign: "right", fontFamily: HEAD, fontWeight: 900, fontSize: 44, color: t.hi, textShadow: `0 3px 0 ${FX.outline}` }}>
+              <div style={{ width: 120, textAlign: "right", fontFamily: HEAD, fontWeight: 900, fontSize: 44, color: t.hi, textShadow: `0 3px 0 ${FX.outline}` }}>
                 {v.toFixed(digits)}
               </div>
               {lead ? <SparkleBurst f={f - done} x={130 + 16 + barW * (r.value / max)} y={35} count={8} radius={90} life={16} seed={`sr${i}`} /> : null}

@@ -12,7 +12,7 @@ import { ForgedBurst } from "./ForgedBurst";
 import { Mascot, Mood } from "./Mascot";
 import { PlusPop } from "./PlusPop";
 import { FocusLines, ImpactFlash, shake } from "./primitives";
-import { ScoreRace } from "./ScoreRace";
+import { ScoreRace, ScoreRaceProps } from "./ScoreRace";
 import { SpeedWipe } from "./SpeedWipe";
 import { Stamp } from "./Stamp";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
@@ -53,6 +53,20 @@ const PunchOverlay: React.FC<CueProps> = ({ x = 960, y = 540 }) => {
   );
 };
 
+// "0.917 vs 0.557|Held-out review orders": trained then base, exactly as written; optional title after "|".
+function scoreText(text?: string): Partial<ScoreRaceProps> {
+  if (!text) return {};
+  const [nums, title] = text.split("|");
+  const vals = nums.match(/\d*\.?\d+/g) ?? [];
+  if (vals.length < 2) return title ? { title } : {};
+  const digits = Math.max(...vals.map((v) => (v.split(".")[1] ?? "").length));
+  return {
+    digits,
+    rows: [{ label: "Trained", value: Number(vals[0]), tone: "river" }, { label: "Base", value: Number(vals[1]), tone: "danger" }],
+    ...(title ? { title: title.trim() } : {}),
+  };
+}
+
 export const CUES: Record<string, Cue> = {
   punchIn: { frames: PUNCH_FRAMES, C: PunchOverlay, note: "x,y focus; also drives punchTransform" },
   callout: { frames: 60, C: callout("gold", "LOOK!"), note: "gold ring+arrow; text 'LABEL|small line'" },
@@ -61,7 +75,7 @@ export const CUES: Record<string, Cue> = {
   pagePop: { frames: 40, C: ({ text, x = 960, y = 540 }) => React.createElement(PlusPop, { from: 0, x, y, text: text ?? "+1 page" }), note: "memory landed" },
   approvedStamp: { frames: 60, C: ({ text, x, y }) => React.createElement(Stamp, { from: 0, text: text ?? "APPROVED!", x, y }), note: "reviewer verdict" },
   forgedBurst: { frames: 75, C: ({ text, x, y }) => React.createElement(ForgedBurst, { from: 0, name: text, x, y }), note: "text = unit name" },
-  scoreRace: { frames: 90, C: ({ x, y }) => React.createElement(ScoreRace, { from: 0, x, y }), note: "trained 0.82 vs base 0.42; x,y top-left" },
+  scoreRace: { frames: 90, C: ({ text, x, y }) => React.createElement(ScoreRace, { from: 0, x, y, ...scoreText(text) }), note: "text '0.917 vs 0.557|Held-out review orders' (trained first); x,y top-left" },
   comboOrders: { frames: 60, C: combo("3 ORDERS"), note: "text '7 ORDERS'; x,y right edge/top" },
   comboTokens: { frames: 60, C: combo("12480 TOKENS"), note: "text '12480 TOKENS'" },
   mascot: { frames: 60, C: mascot("cheer"), note: "cheer; text = bubble; x>960 puts it bottom right" },

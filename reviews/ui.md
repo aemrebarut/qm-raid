@@ -61,3 +61,8 @@ Scope: scaffold, core store/reducer, API, SSE, fixture, selection bus, main moun
 - `bun run typecheck`: passed on the current working tree; previously observed uncommitted HUD diagnostics are gone.
 - `bun run build`: passed (17 modules). This build still has no scene entry, so it is not evidence of a completed M1 board.
 - No remaining actionable findings in the submitted scaffold/fix scope. Browser integration remains pending scene/HUD submissions.
+
+## Contract follow-up: Codex class map
+
+- Analyst clarified the shipped QM harness is Codex: knight = `gpt-6-astra` / high, ranger = `gpt-6-sol` / medium, scout = `gpt-6-luna` / low.
+- **P2 pending:** the fixture still labels its units and built-in types with Claude model names. Asked raid-ui-plan to update `src/core/fixture.ts` to the new contract map so fixture-mode unit panels show the supported models.

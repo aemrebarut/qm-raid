@@ -16,7 +16,19 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+from functools import lru_cache
+from pathlib import Path
+
 from forge import datagen, env
+
+
+@lru_cache(maxsize=64)
+def context_cap(type_id: str) -> int:
+    """Per-type recall budget, written by the pipeline (reviewers need the house rules past the learnings)."""
+    try:
+        return int(json.loads((Path(__file__).resolve().parent.parent / "runs" / type_id / "profile.json").read_text())["contextCap"])
+    except Exception:
+        return 1500
 
 env.load()
 
@@ -45,7 +57,7 @@ def messages(req: dict) -> list[dict]:
     if (req.get("instructions") or "").strip():  # loadout: the commander's standing orders extend the trained prompt
         system += "\n\nStanding orders from your commander:\n" + req["instructions"].strip()[:4000]
     msgs = [{"role": "system", "content": system},
-            {"role": "user", "content": datagen.user_message(req["order"], req.get("context") or "")}]
+            {"role": "user", "content": datagen.user_message(req["order"], req.get("context") or "", context_cap(req["typeId"]))}]
     if req.get("followup"):  # a second turn on the same order, e.g. the reviewer verdict line
         msgs += [{"role": "assistant", "content": req.get("previous", "")}, {"role": "user", "content": req["followup"]}]
     return msgs

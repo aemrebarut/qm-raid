@@ -14,6 +14,8 @@ import random
 import time
 from pathlib import Path
 
+from forge import warden
+
 HEADINGS = ["Recall:", "Plan:", "Decision:", "Customer reply:", "Remember:"]
 
 
@@ -97,12 +99,22 @@ def evaluate(args, evalset: list[dict], checkpoint: str, out: Path, emit) -> tup
             trained = session.sample(prompts, checkpoint=checkpoint, **kw)
             base = session.sample(prompts, **kw)
             for row, tr, bs in zip(chunk, trained, base):
-                cust = row["meta"].get("customers", [])
-                rows.append({"order": row["messages"][1]["content"], "trained": tr[0].text, "base": bs[0].text,
-                             "trainedScore": score(tr[0].text, row["meta"], cust), "baseScore": score(bs[0].text, row["meta"], cust)})
+                meta, cust = row["meta"], row["meta"].get("customers", [])
+                if meta.get("profile") == "reviewer":  # review house style, plus verdict accuracy against the known key
+                    rows.append({"order": row["messages"][1]["content"], "trained": tr[0].text, "base": bs[0].text,
+                                 "trainedScore": warden.score(tr[0].text, meta), "baseScore": warden.score(bs[0].text, meta),
+                                 "trainedVerdict": warden.verdict_correct(tr[0].text, meta), "baseVerdict": warden.verdict_correct(bs[0].text, meta)})
+                else:
+                    rows.append({"order": row["messages"][1]["content"], "trained": tr[0].text, "base": bs[0].text,
+                                 "trainedScore": score(tr[0].text, meta, cust), "baseScore": score(bs[0].text, meta, cust)})
             emit(status="evaluating", progress=0.8 + 0.18 * len(rows) / len(evalset), stage=f"held-out prompts {len(rows)}/{len(evalset)} (trained and base)")
     ts = sum(x["trainedScore"] for x in rows) / len(rows)
     bs = sum(x["baseScore"] for x in rows) / len(rows)
+    metrics = []
+    if all("trainedVerdict" in x for x in rows):
+        metrics.append({"key": "verdict", "label": "Verdict accuracy (known key)",
+                        "trained": round(sum(x["trainedVerdict"] for x in rows) / len(rows), 3),
+                        "base": round(sum(x["baseVerdict"] for x in rows) / len(rows), 3)})
     (out / "eval.json").write_text(json.dumps({"trained": ts, "base": bs, "n": len(rows), "seconds": round(time.time() - t0, 1),
-                                               "rows": rows}, indent=2))
+                                               "metrics": metrics, "rows": rows}, indent=2))
     return round(ts, 3), round(bs, 3)

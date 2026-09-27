@@ -88,9 +88,9 @@ def load_contexts(brain_url: str, world: dict) -> dict:
     return out
 
 
-def user_message(order: str, context: str) -> str:
-    """The user turn for training, eval and serving (river/forge/serve.py uses this too)."""
-    return order + ("\n\nWhat the team brain knows:\n" + context[:1500] if context else "")
+def user_message(order: str, context: str, cap: int = 1500) -> str:
+    """The user turn for training, eval and serving (river/forge/serve.py uses this too, with the type's cap)."""
+    return order + ("\n\nWhat the team brain knows:\n" + context[:cap] if context else "")
 
 
 def _customers(t: dict, world: dict) -> str:
@@ -184,9 +184,9 @@ class RiverTeacher:
         import river_client as river
         return cls(river.Client(api_key=key), model)
 
-    def respond(self, spec: TypeSpec, user: str) -> str:
+    def respond(self, spec: TypeSpec, user: str, system: str | None = None) -> str:
         res = self.client.chat_complete(
-            [{"role": "system", "content": teacher_prompt(spec)}, {"role": "user", "content": user}],
+            [{"role": "system", "content": system or teacher_prompt(spec)}, {"role": "user", "content": user}],
             base_model=self.model, max_tokens=450, temperature=0.7,
             chat_template_kwargs={"enable_thinking": False}, timeout=120,
         )

@@ -14,12 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from forge import datagen, env
+from forge import datagen, env, warden
 
 env.load()
 
@@ -37,19 +38,31 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
     world = datagen.load_world(args.brain_url)
     emit(status="generating", progress=0.05, stage=f"world: {len(world['targets'])} issues, {len(world['components'])} components")
     spec = datagen.TypeSpec(args.type_id, args.name, args.description)
+    # Profile from the job description: reviewers and judges train on workflow review orders (forge/warden.py).
+    reviewer = bool(re.search(r"\b(review|reviewer|reviews|judge|judges|verdict)\b", f"{args.name} {args.description}", re.I))
+    cap = warden.CONTEXT_CAP if reviewer else 1500
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "profile.json").write_text(json.dumps({"profile": "reviewer" if reviewer else "unit", "contextCap": cap}))
     n_eval = max(12, args.examples // 5)
-    train_p, eval_p = datagen.build_split(spec, world, args.examples - n_eval, n_eval, seed=args.seed)
+    if reviewer:
+        train_p, eval_p = warden.build_split(world, args.examples - n_eval, n_eval, seed=args.seed)
+        emit(status="generating", progress=0.05, stage=f"reviewer profile: {len(train_p)} train and {len(eval_p)} held-out review orders, disjoint house rules")
+    else:
+        train_p, eval_p = datagen.build_split(spec, world, args.examples - n_eval, n_eval, seed=args.seed)
     prompts = train_p + eval_p
     contexts = {} if dry else datagen.load_contexts(args.brain_url, world)
     teacher = None if dry else datagen.RiverTeacher.from_env(args.teacher_model)
-    users = [datagen.user_message(p["order"], contexts.get(p["meta"]["targetId"], "")) for p in prompts]
+    users = [datagen.user_message(p["order"], contexts.get(p["meta"]["targetId"], ""), cap) for p in prompts]
+    rules_by_id = {r["id"]: r for r in warden.RULES}
+    teacher_system = datagen.system_prompt(spec) + "\n\n" + warden.TEACHER_STYLE
     responses: list[str | None] = [None] * len(prompts)
     fallbacks = 0
     if teacher is not None:
         emit(status="generating", progress=0.06, stage=f"teacher {args.teacher_model} writing {len(prompts)} examples")
         done = 0
         with ThreadPoolExecutor(max_workers=16) as pool:
-            futs = {pool.submit(teacher.respond, spec, u): i for i, u in enumerate(users)}
+            futs = {pool.submit(teacher.respond, spec, u + warden.teacher_key(prompts[i]["meta"], rules_by_id), teacher_system)
+                    if reviewer else pool.submit(teacher.respond, spec, u): i for i, u in enumerate(users)}
             for f in as_completed(futs):
                 i = futs[f]
                 try:
@@ -61,8 +74,13 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
                     emit(status="generating", progress=0.06 + 0.24 * done / len(prompts),
                          stage=f"teacher wrote {done}/{len(prompts)} examples", examples=done)
     rows: list[dict] = []
+    rejected = 0
     for i, p in enumerate(prompts):
         response = responses[i]
+        if reviewer and response is not None and not warden.agrees(response, p["meta"]):
+            response, rejected = None, rejected + 1  # teacher disagreed with the key: use the checked template
+        if response is None and reviewer:
+            response = warden.template(p["meta"], rules_by_id)
         if response is None:
             if teacher is not None:
                 fallbacks += 1
@@ -79,6 +97,8 @@ def stage_generate(args, out: Path, dry: bool) -> tuple[list[dict], list[dict]]:
         ], "meta": p["meta"]})
     if fallbacks:
         log(f"{fallbacks} examples fell back to the template generator")
+    if rejected:
+        log(f"{rejected} teacher reviews disagreed with the key and were replaced by the template")
     train, evalset = rows[:len(train_p)], rows[len(train_p):]
     out.mkdir(parents=True, exist_ok=True)
     for name, data in (("train.jsonl", train), ("eval.jsonl", evalset)):
@@ -139,10 +159,15 @@ def main() -> int:
             emit(status="ready", progress=1.0, model=model, evalScore=None, baseModel=args.base_model,
                  stage=f"ready: eval incomplete (judge graded {judged} of {total} pairs); style {style:.2f} vs base {base_style:.2f}")
             return 0
-        # evalScore blends house style (rubric) and groundedness (teacher judge) equally; both parts are in the stage text.
-        score, base_score = round((style + g) / 2, 3), round((base_style + bg) / 2, 3)
+        # evalScore is the plain mean of every metric: house style (rubric), any profile metric (reviewer: verdict
+        # accuracy against the known key) and groundedness (teacher judge). All parts are in the stage text.
+        extra = json.loads((out / "eval.json").read_text()).get("metrics", [])
+        parts = [("style", style, base_style)] + [(m["key"], m["trained"], m["base"]) for m in extra] + [("grounded", g, bg)]
+        score = round(sum(p[1] for p in parts) / len(parts), 3)
+        base_score = round(sum(p[2] for p in parts) / len(parts), 3)
+        detail = ", ".join(f"{k} {t:.2f} vs {b:.2f}" for k, t, b in parts)
         emit(status="ready", progress=1.0, model=model, evalScore=score, baseModel=args.base_model,
-             stage=f"ready: eval {score:.2f} vs base {base_score:.2f} (style {style:.2f} vs {base_style:.2f}, grounded {g:.2f} vs {bg:.2f})")
+             stage=f"ready: eval {score:.2f} vs base {base_score:.2f} ({detail})")
         return 0
     except Exception as e:  # report and exit non-zero; the service marks the type failed
         log(f"failed: {type(e).__name__}: {e}")

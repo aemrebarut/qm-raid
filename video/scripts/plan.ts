@@ -207,7 +207,9 @@ function plan(id: string, rule: Rule, doc: { duration: number; events: Ev[] }, e
   if (voAnchor.vo_teams_3b !== undefined && voAnchor.vo_teams_3 === undefined) voSwap.vo_teams_3 = "vo_teams_3b";
   // --warden: the take shows the Rule Warden reviewing (checked on the frames), so the line may name it.
   if (id === "teams" && process.argv.includes("--warden")) voSwap.vo_teams_2 = "vo_teams_2b";
-  return { id, src, sfx, voSwap, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
+  // Optional alt lines, used only if their section still fits (voPlace): the veto line needs a confirmed cancel.
+  const voAdd: string[] = voAnchor.vo_auto_3 !== undefined ? ["vo_auto_3"] : [];
+  return { id, src, sfx, voSwap, voAdd, segments: segs.map((g) => ({ ...g, src })), captions, fx, events, voAnchor, seconds: round(total, 2), holdRate, gapRate };
 }
 
 type Planned = NonNullable<ReturnType<typeof plan>>;
@@ -243,6 +245,9 @@ function insertIntercut(m: Planned, q: Planned, after: string) {
   m.sfx = shift(m.sfx);
   m.voAnchor = Object.fromEntries(Object.entries(m.voAnchor).map(([k, v]) => [k, v >= at ? round(v + dt, 2) : v]));
   m.seconds = round(m.seconds + dt, 2);
+  // the QM narration line starts with the intercut
+  m.voAnchor[`vo_${m.id}_qm`] = round(at + 0.2, 2);
+  m.voAdd = [...m.voAdd, `vo_${m.id}_qm`];
 }
 
 const dir = process.argv.slice(2).find((a) => !a.startsWith("--")) ?? join(import.meta.dir, "../public/clips");

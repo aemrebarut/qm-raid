@@ -42,9 +42,19 @@ export const placeVo = (tracks: VoTrack[], alts: VoTrack[]): Placed[] => {
     const t = (swap && alts.find((a) => idOf(a) === swap)) || t0;
     bySection.set(t0.section, [...(bySection.get(t0.section) ?? []), t]);
   }
-  for (const [sec, ts0] of bySection) {
-    const ts = [...ts0].sort((a, b) => a.offset - b.offset);
-    const len = sectionSeconds(sec);
+  // optional alt lines named by the EDL (QM intercut narration, confirmed veto); dropped if the section cannot fit them
+  const optional = new Set<VoTrack>();
+  for (const c of clips) {
+    for (const id of planned[c.id]?.voAdd ?? []) {
+      const a = alts.find((x) => idOf(x) === id);
+      if (a && bySection.has(c.id)) {
+        const t = { ...a, section: c.id };
+        optional.add(t);
+        bySection.get(c.id)!.push(t);
+      }
+    }
+  }
+  const solve = (sec: string, ts: VoTrack[], len: number) => {
     const anchors = ts.map((t) => planned[sec]?.voAnchor?.[idOf(t)]);
     let at = ts.map((t, i) => (anchors[i] !== undefined ? Math.max(1.1, anchors[i]! - 0.2) : t.offset));
     // forward: no overlap
@@ -54,12 +64,19 @@ export const placeVo = (tracks: VoTrack[], alts: VoTrack[]): Placed[] => {
       const limit = i === at.length - 1 ? len - 0.1 - ts[i].duration : at[i + 1] - GAP - ts[i].duration;
       at[i] = Math.min(at[i], limit);
     }
-    let how: Placed["how"] = anchors.some((a) => a !== undefined) ? "anchor" : "manifest";
-    if (!fits(ts, at, len)) {
-      at = ts.map((t) => t.offset);
-      how = "manifest";
+    return { ts, at, ok: fits(ts, at, len), how: (anchors.some((a) => a !== undefined) ? "anchor" : "manifest") as Placed["how"] };
+  };
+  const anchorOf = (sec: string, t: VoTrack) => planned[sec]?.voAnchor?.[idOf(t)] ?? t.offset;
+  for (const [sec, all] of bySection) {
+    const len = sectionSeconds(sec);
+    const sorted = (xs: VoTrack[]) => [...xs].sort((a, b) => anchorOf(sec, a) - anchorOf(sec, b));
+    let r = solve(sec, sorted(all), len);
+    if (!r.ok) r = solve(sec, sorted(all.filter((t) => !optional.has(t))), len);
+    if (!r.ok) {
+      const ts = all.filter((t) => !optional.has(t)).sort((a, b) => a.offset - b.offset);
+      r = { ts, at: ts.map((t) => t.offset), ok: true, how: "manifest" };
     }
-    ts.forEach((t, i) => out.push({ t, section: sec, at: at[i], abs: starts[sec] / FPS + at[i], how }));
+    r.ts.forEach((t, i) => out.push({ t, section: sec, at: r.at[i], abs: starts[sec] / FPS + r.at[i], how: r.how }));
   }
   return out.sort((a, b) => a.abs - b.abs);
 };

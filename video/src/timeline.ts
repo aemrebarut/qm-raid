@@ -45,6 +45,7 @@ export type Planned = {
   voAnchor: Record<string, number>;
   sfx?: { file: string; at: number }[];
   voSwap?: Record<string, string>;
+  voAdd?: string[];
 };
 export const planned = edl as unknown as Record<string, Planned>;
 

@@ -13,6 +13,7 @@
       }
     ],
     "voSwap": {},
+    "voAdd": [],
     "segments": [
       {
         "from": 1.299,
@@ -234,6 +235,7 @@
       }
     ],
     "voSwap": {},
+    "voAdd": [],
     "segments": [
       {
         "from": 6.917,
@@ -494,6 +496,7 @@
       }
     ],
     "voSwap": {},
+    "voAdd": [],
     "segments": [
       {
         "from": 1.119,
@@ -681,6 +684,7 @@
     "src": "clips/autopilot.mp4",
     "sfx": [],
     "voSwap": {},
+    "voAdd": [],
     "segments": [
       {
         "from": 2.032,
@@ -894,6 +898,7 @@
     "src": "mock-loadout/loadout.mp4",
     "sfx": [],
     "voSwap": {},
+    "voAdd": [],
     "segments": [
       {
         "from": 0.213,

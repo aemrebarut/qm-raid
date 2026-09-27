@@ -13,7 +13,6 @@ export interface TerrainArt extends Handle {
   heightAt(x: number, z: number): number;
 }
 
-const MARGIN = 16; // land drawn beyond the map edge, in tiles
 
 // ---------- noise ----------
 function hash2(x: number, y: number, seed: number) {
@@ -50,7 +49,9 @@ function segDist(px: number, pz: number, s: Seg) {
   return Math.hypot(px - s[0] - dx * t, pz - s[1] - dz * t);
 }
 
-export function makeTerrain(spec: TerrainSpec): TerrainArt {
+/** `margin`: land drawn beyond the map edge, in tiles (16 for the board, less for the showroom). */
+export function makeTerrain(spec: TerrainSpec, { margin = 16 }: { margin?: number } = {}): TerrainArt {
+  const MARGIN = margin;
   const size = spec.size, seed = spec.seed ?? 7;
   const r = rng(seed * 7919 + 13);
   const segs = segments(spec.paths ?? []);
@@ -136,9 +137,10 @@ export function makeTerrain(spec: TerrainSpec): TerrainArt {
   waterMat.userData.owned = true;
   waterMat.map = waterMat.map!.clone();
   waterMat.map.repeat.set(6, 40);
-  const water = new THREE.Mesh(new THREE.PlaneGeometry(12, size + MARGIN * 2), waterMat);
+  const waterW = Math.min(12, MARGIN);
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(waterW, size + MARGIN * 2), waterMat);
   water.rotation.x = -Math.PI / 2;
-  water.position.set(-6, -0.14, size / 2);
+  water.position.set(-waterW / 2, -0.14, size / 2);
   water.receiveShadow = true;
   group.add(water);
 
@@ -162,7 +164,8 @@ export function makeTerrain(spec: TerrainSpec): TerrainArt {
       trees.push({ x: tx, z: tz, s: 0.75 + r() * 0.55, kind: kindR < 0.5 ? 0 : kindR < 0.85 ? 1 : 2 });
     }
   }
-  group.add(buildTrees(trees, heightAt, r));
+  const forest = buildTrees(trees, heightAt, r);
+  group.add(forest.group);
 
   // ---- rocks: small ones inside (low), outcrops on the hills ----
   const rocks: { x: number; z: number; s: number }[] = [];
@@ -228,17 +231,18 @@ export function makeTerrain(spec: TerrainSpec): TerrainArt {
       groundMat.dispose();
       waterMat.map?.dispose();
       waterMat.dispose();
-      for (const g of treeGeos) g.dispose();
+      for (const g of forest.geos) g.dispose();
+      for (const m of forest.mats) m.dispose();
     },
   };
 }
 
 // ---------- trees: pine, oak, poplar, all instanced ----------
-const treeGeos: THREE.BufferGeometry[] = [];
-function geo<T extends THREE.BufferGeometry>(g: T) { treeGeos.push(g); return g; }
-
+/** Returns the tree group plus what it created (the caller's dispose frees exactly these). */
 function buildTrees(trees: { x: number; z: number; s: number; kind: 0 | 1 | 2 }[], heightAt: (x: number, z: number) => number, r: () => number) {
   const g = new THREE.Group();
+  const geos: THREE.BufferGeometry[] = [];
+  const geo = <T extends THREE.BufferGeometry>(x: T) => { geos.push(x); return x; };
   const trunkGeo = geo(new THREE.CylinderGeometry(0.05, 0.08, 0.5, 5)).translate(0, 0.25, 0);
   const pineA = geo(new THREE.ConeGeometry(0.44, 0.62, 7)).translate(0, 0.55, 0);
   const pineB = geo(new THREE.ConeGeometry(0.34, 0.55, 7)).translate(0, 0.88, 0);
@@ -257,7 +261,6 @@ function buildTrees(trees: { x: number; z: number; s: number; kind: 0 | 1 | 2 }[
   };
   const trunk = make(trunkGeo, mat("#6b4a2b"), trees.length);
   const leafMat = leaf();
-  leafMat.userData.owned = true;
   const pa = make(pineA, leafMat, pines.length), pb = make(pineB, leafMat, pines.length), pc = make(pineC, leafMat, pines.length);
   const oa = make(oakA, leafMat, oaks.length), ob = make(oakB, leafMat, oaks.length), oc = make(oakC, leafMat, oaks.length);
   const po = make(poplar, leafMat, pops.length);
@@ -284,7 +287,7 @@ function buildTrees(trees: { x: number; z: number; s: number; kind: 0 | 1 | 2 }[
     po.setMatrixAt(i, place(t, 1 + r() * 0.3));
     po.setColorAt(i, c.setHSL(0.16 + r() * 0.05, 0.45, 0.34 + r() * 0.08));
   });
-  return g;
+  return { group: g, geos, mats: [leafMat] };
 }
 
 /** Soft ripple streaks for the river (white on grey, tinted by the water colour). */

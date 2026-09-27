@@ -36,7 +36,7 @@ const LIB: [number, number] = [11, 11];
 const terrain: Exhibit = {
   name: "Terrain: 24 x 24 map, roads, river, forest",
   area: "world",
-  span: 24,
+  span: 34,
   turntable: false,
   make() {
     const blocked: [number, number][] = [];
@@ -45,9 +45,9 @@ const terrain: Exhibit = {
     const paths: [number, number][][] = [
       [[9, 5], [11, 5], LIB], [[13, 5], [11, 5]], [[9, 18], [11, 18], LIB], [[13, 18], [11, 18]], [[5, 11], LIB], [[18, 11], LIB],
     ];
-    const t = makeTerrain({ size: 24, seed: 3, paths, blocked });
+    const t = makeTerrain({ size: 24, seed: 3, paths, blocked }, { margin: 5 });
     const wrap = new THREE.Group(); // terrain is in world coords 0..24; centre it on the cell
-    t.object3d.position.set(-12, 0, -12);
+    t.object3d.position.set(-12, 0.012, -12); // just above the showroom plate (no z-fighting)
     wrap.add(t.object3d);
     return { object3d: wrap, tick: (tt, dt) => t.tick(tt, dt), dispose: () => t.dispose() };
   },

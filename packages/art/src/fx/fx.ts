@@ -38,7 +38,7 @@ const orbGeo = () => (_orbGeo ??= new THREE.IcosahedronGeometry(0.1, 1));
 
 function additive(color: THREE.ColorRepresentation, map?: THREE.Texture, opacity = 1) {
   return new THREE.MeshBasicMaterial({
-    color, map, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending,
+    color, ...(map ? { map } : {}), transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending,
     side: THREE.DoubleSide, toneMapped: false,
   });
 }
@@ -559,11 +559,12 @@ export class ArtFx {
     const cleanup = () => {
       if (dead) return;
       dead = true;
+      eff.dur = 0; // ends the effect on the next tick, also for dur: Infinity
       this.group.remove(g);
       [poleGeo, knobGeo, clothGeo, moundGeo].forEach((x) => x.dispose());
       [woodM, goldM, clothM, mound.material as THREE.Material].forEach((m) => m.dispose());
     };
-    this.add({
+    const eff: Effect = {
       t: 0, dur: Number.isFinite(dur) ? dur + 0.6 : 1e9,
       update: (_k, dt) => {
         if (dead) return;
@@ -584,7 +585,8 @@ export class ArtFx {
         if (removing >= 0 && t - removing > 0.5) cleanup();
       },
       done: cleanup,
-    });
+    };
+    this.add(eff);
     return { object3d: g, remove: () => { if (removing < 0) removing = t; } };
   }
 
@@ -593,8 +595,8 @@ export class ArtFx {
    * verdict colours the ribbon and landing burst: "approve" green, "changes" red, anything else gold.
    * label: optional floating text at the receiver ("changes requested", "plan", ...).
    */
-  handoffScroll(from: Pt, to: Pt, opts: { verdict?: string; label?: string; dur?: number; onArrive?: () => void } = {}) {
-    const ribbonColor = opts.verdict === "approve" ? FX_COLORS.approve : opts.verdict === "changes" ? FX_COLORS.changes : "#e2b33c";
+  handoffScroll(from: Pt, to: Pt, opts: { verdict?: string; label?: string; dur?: number; onArrive?: () => void; color?: THREE.ColorRepresentation; arc?: number } = {}) {
+    const ribbonColor = opts.verdict === "approve" ? FX_COLORS.approve : opts.verdict === "changes" ? FX_COLORS.changes : opts.color ?? "#e2b33c";
     const g = new THREE.Group();
     const paperGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.3, 10).rotateZ(Math.PI / 2);
     const knobGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6).rotateZ(Math.PI / 2);
@@ -618,7 +620,7 @@ export class ArtFx {
     };
     const src = at(from).clone();
     this.sparkle(src, ribbonColor, 8);
-    this.fly(g, from, to, opts.dur ?? 1.2, 1.3, () => {
+    this.fly(g, from, to, opts.dur ?? 1.2, opts.arc ?? 1.3, () => {
       [paperGeo, knobGeo, ribbonGeo, sealGeo].forEach((x) => x.dispose());
       [paperM, knobM, ribbonM, sealM].forEach((m) => m.dispose());
       halo.material.dispose();
@@ -627,6 +629,15 @@ export class ArtFx {
       if (opts.label) this.text(p.clone().setY(p.y + 0.3), opts.label, { color: "#fff6d8", bg: null, height: 0.24, dur: 2 });
       opts.onArrive?.();
     }, "#f3dca0", 3.5);
+  }
+
+  /**
+   * Board signature of the handoff (raid-ui-scene, scene/fx.ts scroll): from/to are unit head points, to may move;
+   * color is the team colour (ribbon, glow, landing burst). Default 1.4 s, arc 1.2 + distance * 0.12.
+   */
+  scroll(from: Pt, to: Pt, opts: { color?: THREE.ColorRepresentation; dur?: number } = {}, onArrive?: () => void) {
+    const dist = at(from).distanceTo(at(to));
+    this.handoffScroll(from, to, { color: opts.color, dur: opts.dur ?? 1.4, arc: 1.2 + dist * 0.12, onArrive });
   }
 }
 
@@ -643,8 +654,9 @@ export class SelectionRing {
   private selected = false;
   private hovered = false;
   private shownAt = 0;
+  private readonly selColor = new THREE.Color();
 
-  constructor(radius = 0.34, color: THREE.ColorRepresentation = "#7dff6a") {
+  constructor(private readonly radius = 0.34, color: THREE.ColorRepresentation = "#7dff6a") {
     this.object3d = new THREE.Group();
     this.object3d.name = "art:selring";
     this.dashM = new THREE.MeshBasicMaterial({ map: dashedRingTexture(), color, transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -3 });
@@ -659,6 +671,7 @@ export class SelectionRing {
     this.dashes.raycast = this.disc.raycast = () => {};
     this.object3d.add(this.disc, this.dashes);
     this.object3d.visible = false;
+    this.selColor.set(color);
     const r = radius * 2.3;
     this.dashes.onBeforeRender = () => {
       const now = performance.now() / 1000;
@@ -671,16 +684,19 @@ export class SelectionRing {
     };
   }
 
+  /** color is the selection colour (team colour); it is remembered, hover alone always shows a white ring. */
   set(o: { selected?: boolean; hovered?: boolean; color?: THREE.ColorRepresentation }) {
     const wasShown = this.selected;
     if (o.selected !== undefined) this.selected = o.selected;
     if (o.hovered !== undefined) this.hovered = o.hovered;
-    if (o.color !== undefined) { this.dashM.color.set(o.color); this.discM.color.set(o.color); }
+    if (o.color !== undefined) this.selColor.set(o.color);
     if (this.selected && !wasShown) this.shownAt = performance.now() / 1000;
     this.object3d.visible = this.selected || this.hovered;
     this.disc.visible = this.selected;
     this.dashM.opacity = this.selected ? 0.95 : 0.5;
-    if (!this.selected) { this.dashM.color.set(o.color ?? "#ffffff"); this.dashes.rotation.y = 0; }
+    this.discM.color.copy(this.selColor);
+    if (this.selected) this.dashM.color.copy(this.selColor);
+    else { this.dashM.color.set("#ffffff"); this.dashes.rotation.y = 0; this.dashes.scale.setScalar(this.radius * 2.3); }
   }
 
   dispose() { this.dashM.dispose(); this.discM.dispose(); }

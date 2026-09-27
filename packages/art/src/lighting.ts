@@ -44,7 +44,7 @@ export function lighting(scene: THREE.Scene, renderer: THREE.WebGLRenderer, opts
   renderer.toneMappingExposure = opts.exposure ?? 1.15;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap; // r186: PCFSoft was removed; PCF + shadow.radius is the soft path
+  // shadowMap.type stays the caller's (board constraint). In r186 PCFSoft falls back to PCF, where shadow.radius softens.
 
   const hemi = new THREE.HemisphereLight(GOLDEN.sky, GOLDEN.ground, GOLDEN.hemiI);
   hemi.name = "art:hemi";

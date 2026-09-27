@@ -2,6 +2,15 @@
 
 Emre: "Make it fun, add voice over." Emre 15:50: a 15 second fun intro that introduces our approach, anime style, like the first 15 seconds of a good YouTube video; then 90 seconds of 15 to 20 second clips, one per capability; the team makes the video itself, with Remotion. Target 1:45 to 1:55, hard max 2:00, 1920x1080 mp4, H.264 + AAC.
 
+## Update 16:03 (Emre): total length 75 seconds. This overrides the structure below.
+- 0:00 to 0:02 real gameplay hero shot (thumbnail frame), then 0:02 to 0:13 the anime intro (11 s: the four claims at about 2.2 s each, short title drop).
+- 0:13 to 0:28 Clip 1 Orders and memory (GBrain recall and remember, the real QM reply).
+- 0:28 to 0:42 Clip 2 Teams (Form team, Trio with a Rule Warden reviewer, APPROVED!).
+- 0:42 to 0:57 Clip 3 The Forge (River: refund ranger 0.82 vs 0.42, Rule Warden 0.917 vs 0.557, train a unit, it walks out).
+- 0:57 to 1:11 Clip 4 Command montage: new-issue button, autopilot proposals with veto, a 3 s Loadout edit.
+- 1:11 to 1:15 End card.
+- VO about 170 words total; every section leaves room to breathe.
+
 ## Agents and ownership
 - raid-video (Opus 5.5 xhigh, lead and editor): owns `video/` (a Remotion project, its own package.json; a microservice like the rest) except `video/src/intro/`. First 8 minutes: scaffold Remotion, register compositions `Intro` (15 s, owned by raid-video-intro) and `Main` (the full cut), commit, tell the others. Then Main: intro, the five clips as OffthreadVideo with speed ramps (playbackRate, a small fast-forward badge when above 2x), lower-third captions and clip title cards in the game's gold-on-stone style, snappy transitions, the VO and music tracks, end card. Renders to `~/Workspace/qm-raid-video/<take>/qm-raid-demo.mp4`, 1920x1080, H.264 + AAC.
 - raid-video-intro (Opus 5.5 xhigh): owns `video/src/intro/`. The 15 second anime-style opener, fully code-drawn in Remotion (SVG and CSS): speed lines, impact frames, a dramatic zoom and screen shake, big bold title cards, sparkles, a chibi squad of agent units (you may use stills of our own units from the art showroom http://127.0.0.1:4620 or the board), the backlog as a monster horde. It must introduce the approach in plain words: your issues are monsters, your AI agents are units, GBrain is their shared memory, River forges new unit types. Fun first, legible second, no copyrighted characters, music or sound.

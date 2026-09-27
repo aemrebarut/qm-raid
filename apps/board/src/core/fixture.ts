@@ -20,12 +20,12 @@ export function fixtureState(): State {
       { id: "forge", kind: "river", x: 3, y: 20 },
     ],
     units: [
-      { id: "u1", name: "Ada", class: "knight", model: "claude-opus-5-5", effort: "high", role: "worker", team: 1, status: "working", pos: { x: 5, y: 4 }, orderId: "o1", qm: { sessionId: "s-ada", sessionUrl: null } },
-      { id: "u2", name: "Brom", class: "knight", model: "claude-opus-5-5", effort: "high", role: "worker", team: 1, status: "idle", pos: { x: 13, y: 14 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
-      { id: "u3", name: "Cyra", class: "ranger", model: "claude-sonnet-5", effort: "medium", role: "worker", team: 1, status: "recalling", pos: { x: 12, y: 13 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
-      { id: "u4", name: "Dain", class: "ranger", model: "claude-sonnet-5", effort: "medium", role: "worker", team: 2, status: "moving", pos: { x: 16, y: 12 }, orderId: "o2", qm: { sessionId: null, sessionUrl: null } },
-      { id: "u5", name: "Esme", class: "scout", model: "claude-haiku-4-5-20251001", effort: "low", role: "worker", team: 2, status: "idle", pos: { x: 19, y: 18 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
-      { id: "u6", name: "Fenn", class: "scout", model: "claude-haiku-4-5-20251001", effort: "low", role: "worker", team: null, status: "idle", pos: { x: 21, y: 18 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
+      { id: "u1", name: "Ada", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "working", pos: { x: 5, y: 4 }, orderId: "o1", qm: { sessionId: "s-ada", sessionUrl: null } },
+      { id: "u2", name: "Brom", class: "knight", model: "gpt-6-astra", effort: "high", role: "worker", team: 1, status: "idle", pos: { x: 13, y: 14 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
+      { id: "u3", name: "Cyra", class: "ranger", model: "gpt-6-sol", effort: "medium", role: "worker", team: 1, status: "recalling", pos: { x: 12, y: 13 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
+      { id: "u4", name: "Dain", class: "ranger", model: "gpt-6-sol", effort: "medium", role: "worker", team: 2, status: "moving", pos: { x: 16, y: 12 }, orderId: "o2", qm: { sessionId: null, sessionUrl: null } },
+      { id: "u5", name: "Esme", class: "scout", model: "gpt-6-luna", effort: "low", role: "worker", team: 2, status: "idle", pos: { x: 19, y: 18 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
+      { id: "u6", name: "Fenn", class: "scout", model: "gpt-6-luna", effort: "low", role: "worker", team: null, status: "idle", pos: { x: 21, y: 18 }, orderId: null, qm: { sessionId: null, sessionUrl: null } },
     ],
     targets: [
       { id: "t12", issue: "LUM-12", title: "Retry double-charges a card", component: "billing", kind: "bug", severity: 3, status: "engaged", pos: { x: 4, y: 3 }, customers: ["acme-robotics"] },
@@ -47,9 +47,9 @@ export function fixtureState(): State {
       { id: "o3", unitId: "u5", targetId: "t31", status: "proposed", source: "autopilot", vetoDeadline: t0 + 15000, reply: null },
     ],
     unitTypes: [
-      { id: "knight", name: "Knight", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "claude-opus-5-5" },
-      { id: "ranger", name: "Ranger", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "claude-sonnet-5" },
-      { id: "scout", name: "Scout", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "claude-haiku-4-5-20251001" },
+      { id: "knight", name: "Knight", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-astra" },
+      { id: "ranger", name: "Ranger", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-sol" },
+      { id: "scout", name: "Scout", source: "builtin", status: "ready", progress: 1, stage: "ready", model: "gpt-6-luna" },
       { id: "forge-triager", name: "Triager", source: "forge", status: "training", progress: 0.45, stage: "SFT epoch 1 of 2", model: null },
     ],
     memory: {

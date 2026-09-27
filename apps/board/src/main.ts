@@ -1,7 +1,7 @@
 // Board entry: builds the store and bus, connects to the engine, mounts scene/ and hud/.
 // scene/index.ts must export mountScene(el, store, bus); hud/index.ts must export mountHud(el, store, bus).
 // Both are optional at load time (import.meta.glob), so the app runs while either is still being built.
-import { createStore, createBus, connectEngine, fixtureState, api, type Store, type Bus } from "./core";
+import { createStore, createBus, connectEngine, fixtureState, installKeys, api, type Store, type Bus } from "./core";
 
 type Mount = (el: HTMLElement, store: Store, bus: Bus) => void | (() => void);
 
@@ -26,6 +26,7 @@ function mount(label: string, el: HTMLElement | null, fn: Mount | undefined) {
 mount("scene", document.getElementById("scene"), Object.values(scenes)[0]?.mountScene);
 mount("hud", document.getElementById("hud"), Object.values(huds)[0]?.mountHud);
 connectEngine(store);
+installKeys(store, bus);
 
 // Console handle for debugging and review: raid.store.getState(), raid.bus.select(["u1"]), raid.api.state()
 (window as any).raid = { store, bus, api };

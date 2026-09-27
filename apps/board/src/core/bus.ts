@@ -10,6 +10,9 @@ export interface Selection {
   focus: "units" | "target" | "building" | null;
 }
 
+/** Pending command mode: the next click completes it (Adjust from the orders bar, Order from the command grid). */
+export type Command = { kind: "adjust"; orderId: string } | { kind: "order" } | null;
+
 export type BusEvents = {
   select: string[];                 // selected unit ids (empty = none)
   selectTarget: string | null;
@@ -17,6 +20,8 @@ export type BusEvents = {
   selection: Selection;             // fired after any of the three above
   hover: HoverRef;
   focusTile: { x: number; y: number }; // ask the camera to centre on a tile (minimap clicks)
+  command: Command;
+  toast: { text: string; level: "info" | "error" }; // HUD shows these
 };
 
 type Handler<T> = (payload: T) => void;
@@ -24,6 +29,9 @@ type Handler<T> = (payload: T) => void;
 export interface Bus {
   readonly selection: Selection;
   readonly hovered: HoverRef;
+  readonly command: Command;
+  setCommand(c: Command): void;
+  toast(text: string, level?: "info" | "error"): void;
   select(unitIds: string[], opts?: { add?: boolean }): void;
   selectTarget(id: string | null): void;
   selectBuilding(id: string | null): void;
@@ -38,6 +46,7 @@ export function createBus(): Bus {
   const handlers = new Map<keyof BusEvents, Set<Handler<any>>>();
   let selection: Selection = { units: [], target: null, building: null, focus: null };
   let hovered: HoverRef = null;
+  let command: Command = null;
 
   const emit = <K extends keyof BusEvents>(type: K, payload: BusEvents[K]) => {
     for (const fn of handlers.get(type) ?? []) {
@@ -49,6 +58,12 @@ export function createBus(): Bus {
   return {
     get selection() { return selection; },
     get hovered() { return hovered; },
+    get command() { return command; },
+    setCommand(c) {
+      command = c;
+      emit("command", c);
+    },
+    toast(text, level = "info") { emit("toast", { text, level }); },
     select(unitIds, opts) {
       const units = opts?.add ? [...new Set([...selection.units, ...unitIds])] : [...unitIds];
       // Selecting units keeps a selected target (so "units then target" can order), drops the building.

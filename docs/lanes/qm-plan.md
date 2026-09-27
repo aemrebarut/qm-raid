@@ -56,6 +56,8 @@ Concurrency (measured 15:05): 6 simultaneous orders finish in 6 to 12 s; QM WORK
 
 Status 15:26: a-d done and live (21a68ed adoption revert, 178bae6 catalog before resume, b7a6529 undelivered terminals persisted, ece802f timing log in /tmp/qm-bridge.log and services/qm-bridge/.state/timing.jsonl); f8585e4 usage fixes and 3324326 pushed, load at the next announced restart. b251ab1 one conversation per unit verified. Live timing: first activity about 3.5 s, reply 16 to 20 s, depth 0. Next: e. demo path on the shared engine in a slot from raid-eng-plan, bridge-only dry run first with test unit ids.
 
+Status 15:33: 438d9c9 (model-drop warning, gpt-* pass-through before the catalog loads, usage recheck) and 860550b (GET /events?observe=1 observer streams, test/watch-orders.ts) live since the 15:30:55 restart; smoke passed; rev accepted both. Dry run d4d1a26 done, but rev P1/P2 on its cleanup (forget only the exact slugs it generated, cleanup in finally, exit non-zero on failure): impl fixing, and demo-dry.ts must not run until then. Demo slot 15:45 on 4610, driven by raid-eng-plan: reset, wave 1, wave 2, twice, then one trio workflow (W2). The orderPrompt now asks agents to name the slug of every past learning they applied. Bridge and brain restart-free 15:43-15:57; impl watches with watch-orders.ts (observer) and checks transcripts. After the slot: step 14 accept test (announced bridge restart with an order in flight, engine keeps running, next order works), then TEST.md M5 qm.
+
 ### M5 (16:25): hardening
 14. Reconnect run streams, retry transient 5xx once, restart-safe unit map, demo path twice in a row. Accept: kill and restart the bridge mid-demo, engine keeps running, next order works.
 

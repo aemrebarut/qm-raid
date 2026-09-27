@@ -57,8 +57,10 @@ const states: { name: string; setup: string; settle?: number; keys?: string[]; c
   { name: "proposals", setup: `(() => { const us = raid.store.getState().units; const ts = raid.store.getState().targets.filter(t => t.status === 'open'); for (let i = 0; i < 3; i++) raid.dev.propose(us[i]?.id, ts[i]?.id); })()` },
   { name: "workflow", setup: `(() => { raid.dev.workflow(1, undefined, 1200); raid.bus.select(raid.store.team(1)?.members ?? []); })()`, settle: 3200 },
   { name: "spawn", setup: `raid.bus.newIssue()`, settle: 700 },
-  // Emre's formation flow: 2+ units selected, F opens the formation view (makes them a team first if needed).
-  { name: "formation", setup: `raid.bus.select(raid.store.team(2)?.members?.length ? raid.store.team(2).members : ${firstIds(2)})`, keys: ["f"], settle: 1200 },
+  // Emre's formation flow (routes from raid-ui-hud). All local: team changes go through store.apply, never the engine.
+  { name: "formation", setup: `raid.bus.select(['u1', 'u4'])`, keys: ["f"], settle: 1200 },
+  { name: "presets", setup: `(() => { const t = raid.store.team(1); raid.store.apply({ seq: 1e9, ts: Date.now(), type: 'team.updated', team: { ...t, workflow: null } }); raid.bus.select(t.members); })()`, settle: 1200 },
+  { name: "rolepick", setup: `raid.bus.select(raid.store.team(1).members)`, click: "Planner", settle: 900 },
   // Loadout (Emre 15:40): a tab in the unit side panel (hud/loadout.ts, mounted by raid-look-hud).
   { name: "loadout", setup: `raid.bus.select(${firstIds(1)})`, click: "Loadout", settle: 1500 },
   { name: "feed", setup: `(() => { const d = raid.dev; d.recall('u1'); d.remember('u2'); d.handoff('u1', 'u2'); d.recall('u3'); d.remember('u1'); raid.bus.select(['u1']); })()`, settle: 1200 },

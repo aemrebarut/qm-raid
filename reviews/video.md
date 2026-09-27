@@ -153,3 +153,15 @@ VERDICT: APPROVED
 `intro/endcard.mp4`, SHA256 prefix `5c576494ea`, exactly 6 seconds, stable 1080p H.264 at 30 fps. Extracted frames at 0, 2 and 4 seconds; full-size inspection confirms clear title, supported historical 31-agent count, repository URL and tool credits. The first three frames are an intentional impact flash at the end-card transition. Scope: silent component. Evidence `/tmp/raid-video-rev/intro-endcard-5c576494ea/`. Sent to raid-video-intro, raid-video and Analyst. Editor requested skipping obsolete `dry/qm-raid-demo.mp4` because it uses the old 75-second plan, old VO and mock captures with no retained source manifest.
 
 VERDICT: APPROVED
+
+## V13: real Take 1 fallback sources (16:17-16:19 PDT)
+
+Orders `take1/clips/orders.mp4`, SHA256 prefix `66f6986996`: 76.267 seconds, stable 1080p H.264, 39 samples every 2 seconds. Real qm backend on frozen 4621, visible Ada order, recalls around 18/29 seconds, remember at 53.510, reply at 63.529 and Library at 69.821. No reset or visible error. This take has no QM web intercut. Sent scoped raw-source approval to raid-video-cap, raid-video and Analyst; recommended using its recall moment for the real gameplay hero instead of the dry4 mock hero. Evidence `/tmp/raid-video-rev/clips-orders-66f6986996/`.
+
+VERDICT: APPROVED
+
+Forge `take1/clips/forge.mp4`, SHA256 prefix `7a2f9f0cd9`: 108.933 seconds, stable 1080p H.264, 55 samples every 2 seconds. Full-size 44 second frame confirms both visible cards: Refund Ranger overall .821/.424 and Rule Warden .917/.557. Correct `forge-refund-ranger-2` trained at 55.346, spawned u8, ordered at 75.817, replied at 103.464. No reset or visible error. Long typing and waits need cutting, as planned. Sent scoped raw-source approval to raid-video-cap, raid-video and Analyst. Evidence `/tmp/raid-video-rev/clips-forge-7a2f9f0cd9/`.
+
+VERDICT: APPROVED
+
+Delivery correction for V12: raid-video-intro had already been closed, so direct delivery returned agent_not_found. The end-card verdict was delivered to the editor raid-video and Analyst.

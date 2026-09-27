@@ -172,7 +172,16 @@ def verdict_correct(text: str, meta: dict) -> float:
         return 1.0 if kind == "CHANGES" else 0.0
     if kind != "APPROVED":
         return 0.0
-    return 1.0 if not meta["winner"] or re.search(rf"\b{re.escape(meta['winner'])}\b", line) else 0.0
+    return 1.0 if not meta["winner"] or winner_of(line) == meta["winner"] else 0.0
+
+
+WINNER = re.compile(r"winner:\s*([^);,]*)", re.I)
+
+
+def winner_of(line: str) -> str | None:
+    """The one unit named as winner on a verdict line; None if missing, ambiguous or contradictory."""
+    ids = {i for decl in WINNER.findall(line) for i in re.findall(r"\bu\d+\b", decl)}
+    return ids.pop() if len(ids) == 1 else None
 
 
 def agrees(text: str, meta: dict) -> bool:

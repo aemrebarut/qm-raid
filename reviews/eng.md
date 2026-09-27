@@ -66,4 +66,17 @@ Each reviewed commit records its SHA, tests and result, concrete findings (sever
 - Read d23bb44. First mock smoke run passed 23 checks but failed the final saved-config comparison; service log and lead confirmed an overlapping noGbrain toggle. Coordinated a stable window and reran: all 24 checks passed, 7.1-second reply, config restored. Includes MCP names, no-GBrain mode, explicit terminal failure, and engine-assigned learning slug.
 - Read 5fb3eb5. Monotonic order IDs survive reset. `bun test` passed 6 tests with 20 assertions, including stale pre-reset reply and nested MCP args. Original reset collision finding resolved; full E14 reset behavior remains pending.
 - Compared graph, stats, search with query, and page with URL-encoded slug directly against the engine proxies: all four returned HTTP 200 and identical bodies. An initial connection refusal from brain was transient, so no dependency-down result is claimed from that attempt.
-- **Forge review test update required:** Analyst requires `dryRun: true` on every review-created type. `services/engine/test/forge-smoke.ts` in 5fb3eb5 omitted it, and `src/forge.ts` dropped that field when proxying. Sent both changes to raid-eng-mock (module owner), informed raid-eng-impl. Did not run the Forge-creating smoke. Verify fix before running it.
+- **Forge review test update resolved by 2cbe733:** Analyst requires `dryRun: true` on every review-created type. `services/engine/test/forge-smoke.ts` in 5fb3eb5 omitted it, and `src/forge.ts` dropped that field when proxying. Sent both changes to raid-eng-mock (module owner), informed raid-eng-impl. Did not run the Forge-creating smoke.
+
+## 2026-09-27 15:01 PDT: M1 R2 independent integration acceptance
+
+- PASS on existing engine PID 23582, mock-bridge PID 12912, autopilot PID 71737. All listen on loopback; reviewer started/stopped no services and changed no mock config.
+- Verified all three health responses; 4 components, 6 Codex-model units, 9 targets, mock backend; live state yielded 5 proposer assignments.
+- Opened SSE first, verified state.snapshot, ordered u1 to t105. Order o5 completed in 12.0 seconds with 17 single-tile moves, 46 increasing-seq/epoch-ms events, working status, recall before remember, final reply, unit idle, and target resolved.
+- Sent R2 done to raid-eng-plan and raid-eng-impl and M1 acceptance to Analyst. Shared engine was then switched to real QM by the implementer. Further reviewer probes remain isolated.
+
+## 2026-09-27 15:02 PDT: 2cbe733, 547832d, 3fea5e3
+
+- Reviewed Forge dryRun handling, autopilot loop/veto resolution, Forge wiring and full reset changes. `cd services/engine && bun test` passed 7 tests, 37 assertions, including go/adjust/cancel/expiry log rows.
+- Forge `bun test/forge-smoke.ts` passed in its new read-only default: 7 existing types merged, change-only events, lookup, and unavailable-Forge handling. Port 4699 was unbound before the negative test; no server was opened there. No Forge types created. dryRun forwarding is present and `--create` sends true.
+- **P2, open: a delayed proposer response can reserve an already engaged target.** `services/engine/src/game.ts:695` checks a `taken` set captured before awaiting `/propose`, and checks only current resolved status. Isolated reproduction: hold the proposer response; create a user order u4 -> t101; release a proposal u1 -> t101. Both the user active order and autopilot proposed order now target t101, despite t101 being engaged. Recompute reservations after the response and require the target still be open. Sent to raid-eng-impl and lead. No shared QM state or mock configuration changed.

@@ -2,10 +2,19 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createUnits } from "../src/units";
+import { createUnits, finalVerdict, lastVerdict } from "../src/units";
 
 process.env.BRAIN_URL = "http://127.0.0.1:9"; // brain unreachable: the loop degrades and still replies
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
+// Reviewer verdicts (P2): only APPROVED or CHANGES with a detail count, and only on the final line.
+for (const [t, f, l] of [
+  ["Plan: x\nVERDICT: APPROVED", "VERDICT: APPROVED", "VERDICT: APPROVED"],
+  ["VERDICT: NEEDS WORK", null, null],
+  ["VERDICT: CHANGES: fix duplicate capture\nRemember: y", null, "VERDICT: CHANGES: fix duplicate capture"],
+  ["**VERDICT: CHANGES: add a test**", "VERDICT: CHANGES: add a test", "VERDICT: CHANGES: add a test"],
+  ["VERDICT: CHANGES:", null, null],
+] as const) if (finalVerdict(t) !== f || lastVerdict(t) !== l) fail(`verdict ${JSON.stringify(t)}: ${finalVerdict(t)} / ${lastVerdict(t)}`);
+
 const waiters: Array<(t: string) => void> = [];
 const units = createUnits({
   types: () => [{ id: "forge-t", name: "Tester", description: "d", status: "ready", model: "dry-run:forge-t", baseModel: null }],

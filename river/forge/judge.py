@@ -27,16 +27,22 @@ ANSWER:
 {answer}"""
 
 
+GRADE = re.compile(r"^\s*(0(?:\.0)?|0?\.5|1(?:\.0)?)\s*\.?\s*$")
+MIN_COVERAGE = 0.9  # share of eval rows that need a grade for both models before a blended score is published
+
+
 def judge_one(client, model: str, user: str, answer: str) -> float:
     res = client.chat_complete([{"role": "user", "content": JUDGE.format(user=user[:4000], answer=answer[:3000])}],
                                base_model=model, max_tokens=8, temperature=0.0,
                                chat_template_kwargs={"enable_thinking": False}, timeout=120)
-    text = json.loads(res.response_json)["choices"][0]["message"]["content"]
-    m = re.search(r"[01](?:\.\d+)?", text)
-    return max(0.0, min(1.0, float(m.group(0)))) if m else 0.0
+    text = json.loads(res.response_json)["choices"][0]["message"]["content"] or ""
+    m = GRADE.match(text)
+    if not m:  # an unparsable or off-rubric grade is unavailable, never a zero
+        raise ValueError(f"invalid grade {text[:20]!r}")
+    return float(m.group(1))
 
 
-def judge_eval(out: Path, model: str, emit=None) -> tuple[float, float]:
+def judge_eval(out: Path, model: str, emit=None) -> tuple[float | None, float | None, int, int]:
     env.load()
     import river_client as river
     client = river.Client(api_key=os.environ["RIVER_API_KEY"])
@@ -47,22 +53,24 @@ def judge_eval(out: Path, model: str, emit=None) -> tuple[float, float]:
 
     def run(job):
         i, who, user, ans = job
-        try:
-            return i, who, judge_one(client, model, user, ans)
-        except Exception as e:
-            print(f"[judge] {who} {i} failed: {type(e).__name__}", file=sys.stderr)
-            return i, who, None
+        for attempt in (1, 2):
+            try:
+                return i, who, judge_one(client, model, user, ans)
+            except Exception as e:
+                print(f"[judge] {who} {i} attempt {attempt} failed: {type(e).__name__}: {str(e)[:80]}", file=sys.stderr)
+        return i, who, None
 
     with ThreadPoolExecutor(max_workers=16) as pool:
         for i, who, s in pool.map(run, jobs):
             d["rows"][i][f"{who}Grounded"] = s
-    tg = [r["trainedGrounded"] for r in d["rows"] if r.get("trainedGrounded") is not None]
-    bg = [r["baseGrounded"] for r in d["rows"] if r.get("baseGrounded") is not None]
-    d["trainedGrounded"] = round(sum(tg) / len(tg), 3) if tg else None
-    d["baseGrounded"] = round(sum(bg) / len(bg), 3) if bg else None
-    d["judge"] = model
+    # Compare the models on the same rows only, and only with enough coverage; otherwise the eval is incomplete.
+    pairs = [r for r in d["rows"] if r.get("trainedGrounded") is not None and r.get("baseGrounded") is not None]
+    complete = bool(d["rows"]) and len(pairs) >= MIN_COVERAGE * len(d["rows"])
+    d["trainedGrounded"] = round(sum(r["trainedGrounded"] for r in pairs) / len(pairs), 3) if complete else None
+    d["baseGrounded"] = round(sum(r["baseGrounded"] for r in pairs) / len(pairs), 3) if complete else None
+    d["judgedPairs"], d["judge"] = len(pairs), model
     (out / "eval.json").write_text(json.dumps(d, indent=2))
-    return d["trainedGrounded"], d["baseGrounded"]
+    return d["trainedGrounded"], d["baseGrounded"], len(pairs), len(d["rows"])
 
 
 if __name__ == "__main__":

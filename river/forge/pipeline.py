@@ -134,9 +134,12 @@ def main() -> int:
         style, base_style = river_train.evaluate(args, evalset, model, out, emit)
         emit(status="evaluating", progress=0.985, stage="judging groundedness against the brain context")
         from forge import judge
-        grounded, base_grounded = judge.judge_eval(out, args.teacher_model)
+        g, bg, judged, total = judge.judge_eval(out, args.teacher_model)
+        if g is None or bg is None:  # judge unavailable for too many rows: the model is usable, the score is not known
+            emit(status="ready", progress=1.0, model=model, evalScore=None, baseModel=args.base_model,
+                 stage=f"ready: eval incomplete (judge graded {judged} of {total} pairs); style {style:.2f} vs base {base_style:.2f}")
+            return 0
         # evalScore blends house style (rubric) and groundedness (teacher judge) equally; both parts are in the stage text.
-        g, bg = grounded or 0.0, base_grounded or 0.0
         score, base_score = round((style + g) / 2, 3), round((base_style + bg) / 2, 3)
         emit(status="ready", progress=1.0, model=model, evalScore=score, baseModel=args.base_model,
              stage=f"ready: eval {score:.2f} vs base {base_score:.2f} (style {style:.2f} vs {base_style:.2f}, grounded {g:.2f} vs {bg:.2f})")

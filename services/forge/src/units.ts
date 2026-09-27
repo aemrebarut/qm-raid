@@ -31,6 +31,12 @@ export function orderFacts(text: string): string {
   return keep.join("\n").trim() || text;
 }
 
+// A valid reviewer verdict (docs/CONTRACT.md team workflows): APPROVED, or CHANGES with what to change.
+const VERDICT_LINE = /^\W*VERDICT:\s*(APPROVED|CHANGES:\s*\S.*?)\W*$/i;
+const verdictOf = (line: string) => { const m = line.trim().match(VERDICT_LINE); return m ? `VERDICT: ${m[1].replace(/^approved$/i, "APPROVED").replace(/^changes:/i, "CHANGES:")}` : null; };
+export const finalVerdict = (text: string) => verdictOf(text.trimEnd().split("\n").pop() ?? "");
+export const lastVerdict = (text: string) => text.split("\n").map(verdictOf).filter(Boolean).pop() ?? null;
+
 export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskRequest) => Promise<string>; store: string }) {
   const units = new Map<string, ForgeUnit>();
   // Persisted so a forge restart keeps each unit bound to its type (the engine spawns a unit only once).
@@ -112,15 +118,19 @@ export function createUnits(opts: { types: () => UnitTypeView[]; ask: (r: AskReq
         answer = "[template fallback, River unavailable]\n" + await opts.ask({ ...ask, model: `dry-run:${t.id}` });
       }
       if (!live()) return;
-      // Team workflows: a reviewer's reply must end with a VERDICT line. The house-style model may not write one,
-      // so ask it once more for just the verdict; if it still gives none, approve and say so.
-      if (/VERDICT:/.test(text) && !/^\s*VERDICT:/m.test(answer)) {
-        act("thinking", "Deciding the review verdict");
-        const v = await opts.ask({ ...ask, previous: answer,
-          followup: "End your review now with exactly one line: VERDICT: APPROVED, or VERDICT: CHANGES: <what to change>." }).catch(() => "");
-        const m = v.match(/VERDICT:\s*(APPROVED|CHANGES:.*)/i);
-        answer = `${answer.trimEnd()}\n${m ? `VERDICT: ${m[1].trim()}` : "VERDICT: APPROVED"}`;
-        if (!live()) return;
+      // Team workflows: a reviewer's reply must end with a valid VERDICT line. The house-style model may put it
+      // elsewhere, write an invalid one, or none: reuse its last valid verdict, else ask once more, else approve visibly.
+      if (/VERDICT:/.test(text) && !finalVerdict(answer)) {
+        let verdict = lastVerdict(answer);
+        if (!verdict) {
+          act("thinking", "Deciding the review verdict");
+          const v = await opts.ask({ ...ask, previous: answer,
+            followup: "End your review now with exactly one line: VERDICT: APPROVED, or VERDICT: CHANGES: <what to change>." }).catch(() => "");
+          if (!live()) return;
+          verdict = lastVerdict(v);
+        }
+        if (!verdict) act("message", "No valid verdict from the model; approving by default.");
+        answer = `${answer.trimEnd()}\n${verdict ?? "(No valid verdict from the model; approved by default.)\nVERDICT: APPROVED"}`;
       }
       const sec = sections(answer);
       const plan = [sec.plan && `Plan: ${sec.plan}`, sec.decision && `Decision: ${sec.decision}`].filter(Boolean).join(" ")

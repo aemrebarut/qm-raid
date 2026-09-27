@@ -45,3 +45,14 @@ test("gbrain MCP tool calls normalize to gbrain.<op> with flat args", () => {
   expect(normalizeTool("skills", { action: "read", name: "onboarding" })).toBe("skills.read");
   expect(toolArgs({ action: "read" })).toEqual({ action: "read" });
 });
+
+test("GET retries once on 5xx", async () => {
+  let n = 0;
+  globalThis.fetch = (async () => {
+    n++;
+    return n === 1 ? new Response("boom", { status: 502 }) : new Response(JSON.stringify({ status: "done", result: { status: "ok" } }));
+  }) as unknown as typeof fetch;
+  const run = await waitRun("r3", 5_000, 1);
+  expect(run.status).toBe("done");
+  expect(n).toBe(2);
+});

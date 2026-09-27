@@ -22,19 +22,36 @@ export interface RunState {
 }
 
 async function api<T>(method: string, path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(`${PORTAL_URL}${path}`, {
-    method,
-    headers: {
-      ...(body !== undefined ? { "content-type": "application/json" } : {}),
-      // Non-GET portal requests must look same-origin.
-      ...(method !== "GET" ? { origin: PORTAL_URL } : {}),
-    },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-    signal: signal ?? AbortSignal.timeout(30_000),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`QM ${method} ${path} -> ${res.status}: ${text.slice(0, 300)}`);
-  return JSON.parse(text) as T;
+  // Retry once on a network error or 5xx when the call is safe to repeat (GET, or a POST carrying an idempotencyKey).
+  const retryable = method === "GET" || (typeof body === "object" && body !== null && "idempotencyKey" in body);
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${PORTAL_URL}${path}`, {
+        method,
+        headers: {
+          ...(body !== undefined ? { "content-type": "application/json" } : {}),
+          // Non-GET portal requests must look same-origin.
+          ...(method !== "GET" ? { origin: PORTAL_URL } : {}),
+        },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+        signal: signal ?? AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      if (retryable && attempt === 0 && !signal?.aborted) {
+        await Bun.sleep(500);
+        continue;
+      }
+      throw err;
+    }
+    const text = await res.text();
+    if (res.status >= 500 && retryable && attempt === 0) {
+      await Bun.sleep(500);
+      continue;
+    }
+    if (!res.ok) throw new Error(`QM ${method} ${path} -> ${res.status}: ${text.slice(0, 300)}`);
+    return JSON.parse(text) as T;
+  }
 }
 
 let principalCache: string | null = null;

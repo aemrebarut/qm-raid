@@ -25,6 +25,7 @@ const STATE_FILE = join(import.meta.dir, "..", ".state", "units.json");
 
 interface Send extends SendRequest {
   intro?: boolean;
+  key?: string; // idempotency key, persisted, so retries and post-crash re-sends never start a second run
 }
 interface Unit extends SpawnRequest {
   threadRef: string;
@@ -118,8 +119,9 @@ function header(u: Unit, s: Send): string {
   return `[${tags.join(" | ")}]\n${s.text}`;
 }
 
-function turnOptions(u: Unit): { model?: string; thinkingLevel?: string } {
+function turnOptions(u: Unit, s: Send): { model?: string; thinkingLevel?: string; idempotencyKey?: string } {
   return {
+    ...(s.key ? { idempotencyKey: s.key } : {}),
     ...(codexModels.includes(u.model) ? { model: u.model } : {}),
     ...(CODEX_EFFORTS.includes(u.effort) ? { thinkingLevel: u.effort } : {}),
   };
@@ -133,8 +135,9 @@ function enqueue(u: Unit, s: Send): void {
 
 /** Start a send as the unit's active run; rejects if QM does not accept the turn. */
 async function begin(u: Unit, s: Send): Promise<void> {
+  s.key ??= `raid-${crypto.randomUUID()}`;
   u.active = { runId: "", send: s };
-  const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u));
+  const { runId } = await startTurn(u.threadRef, header(u, s), turnOptions(u, s));
   if (!u.active || u.active.send !== s) return;
   u.active.runId = runId;
   lastWork.set(u.id, Date.now());

@@ -1,6 +1,6 @@
 // mock-bridge: fake agents behind the Bridge API (docs/CONTRACT.md). No dependencies.
 import type { BridgeEvent, SendRequest, SpawnRequest, SpawnResponse } from "../../../contract/types.ts";
-import { buildScript, isOrderSend } from "./script.ts";
+import { buildScript, isOrderSend, learningFrom, type Learning } from "./script.ts";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT ?? 4615);
@@ -14,7 +14,11 @@ const config = {
   fail: clamp(process.env.MOCK_FAIL ?? 0, 0, 1, 0),            // 0.1 = 10% of orders end in a terminal error
   noGbrain: truthy(process.env.MOCK_NO_GBRAIN),                // no gbrain tool calls (engine fallback)
   mcpNames: clamp(process.env.MOCK_MCP_NAMES ?? 0.25, 0, 1, 0.25), // share of runs with mcp__gbrain__* tool names
+  script: process.env.MOCK_SCRIPT === "demo" ? "demo" : "default",  // demo: wave 1 learns a rule, wave 2 recalls it
 };
+
+// Demo memory: learnings the mock agents remembered, oldest first. Cleared by POST /debug/reset or when the last unit is deleted.
+let learnings: Learning[] = [];
 
 interface MockUnit extends SpawnRequest {
   sessionId: string;
@@ -86,12 +90,15 @@ function play(u: MockUnit, req: SendRequest) {
   stop(u, order ? "order" : "chat");
   const slot = order ? u.timers.order : u.timers.chat;
   if (order) u.orderId = req.orderId ?? null;
-  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames });
+  const demo = config.script === "demo";
+  const steps = buildScript(u.id, u.name, req, { errorRate: config.fail, noGbrain: config.noGbrain, mcpRate: config.mcpNames, demo, learnings });
   const speed = config.speed;
   for (const s of steps) {
     const t = setTimeout(() => {
       if (units.get(u.id) !== u) return; // deleted meanwhile
       emit(s.event);
+      const l = demo ? learningFrom(s.event, u.name) : null; // only demo sends feed the demo memory
+      if (l) { learnings.push(l); if (learnings.length > 100) learnings.shift(); }
       if (order && (s.event.type === "reply" || s.event.type === "error")) { u.orderId = null; u.timers.order = []; }
     }, Math.round(s.at / speed));
     slot.push(t);
@@ -121,15 +128,18 @@ const server = Bun.serve({
     try {
       if (m === "GET" && url.pathname === "/health") return json({ ok: true, service: "mock-bridge", units: units.size, clients: clients.size });
       if (m === "GET" && url.pathname === "/events") return sse(req, srv);
+      if (m === "POST" && url.pathname === "/debug/reset") { const n = learnings.length; learnings = []; console.log(`demo memory cleared (${n})`); return json({ ok: true, cleared: n }); }
+      if (m === "GET" && url.pathname === "/debug/learnings") return json(learnings);
       if (url.pathname === "/debug/config") {
-        if (m === "GET") return json({ ok: true, config });
+        if (m === "GET") return json({ ok: true, config, learnings: learnings.length });
         if (m === "POST") {
-          const b = await body<{ speed?: number; fail?: number; noGbrain?: boolean; mcpNames?: number }>(req);
+          const b = await body<{ speed?: number; fail?: number; noGbrain?: boolean; mcpNames?: number; script?: string }>(req);
           if (!b || typeof b !== "object") return fail("json body required");
           if (b.speed !== undefined) config.speed = clamp(b.speed, 0.1, 100, config.speed);
           if (b.fail !== undefined) config.fail = clamp(b.fail, 0, 1, config.fail);
           if (b.noGbrain !== undefined) config.noGbrain = truthy(b.noGbrain);
           if (b.mcpNames !== undefined) config.mcpNames = clamp(b.mcpNames, 0, 1, config.mcpNames);
+          if (b.script !== undefined) config.script = b.script === "demo" ? "demo" : "default";
           console.log(`config ${JSON.stringify(config)}`);
           return json({ ok: true, config });
         }
@@ -160,6 +170,7 @@ const server = Bun.serve({
           if (m === "DELETE") {
             const u = units.get(id);
             if (u) { stop(u, "all"); units.delete(id); console.log(`delete ${id}`); }
+            if (units.size === 0 && learnings.length) { learnings = []; console.log("all units deleted: demo memory cleared"); }
             return json({ ok: true });
           }
         } else if (parts.length === 3 && parts[2] === "send" && m === "POST") {

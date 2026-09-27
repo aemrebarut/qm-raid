@@ -30,12 +30,12 @@ export function parseOrder(text: string, componentId?: string): OrderInfo {
 }
 
 // House rules mirror world/brain (rules/* pages exist for billing, auth, search) so recall beams hit real pages.
-type Flavor = { file: string; rule: string; ruleSlug: string | null; fix: string; test: string };
+type Flavor = { file: string; rule: string; ruleSlug: string | null; fix: string; test: string; symptom?: string };
 const FLAVOR: Record<string, Flavor> = {
-  billing: { file: "src/billing/charge.ts", rule: "retries must reuse the idempotency key inv_<invoiceId>, never add the attempt number", ruleSlug: "rules/billing-idempotency", fix: "made the retry reuse inv_<invoiceId> as the idempotency key", test: "billing/retry.test.ts" },
-  auth: { file: "src/auth/token.ts", rule: "compare token expiry with a 120 second clock skew allowance", ruleSlug: "rules/auth-clock-skew", fix: "added the 120 second skew allowance to the expiry check", test: "auth/token.test.ts" },
-  onboarding: { file: "src/onboarding/invites.ts", rule: "all outbound email goes through the mailer queue, never inline", ruleSlug: null, fix: "moved the invite email onto the mailer queue", test: "onboarding/invites.test.ts" },
-  search: { file: "src/search/query.ts", rule: "scope every query by workspace_id in the index query, never post-filter", ruleSlug: "rules/search-tenant-scope", fix: "scoped the index query by workspace_id on the cached path too", test: "search/query.test.ts" },
+  billing: { file: "src/billing/charge.ts", rule: "retries must reuse the idempotency key inv_<invoiceId>, never add the attempt number", ruleSlug: "rules/billing-idempotency", fix: "made the retry reuse inv_<invoiceId> as the idempotency key", test: "billing/retry.test.ts", symptom: "the retry still creates a second charge" },
+  auth: { file: "src/auth/token.ts", rule: "compare token expiry with a 120 second clock skew allowance", ruleSlug: "rules/auth-clock-skew", fix: "added the 120 second skew allowance to the expiry check", test: "auth/token.test.ts", symptom: "fresh IdP tokens are still rejected as expired" },
+  onboarding: { file: "src/onboarding/invites.ts", rule: "all outbound email goes through the mailer queue, never inline", ruleSlug: null, fix: "moved the invite email onto the mailer queue", test: "onboarding/invites.test.ts", symptom: "the invite request still times out while sending email" },
+  search: { file: "src/search/query.ts", rule: "scope every query by workspace_id in the index query, never post-filter", ruleSlug: "rules/search-tenant-scope", fix: "scoped the index query by workspace_id on the cached path too", test: "search/query.test.ts", symptom: "cached results still show rows from another workspace" },
 };
 
 function flavorFor(component: string | null): Flavor {
@@ -53,7 +53,20 @@ export interface ScriptOpts {
   errorRate?: number;  // MOCK_FAIL: share of orders that end in a terminal error event
   noGbrain?: boolean;  // MOCK_NO_GBRAIN: no gbrain tool calls at all (exercises the engine fallback)
   mcpRate?: number;    // share of runs that use MCP-style tool names (mcp__gbrain__search, ...)
+  demo?: boolean;      // MOCK_SCRIPT=demo: first order on a component learns the rule the hard way, later ones recall it
+  learnings?: Learning[]; // what earlier mock agents remembered about this order's component (demo mode)
   now?: number;
+}
+
+export interface Learning { slug: string; component: string; unitId: string; unitName: string; text: string }
+
+// The component a remember event is about (for the demo memory in index.ts).
+export function learningFrom(ev: BridgeEvent, unitName: string): Learning | null {
+  if (ev.type !== "activity" || !ev.tool || !/remember|put_page/.test(ev.tool)) return null;
+  const args = ev.args as { slug?: unknown; text?: unknown; links?: unknown } | undefined;
+  const comp = (Array.isArray(args?.links) ? args!.links : []).map(String).find((l) => l.startsWith("components/"))?.slice("components/".length);
+  if (typeof args?.slug !== "string" || !comp) return null;
+  return { slug: args.slug, component: comp, unitId: ev.unitId, unitName, text: typeof args.text === "string" ? args.text : "" };
 }
 
 // Only an explicit orderId makes a send an order (full 6 to 10 s work sequence); anything else is a direct
@@ -71,9 +84,12 @@ const MCP_NAMES: Record<string, string> = {
 export function buildScript(unitId: string, unitName: string, req: SendRequest, opts: ScriptOpts = {}): Step[] {
   const rand = opts.rand ?? Math.random;
   const o = parseOrder(req.text, req.componentId);
-  const steps = isOrderSend(req)
-    ? orderScript(unitId, unitName, o, req.orderId, rand() < (opts.errorRate ?? 0), opts.now ?? Date.now(), rand)
-    : chatScript(unitId, unitName, req.text, o, rand);
+  const failed = isOrderSend(req) && rand() < (opts.errorRate ?? 0);
+  const steps = !isOrderSend(req)
+    ? chatScript(unitId, unitName, req.text, o, rand)
+    : opts.demo && !failed && !opts.noGbrain
+      ? demoScript(unitId, unitName, o, req.orderId!, opts.learnings ?? [], opts.now ?? Date.now(), rand)
+      : orderScript(unitId, unitName, o, req.orderId, failed, opts.now ?? Date.now(), rand);
   const gb = (e: BridgeEvent) => e.type === "activity" && !!e.tool?.startsWith("gbrain.");
   if (opts.noGbrain) return steps.filter((s) => !gb(s.event));
   if (rand() < (opts.mcpRate ?? 0)) {
@@ -123,6 +139,66 @@ function orderScript(unitId: string, unitName: string, o: OrderInfo, orderId: st
   const total = 6000 + Math.floor(rand() * 4000);
   const tokens = 2000 + Math.floor(rand() * 6000);
   seq.splice(seq.length - 1, 0, [0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
+}
+
+// Demo story (MOCK_SCRIPT=demo), the safety net when QM is down. Wave 1 on a component: recall finds no learning,
+// the first attempt fails, the agent finds the house rule and remembers a learning that states it (linked to the
+// rule page). Wave 2 on the same component: recall includes that exact learning slug, it is read and applied at
+// once, and the reply quotes it.
+function demoScript(unitId: string, unitName: string, o: OrderInfo, orderId: string, learnings: Learning[], now: number, rand: () => number): Step[] {
+  const comp = o.component ?? "core";
+  const f = flavorFor(o.component);
+  const issue = o.issue ?? "the issue";
+  const title = o.title ?? `work on ${comp}`;
+  const issueSlug = o.issue ? `issues/${o.issue.toLowerCase()}` : null;
+  const learnSlug = o.learningSlug ?? `learnings/${slugify(o.issue ?? comp)}-${slugify(unitId)}-${now}`;
+  const a = (kind: "message" | "tool" | "thinking" | "error", text: string, tool?: string, args?: unknown): BridgeEvent =>
+    tool ? { type: "activity", unitId, orderId, kind, text, tool, args } : { type: "activity", unitId, orderId, kind, text };
+  const base = [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), ...o.customers];
+  const links = [`components/${comp}`, ...(issueSlug ? [issueSlug] : []), ...(f.ruleSlug ? [f.ruleSlug] : []), `units/${unitId}`];
+  const learnText = `${f.rule} (${issue}: ${f.symptom ?? "the first fix missed this"} otherwise).`;
+  const seq: Array<[number, BridgeEvent]> = [];
+  const prior = learnings.find((l) => l.component === comp); // the first (rule) learning, not later confirmations
+  let total: number, reply: string;
+
+  if (!prior) {
+    seq.push(
+      [0.03, a("thinking", `Reading the order: ${issue} "${title}" in ${comp}.`)],
+      [0.10, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall", { query: `${comp} ${title}`, slugs: base })],
+      [0.17, a("message", `GBrain has no past learning on ${comp} yet. Trying the obvious fix.`)],
+      [0.24, a("tool", `Reading ${f.file}`, "read_file", { path: f.file })],
+      [0.31, a("tool", `Editing ${f.file}`, "edit_file", { path: f.file })],
+      [0.38, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
+      [0.44, a("message", `First attempt fails: ${f.symptom ?? "the test still fails"}.`)],
+      [0.51, a("tool", `Searching GBrain for ${comp} house rules`, "gbrain.search", { query: `${comp} house rules`, slugs: f.ruleSlug ? [f.ruleSlug] : [] })],
+      [0.58, a("message", `Found the house rule: ${f.rule}.`)],
+      [0.65, a("tool", `Editing ${f.file} again`, "edit_file", { path: f.file })],
+      [0.72, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
+      [0.79, a("message", `Tests pass. I ${f.fix}.`)],
+      [0.86, a("tool", `Remembering the rule so the next agent gets it right first time`, "gbrain.remember", { slug: learnSlug, text: learnText, links })],
+    );
+    if (f.ruleSlug) seq.push([0.92, a("tool", `Linking ${learnSlug} to ${f.ruleSlug}`, "gbrain.add_link", { from: learnSlug, to: f.ruleSlug, linkType: "mentions" })]);
+    total = 8500 + Math.floor(rand() * 1500);
+    reply = `${unitName}: fixed ${issue} "${title}" on the second attempt. My first fix failed because ${f.symptom ?? "I missed a house rule"}; the rule is: ${f.rule}. I saved it to GBrain as ${learnSlug} so the next agent gets it right first time.`;
+  } else {
+    seq.push(
+      [0.03, a("thinking", `Reading the order: ${issue} "${title}" in ${comp}.`)],
+      [0.12, a("tool", `Recalling what the team knows about ${comp} and ${issue}`, "gbrain.recall", { query: `${comp} ${title}`, slugs: [...base, prior.slug] })],
+      [0.22, a("tool", `Reading ${prior.slug}`, "gbrain.get_page", { slug: prior.slug })],
+      [0.32, a("message", `${prior.unitName} already learned this in ${prior.slug}: "${prior.text}" Applying it first try.`)],
+      [0.44, a("tool", `Reading ${f.file}`, "read_file", { path: f.file })],
+      [0.56, a("tool", `Editing ${f.file}`, "edit_file", { path: f.file })],
+      [0.68, a("tool", `Running ${f.test}`, "run_tests", { path: f.test })],
+      [0.78, a("message", `Tests pass on the first attempt. I ${f.fix}.`)],
+      [0.88, a("tool", `Remembering that the learning held for ${issue}`, "gbrain.remember", { slug: learnSlug, text: `Applied ${prior.slug} to ${issue}; it held on the first attempt.`, links: [...links, prior.slug] })],
+    );
+    total = 6000 + Math.floor(rand() * 1000);
+    reply = `${unitName}: fixed ${issue} "${title}" on the first attempt by recalling ${prior.slug} from ${prior.unitName}: "${prior.text}" Saved the confirmation as ${learnSlug}.`;
+  }
+  const tokens = 2000 + Math.floor(rand() * 6000);
+  seq.push([0.99, { type: "usage", unitId, tokens, usd: usd(tokens) }]);
+  seq.push([1.0, { type: "reply", unitId, orderId, text: reply }]);
   return seq.map(([p, event]) => ({ at: Math.round(p * total), event }));
 }
 

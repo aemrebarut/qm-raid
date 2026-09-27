@@ -43,8 +43,8 @@ const cfg = await setConfig({ mcpNames: 0, fail: 0, noGbrain: false });
 check(cfg.ok === true && cfg.config.mcpNames === 0 && cfg.config.fail === 0 && cfg.config.noGbrain === false, "POST /debug/config -> {ok, config}");
 
 const A = `smokeA-${run}`, B = `smokeB-${run}`, C = `smokeC-${run}`, D = `smokeD-${run}`, E = `smokeE-${run}`;
-const F = `smokeF-${run}`, G = `smokeG-${run}`, H = `smokeH-${run}`;
-for (const id of [A, B, C, D, E, F, G, H]) {
+const F = `smokeF-${run}`, G = `smokeG-${run}`, H = `smokeH-${run}`, I = `smokeI-${run}`, J = `smokeJ-${run}`;
+for (const id of [A, B, C, D, E, F, G, H, I, J]) {
   const r = await (await post("/units", { id, name: id, model: "mock", effort: "low", role: "worker", team: 1 })).json();
   if (id === A) check(r.sessionId === `mock-${A}` && r.sessionUrl === null, "POST /units -> {sessionId, sessionUrl}");
 }
@@ -76,14 +76,31 @@ await setConfig({ noGbrain: false, mcpNames: 1 });
 await post(`/units/${G}/send`, { text: prompt("oG"), orderId: "oG", componentId: "billing" });
 await setConfig({ mcpNames: 0, fail: 1 });
 await post(`/units/${H}/send`, { text: prompt("oH"), orderId: "oH", componentId: "billing" });
-await setConfig({ speed: saved.speed, fail: saved.fail, noGbrain: saved.noGbrain, mcpNames: saved.mcpNames });
+// demo story on a component of its own (keeps the shared billing memory clean): wave 1 now, wave 2 after wave 1 replies
+const demoComp = `smoke${run}`;
+const learnI = `learnings/lum-7-${I.toLowerCase()}-1790546460000`;
+const demoPrompt = (oid: string, issue: string, learn: string) => prompt(oid, learn).replace(/LUM-12/g, issue).replace(/billing/g, demoComp);
+await setConfig({ fail: 0, script: "demo" });
+await post(`/units/${I}/send`, { text: demoPrompt("oI", "LUM-7", learnI), orderId: "oI", componentId: demoComp });
+await setConfig({ speed: saved.speed, fail: saved.fail, noGbrain: saved.noGbrain, mcpNames: saved.mcpNames, script: saved.script });
+let jSent = false;
+const sendJ = async () => {
+  jSent = true;
+  await setConfig({ script: "demo", fail: 0, noGbrain: false });
+  await post(`/units/${J}/send`, { text: demoPrompt("oJ", "LUM-8", `learnings/lum-8-${J.toLowerCase()}-1790546470000`), orderId: "oJ", componentId: demoComp });
+  await setConfig({ fail: saved.fail, noGbrain: saved.noGbrain, script: saved.script });
+};
 let cDeletedAt = 0;
 setTimeout(async () => { await fetch(`${URL_}/units/${C}`, { method: "DELETE" }); cDeletedAt = Date.now(); }, 1500 / SPEED);
 
 const deadline = Date.now() + 12000 / SPEED + 1000;
 const done = (id: string) => events.some((e) => e.ev.unitId === id && (e.ev.type === "reply" || e.ev.type === "error"));
 const orderDone = (id: string, oid: string) => events.some((e) => e.ev.unitId === id && e.ev.type === "reply" && (e.ev as any).orderId === oid);
-while (Date.now() < deadline && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H))) await Bun.sleep(100);
+const deadline2 = deadline + 8000 / SPEED;
+while (Date.now() < deadline2 && !(done(A) && done(B) && orderDone(D, "oD2") && orderDone(E, "oE") && done(F) && done(G) && done(H) && done(J))) {
+  if (!jSent && done(I)) await sendJ();
+  await Bun.sleep(100);
+}
 await Bun.sleep(1000 / SPEED); // let stragglers arrive
 
 const of = (id: string) => events.filter((e) => e.ev.unitId === id).map((e) => e.ev);
@@ -116,10 +133,14 @@ const g = of(G);
 check(g.some((x) => x.type === "activity" && x.tool === "mcp__gbrain__search") && g.some((x) => x.type === "activity" && x.tool === "mcp__gbrain__put_page") && !g.some((x) => x.type === "activity" && x.tool?.startsWith("gbrain.")), "mcpNames: mcp__gbrain__search / mcp__gbrain__put_page");
 const hh = of(H);
 check(hh.at(-1)?.type === "error" && (hh.at(-1) as any).orderId === "oH" && !hh.some((x) => x.type === "reply") && hh.some((x) => x.type === "activity" && x.kind === "error"), "fail: activity kind error, then terminal error with orderId, no reply");
+const iEv = of(I), jEv = of(J);
+const tool = (evs: BridgeEvent[], name: string) => evs.find((x) => x.type === "activity" && x.tool === name) as any;
+check(iEv.some((x) => x.type === "activity" && /First attempt fails/.test(x.text)) && tool(iEv, "gbrain.remember")?.args?.slug === learnI && !tool(iEv, "gbrain.recall")?.args?.slugs?.some((s: string) => s.startsWith("learnings/")), "demo wave 1: no learning recalled, first attempt fails, remembers the rule");
+check(!!tool(jEv, "gbrain.recall")?.args?.slugs?.includes(learnI) && tool(jEv, "gbrain.get_page")?.args?.slug === learnI && (jEv.at(-1) as any)?.text?.includes(learnI), "demo wave 2: recalls wave 1's exact learning slug and quotes it in the reply");
 const restored = (await (await fetch(URL_ + "/debug/config")).json()).config;
 check(JSON.stringify(restored) === JSON.stringify(saved), "config restored");
 
-for (const id of [A, B, D, E, F, G, H]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
+for (const id of [A, B, D, E, F, G, H, I, J]) await fetch(`${URL_}/units/${id}`, { method: "DELETE" });
 ac.abort();
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

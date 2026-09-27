@@ -12,6 +12,7 @@ import os
 import random
 import re
 import urllib.request
+import zlib
 from dataclasses import dataclass
 
 FALLBACK_WORLD = {
@@ -47,6 +48,8 @@ EVAL_TEMPLATES = [
     "Heads up, {customers} just escalated {issue} ({component}): {title}. What do you do?",
     "Assignment: {issue} for {customers}. Area {component}. Problem: {title}. Priority {severity} of 3.",
     "Can you own {issue} for {customers}? It is a {component} {kind}: {title}.",
+    # The engine's order format (orderFacts in services/forge/src/units.ts), held out so the eval covers real game orders.
+    "Order o{n}: work on issue {issue} \"{title}\" ({kind}, severity {severity}).\nComponent: {component_id}\nCustomers: {customer_ids}",
 ]
 EXTRAS = ["", " The customer is upset.", " It is blocking their month-end close.", " Keep the reply short.",
           " This is the second report this week.", " Support already asked twice."]
@@ -103,7 +106,8 @@ def _words(text: str) -> set[str]:
 def _order(tpl: str, extra: str, t: dict, world: dict, comps: dict) -> dict:
     order = tpl.format(issue=t["issue"], kind=t["kind"], severity=t["severity"],
                        component=comps.get(t["component"], t["component"]), title=t["title"],
-                       customers=_customers(t, world)) + extra
+                       customers=_customers(t, world), component_id=t["component"],
+                       customer_ids=", ".join(t.get("customers", [])), n=zlib.crc32((t["id"] + tpl + extra).encode()) % 90 + 1) + extra
     return {"order": order, "meta": {"targetId": t["id"], "issue": t["issue"], "component": t["component"], "extra": extra.strip(),
                                         "customers": [c.strip() for c in _customers(t, world).split(",") if c.strip()]}}
 

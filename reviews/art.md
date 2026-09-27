@@ -300,3 +300,60 @@ reload. No comparable performance claim follows from this partial result.
 All mutations targeted 4619/4618, never the real demo. Awaiting the FX tuning
 commit and stable live flow; Analyst requires both reviewers and look-dir
 screenshots before the 16:25 default-on cutoff.
+
+## 2026-09-27 15:59 PDT: A3 Art gate PASS
+
+**PASS for the integrated Art set on 4619 ?art=on.** No remaining Art blocker
+found. This is the Art review verdict; Analyst still owns the demo-default
+change and requires the UI verdict plus look-dir's final state captures.
+
+Tested source identity: capture run began with HEAD `404327bf`; post-run HEAD
+was `f73a5e0`. `packages/art/src/` and `apps/board/src/scene/` were clean at the
+checked boundaries and have no diff between those commits. The whole shared
+tree was not clean: showroom/exhibits/fx.ts had an unrelated uncommitted edit.
+The accepted source includes scene cdd1e5e/a727e52, world cc42278/f4f2e5a and
+bc80e40, unit/camp hulls ae45501/b1491a8, shadows c1f21f8, and FX
+9a243cc/7eb50a6/28d6c15. Subsequent source edits need their own review.
+
+- 7eb50a6 and 28d6c15 reviewed. Two simultaneous board recalls show narrow
+  blue beams with small blue pages and no broad white wedge. Surrounding
+  units, Library and terrain remain readable. Source preserves moving
+  endpoints, effect cleanup and arrival callbacks. 9a243cc portal source
+  reviewed; live board capture shows its violet ring, and lifecycle coverage
+  includes portal completion.
+- c1f21f8 contact shadows reviewed. Independent probe confirms 4/4/4/5 meshes
+  for knight/ranger/scout/oracle and 5 for a forged unit; bug camps 4/8/8/8,
+  feature camps 4. All stay under 12. shadow:false removes exactly one draw.
+  A celebrating unit's shadow remains a direct child at local y=.012.
+  Disposing instances frees zero shared shadow geometry/material/texture
+  resources, including across sibling units and all eight camp variants.
+- bc80e40 banner self glow reviewed and rendered. Zone flags retain their
+  colours on shaded faces; no geometry or tick changes and no shader error.
+- b1491a8 focused feature severity-4 image now inspected: crystal and stone
+  outlines are intact. Earlier lifecycle probe covers hull hiding/restoration.
+- Own 1440x900 live/mock board captures show Library, Forge, Barracks, clear
+  staging, farms, river, zone gates and distinct camps. Real mock order o28
+  moved u2 with changing authoritative and visual positions. A concurrent
+  test replaced it with o29; later recall/remember/idle states remained live.
+  This is movement/render evidence, not a claim that my o28 completed.
+- The separate UI review in reviews/ui.md records A3 PASS: real mouse picks,
+  Forge opening, drag selection, forged unit u7 selection and movement via
+  a real mock order, Formation/trio run, and art=off fallback. Independently
+  inspected its art-gate-fx.png, including Formation, rings and overlapping
+  recall/remember effects. Those interaction results belong to raid-ui-rev.
+- Latest Art typecheck passes; five tests pass, 164 assertions. No JavaScript
+  page exceptions or shader failures in the capture run. One generic resource
+  404 and an additional Vite navigation were observed; no empty-console claim.
+  UI review separately records Forge evaluation-detail 404s for its owner.
+
+Own evidence: /tmp/art-a3-board.png, art-a3-recalls.png, art-a3-flow-1.png,
+art-a3-flow-8.png and art-a3-flow-15.png. The capture named art-a3-remember.png
+missed the gold orb's short lifetime, so it is not proof of that moment.
+UI evidence inspected: /tmp/raid-ui-review/art-gate-fx.png.
+
+Native computer control failed twice with a Sky pipe startup error. Used one
+isolated headless Chrome without forced SwiftShader, then closed it. Own draw
+samples ranged 413 to 508 during changing mock states; this is not an off/on
+benchmark. UI review reports a short 61 FPS / 436-call Metal sample, not a
+sustained performance guarantee. A4 performance/pitch captures remain with
+the milestone owners. All reviewer mutations stayed on 4619/4618.

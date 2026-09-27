@@ -39,6 +39,7 @@ Each message is `data: <json>` with `{"seq": n, "ts": <epoch ms>, "type": "<type
 - `POST /api/orders` {unitIds?: [...], teamId?: n, targetId}: user order (one order per unit)
 - `POST /api/orders/:id/cancel` · `POST /api/orders/:id/go` · `POST /api/orders/:id/adjust` {unitId?, targetId?}
 - `POST /api/teams` {id, members} (control group assign) · `PATCH /api/teams/:id` {autopilot?, name?}
+- `POST /api/targets` {title?, body?, component?, kind?, severity?, customers?} -> {target}: spawns a new issue. With no title the engine asks the brain for a random issue from its pool; otherwise it uses the given fields (component defaults to the least busy one, kind bug, severity 2). The engine calls brain `POST /issues`, places the target on a free tile inside the component zone, and emits `target.spawned` {target}. Issue ids continue the LUM sequence.
 - `DELETE /api/units/:id` -> {ok}: cancels the unit's active order, calls the bridge DELETE /units/:id, removes the unit, emits `unit.retired` {unitId}
 - `POST /api/reset` resets the demo world
 - Library proxies (the board talks only to the engine): `GET /api/brain/graph`, `GET /api/brain/search?q=`, `GET /api/brain/page?slug=`, `GET /api/brain/stats` pass through to the brain service unchanged
@@ -95,6 +96,7 @@ GBrain tool calls made by agents arrive as activity with `kind: "tool"` and `too
 - `GET /stats` -> {pages}
 - `GET /search?q=` -> [{slug, title, snippet}]
 - `GET /page?slug=<slug>` -> {slug, title, body}  (slug as a query parameter, URL-encoded, so slashes are safe)
+- `POST /issues` {issue?, title?, body?, component?, kind?, severity?, customers?} -> {issue, slug, title, component, kind, severity, customers}: writes `issues/<issue>` linked to its component and customers. With no title it draws the next unused issue from a pool of about 15 prepared synthetic Lumen issues (each touching a house rule, so recall matters). The pool resets with /reset.
 - `POST /reset` restores the demo world
 One DB owner: services/brain is the only process that opens the game brain. All access, including GBrain MCP for QM agents, goes through it (for example it runs `gbrain serve` as its own child and exposes an MCP facade at http://127.0.0.1:4617/mcp, or another design raid-gbrain chooses and agrees with raid-qm-plan before M2). Nothing else runs `gbrain` against the game brain while the service is up.
 

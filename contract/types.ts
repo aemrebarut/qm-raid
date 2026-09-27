@@ -64,6 +64,7 @@ export type EngineEvent =
   | Ev<"memory.remember", { unitId: string; slug: string; summary: string }>
   | Ev<"memory.link", { from: string; to: string; linkType: string }>
   | Ev<"target.updated", { target: Target }>
+  | Ev<"target.spawned", { target: Target }>
   | Ev<"team.updated", { team: Team }>
   | Ev<"stats", { spentUsd: number; tokens: number }>
   | Ev<"forge.updated", { unitType: UnitType }>

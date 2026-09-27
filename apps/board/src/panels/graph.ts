@@ -97,6 +97,11 @@ export class GraphView {
   }
   title(slug: string): string | null { const n = this.byId.get(slug); return n ? this.label(n) : null; }
   type(slug: string): string | null { return this.byId.get(slug)?.type ?? null; }
+  /** Pages of one type, most linked first (the Library index). */
+  list(type: string): { id: string; title: string; links: number }[] {
+    return this.nodes.filter((n) => n.type === type).sort((a, b) => b.deg - a.deg || a.title.localeCompare(b.title))
+      .map((n) => ({ id: n.id, title: this.label(n), links: n.deg }));
+  }
 
   setData(nodes: GraphNode[], edges: GraphEdge[]): void {
     const old = this.byId;
@@ -144,7 +149,7 @@ export class GraphView {
     const tw = this.tip.offsetWidth || 200, th = this.tip.offsetHeight || 56;
     const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(Math.max(lo, hi), v));
     const left = clamp(x + 14 + tw > w - 8 ? x - 14 - tw : x + 14, 8, w - tw - 8);
-    const top = clamp(y - 12, 8, hgt - th - 8);
+    const top = clamp(y - 12 + th > hgt - 8 ? y - th - 14 : y - 12, 8, hgt - th - 8); // flip above near the bottom
     this.tip.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
   }
 

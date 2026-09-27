@@ -31,6 +31,7 @@ export class LibraryPanel {
   private results: HTMLElement;
   private feed: HTMLElement;
   private legendEl: HTMLElement;
+  private index: HTMLElement;
   private loading: HTMLElement;
   private statPages: HTMLElement;
   private statLinks: HTMLElement;
@@ -50,6 +51,7 @@ export class LibraryPanel {
     this.results = h("div", { class: "pnl-results" });
     this.feed = h("div", { class: "pnl-feed" });
     this.legendEl = h("div", { class: "pnl-legend" });
+    this.index = h("div", { class: "pnl-index" });
     this.loading = h("div", { class: "pnl-loading" }, h("i"), h("span", {}, "Loading pages"));
     this.statPages = h("b", {}, "0");
     this.statLinks = h("b", {}, "0");
@@ -68,7 +70,7 @@ export class LibraryPanel {
         this.legendEl),
       h("div", { class: "pnl-col pnl-col-side" },
         form, this.results, this.pageBox,
-        h("h3", { class: "pnl-h" }, "Recent"), this.feed),
+        h("h3", { class: "pnl-h" }, "Recent"), this.feed, this.index),
     );
   }
 
@@ -126,12 +128,28 @@ export class LibraryPanel {
     this.statPages.textContent = String(this.graph.size.nodes);
     this.statLinks.textContent = String(this.graph.size.edges);
     this.renderLegend();
+    this.renderIndex();
     if (this.root.isConnected) this.renderFeed(); // titles may have arrived
   }
 
   private renderLegend(): void {
     this.legendEl.replaceChildren(...this.graph.types().map(([type, n]) =>
       h("span", { class: "pnl-chip-type" }, h("i", { style: `background:${TYPE_COLORS[type] ?? "#8b8f96"}` }), TYPE_LABELS[type] ?? type, h("b", {}, String(n)))));
+  }
+
+  /** Codex index under the feed: components, rules and issues, most linked first. */
+  private renderIndex(): void {
+    const groups: [string, string][] = [["component", "Components"], ["rule", "Rules"], ["issue", "Issues"]];
+    this.index.replaceChildren();
+    for (const [type, label] of groups) {
+      const items = this.graph.list(type);
+      if (!items.length) continue;
+      this.index.append(h("h3", { class: "pnl-h" }, label, h("span", { class: "pnl-count" }, String(items.length))),
+        h("div", { class: "pnl-index-list" }, ...items.map((it) => h("button", { class: "pnl-index-row", title: it.id, onclick: () => this.openPage(it.id) },
+          h("i", { class: "pnl-dot", style: `background:${TYPE_COLORS[type]}` }),
+          h("span", {}, type === "issue" ? it.title.replace(/^([A-Z]+-\d+):\s*/, "") : pageTitle(it.title)),
+          type === "issue" ? h("small", {}, /^([A-Z]+-\d+)/.exec(it.title)?.[1] ?? "") : h("small", {}, String(it.links))))));
+    }
   }
 
   /** Graph node label: unit ids become unit names ("Learning on LUM-105 by u5" -> "LUM-105 learning, Eno"). */
@@ -196,7 +214,7 @@ export class LibraryPanel {
   }
 
   private renderFeed(): void {
-    const recent = this.store.getState().memory.recent.slice(-24).reverse();
+    const recent = this.store.getState().memory.recent.slice(-10).reverse();
     this.feed.replaceChildren();
     if (!recent.length) { this.feed.append(h("p", { class: "pnl-empty" }, "No memories yet")); return; }
     const now = Date.now();

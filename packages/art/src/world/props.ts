@@ -78,7 +78,12 @@ export function makeProps(spec: PropsSpec, layout: PropsLayout = {}): PropsArt {
   const white = own(new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.9, flatShading: true }));
 
   const WOOD = "#8a5f36", DARK = "#5a3a20";
-  const wheat = new Batch(own(merge([part(new THREE.ConeGeometry(0.035, 0.26, 3), "#ffffff", [0, 0.13, 0]), part(new THREE.ConeGeometry(0.03, 0.2, 3), "#ffffff", [0.03, 0.1, 0.02], [0.2, 0, 0.2])])), white, false);
+  // Crops: a low ridge per row (scaled to the row length) with short bushy tufts on top.
+  const cropRow = new Batch(own(part(B(1, 0.09, 0.1), "#ffffff", [0, 0.045, 0])), white);
+  const wheat = new Batch(own(merge([
+    part(new THREE.IcosahedronGeometry(0.06, 0), "#ffffff", [0, 0.1, 0], [0, 0, 0], [1, 1.5, 1]),
+    part(new THREE.IcosahedronGeometry(0.05, 0), "#ffffff", [0.05, 0.09, 0.02], [0, 0, 0], [1, 1.4, 1]),
+  ])), white, false);
   const post = new Batch(own(part(B(0.045, 0.3, 0.045), DARK, [0, 0.15, 0])), vcol);
   const rail = new Batch(own(merge([part(B(1, 0.03, 0.025), WOOD, [0, 0.12, 0]), part(B(1, 0.03, 0.025), WOOD, [0, 0.23, 0])])), vcol);
   const scarecrow = new Batch(own(merge([
@@ -114,11 +119,16 @@ export function makeProps(spec: PropsSpec, layout: PropsLayout = {}): PropsArt {
     soilParts.push(soil);
     // Wheat rows (ripe gold or young green per field)
     const ripe = r() < 0.7;
-    for (let a = 0.25; a < (alongX ? h : w) - 0.2; a += 0.2) for (let b = 0.2; b < (alongX ? w : h) - 0.2; b += 0.13) {
-      if (r() < 0.08) continue;
-      const x = tx + (alongX ? b : a) + (r() - 0.5) * 0.04, z = ty + (alongX ? a : b) + (r() - 0.5) * 0.04;
-      const c = ripe ? new THREE.Color().setHSL(0.12 + r() * 0.03, 0.62, 0.52 + r() * 0.1) : new THREE.Color().setHSL(0.22 + r() * 0.04, 0.5, 0.38 + r() * 0.08);
-      wheat.put(x, 0, z, r() * 6, [1, 0.8 + r() * 0.5, 1], c);
+    const crop = () => ripe ? new THREE.Color().setHSL(0.11 + r() * 0.025, 0.72, 0.5 + r() * 0.08) : new THREE.Color().setHSL(0.24 + r() * 0.04, 0.55, 0.36 + r() * 0.06);
+    const rowLen = (alongX ? w : h) - 0.45;
+    for (let a = 0.3; a < (alongX ? h : w) - 0.2; a += 0.22) {
+      const cx = tx + (alongX ? (alongX ? w : h) / 2 : a), cz = ty + (alongX ? a : (alongX ? w : h) / 2);
+      cropRow.put(cx, 0, cz, alongX ? 0 : Math.PI / 2, [rowLen, 1, 1], crop());
+      for (let b = 0.28; b < (alongX ? w : h) - 0.22; b += 0.11) {
+        if (r() < 0.1) continue;
+        const x = tx + (alongX ? b : a) + (r() - 0.5) * 0.03, z = ty + (alongX ? a : b) + (r() - 0.5) * 0.03;
+        wheat.put(x, 0, z, r() * 6, [1, 0.8 + r() * 0.4, 1], crop());
+      }
     }
     // Fence around the field with a gap on the south side
     const fence = (ax: number, az: number, bx: number, bz: number) => {
@@ -197,7 +207,7 @@ export function makeProps(spec: PropsSpec, layout: PropsLayout = {}): PropsArt {
     group.add(soil);
   }
   const meshes: THREE.InstancedMesh[] = [];
-  for (const b of [wheat, post, rail, scarecrow, crate, barrel, hay, cart]) {
+  for (const b of [cropRow, wheat, post, rail, scarecrow, crate, barrel, hay, cart]) {
     const im = b.build();
     if (im) { meshes.push(im); group.add(im); }
   }

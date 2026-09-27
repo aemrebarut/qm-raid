@@ -100,7 +100,7 @@ function artBuilding(group: THREE.Group, kind: Building["kind"]) {
 
 function title(group: THREE.Group, name: string, sub: string, y: number, x = 0, z = 0) {
   void sub; // the long "Library · GBrain" form moved to the HUD (look-plan)
-  const l = makeEngraved(name, 0.4);
+  const l = makeEngraved(name, 0.49); // about 11 px at the overview (look-plan)
   l.position.set(x, y, z);
   group.add(l);
 }

@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { commandTarget, commandUnit, type Bus, type Store, type State, type HoverRef } from "../core";
 import { IsoCamera, MAP_SIZE } from "./camera";
 import { buildTerrain, layoutKey, makeRouter, zoneGate } from "./terrain";
-import { buildZones, zoneColor } from "./zones";
+import { buildZones, ZONE_LABEL_H, zoneColor } from "./zones";
 import { buildBuilding, type BuildingView } from "./buildings";
 import { UnitView, setFootprints, setRouter } from "./units";
 import { TargetView } from "./targets";
@@ -79,7 +79,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
         artWorld = buildArtWorld(s, key);
         world.add(artWorld.object3d);
         s.components.forEach((c) => {
-          const label = makeEngraved(c.name, 0.44);
+          const label = makeEngraved(c.name, ZONE_LABEL_H);
           label.position.set(c.zone.x + c.zone.w / 2, 0.55, c.zone.y + 0.1);
           world.add(label);
         });
@@ -285,8 +285,8 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
     fx.scroll(head(a), head(b), { color }, () => {
       b.flashRaise("recall", 0.9);
       fx.burst(head(b)(), color, 0.9, 0.6);
-      const text = summary.replace(/\s+/g, " ").trim();
-      if (text) fx.text(() => head(b)().add(new THREE.Vector3(0, 0.55, 0)), text.length > 52 ? text.slice(0, 51) + "\u2026" : text, { height: 0.3, dur: 3.4 });
+      const text = bubbleText(summary, a.unit.name);
+      if (text) fx.text(() => head(b)().add(new THREE.Vector3(0, 0.55, 0)), text, { height: 0.3, dur: 4 });
     });
   }
 
@@ -586,6 +586,16 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
 }
 
 /** packages/art effects behind the flag, adapted to the scene's FxApi (orb maps to rememberOrb). */
+/** Handoff summary as a short bubble (look-plan): no "Ada:" prefix, first clause only, 8 words max. */
+function bubbleText(summary: string, giver: string) {
+  let text = summary.replace(/\s+/g, " ").trim();
+  text = text.startsWith(giver + ": ") ? text.slice(giver.length + 2) : text.replace(/^[A-Z][\w'-]*( [A-Z][\w'-]*)?: /, "");
+  const clause = text.split(/[.:;!?](?:\s|$)/)[0].trim() || text;
+  const words = clause.split(" ");
+  const out = words.slice(0, 8).join(" ") + (words.length > 8 ? "\u2026" : "");
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
+
 function artFx(): FxApi {
   const a = new ArtFx();
   return {

@@ -40,11 +40,6 @@ const G = {
 };
 const hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
 
-const STATUS_TEXT: Record<string, string> = {
-  idle: "idle", moving: "walking", recalling: "recalling", working: "working",
-  remembering: "remembering", waiting_approval: "awaiting approval", error: "error",
-};
-
 // Status pips over the head (look-plan): a small coloured dot, a glyph only where it must be read.
 const BUBBLES: Record<string, [string, string, string] | undefined> = {
   working: ["", "#2b1d0e", "#e8922e"],
@@ -263,7 +258,7 @@ export class UnitView {
     m.color.set(this.selected ? "#7dff6a" : "#ffffff");
     m.opacity = this.selected ? 0.95 : 0.45;
     const showName = this.selected || this.hovered;
-    const text = `${this.unit.name} \u00b7 ${STATUS_TEXT[this.unit.status] ?? this.unit.status}`;
+    const text = this.unit.name; // status is the pip (look-plan)
     if (this.nameTag && (!showName || text !== this.nameTagText)) {
       this.group.remove(this.nameTag);
       this.nameTag.material.map?.dispose();

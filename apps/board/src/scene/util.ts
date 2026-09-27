@@ -142,7 +142,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 /** Engraved world name (zones, buildings): condensed caps, parchment white with a dark halo, no tag. */
 export function makeEngraved(text: string, height = 0.44) {
-  return makeLabel(text.toUpperCase(), { height, bg: null, color: "#f6ecd2", family: CONDENSED, spacing: 5, font: 48 });
+  return makeLabel(text.toUpperCase(), { height, bg: null, color: "#fffaea", family: CONDENSED, spacing: 7, font: 48 }); // .14em tracking
 }
 
 /** Round icon bubble (for unit status), drawn on top. */

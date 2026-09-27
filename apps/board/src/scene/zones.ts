@@ -4,6 +4,8 @@ import type { Building, Component } from "../core";
 import { zoneGate } from "./terrain";
 import { cobbleTexture, makeEngraved, mat, mergeStatic, mesh } from "./util";
 
+/** Engraved zone name height: about 13 px at the overview (look-plan). */
+export const ZONE_LABEL_H = 0.64;
 export const ZONE_COLORS = ["#b8433a", "#3f73b8", "#c9a227", "#7b4fa3", "#2f8f7a", "#c8662c", "#5f7f3a", "#8a5a44"];
 const WALL = "#9d968a", WALL_TOP = "#b9b2a4";
 const WALL_H = 0.38, WALL_T = 0.16, GATE_W = 1.4;
@@ -90,7 +92,7 @@ export function buildZones(components: Component[], buildings: Building[]) {
     const flag = mesh(new THREE.BoxGeometry(0.02, 0.36, 0.5), mat(color), x + 0.6, 1.15, y + 0.6 + 0.26);
     flag.name = "flag";
     zg.add(pole, flag);
-    const label = makeEngraved(c.name, 0.44);
+    const label = makeEngraved(c.name, ZONE_LABEL_H);
     label.position.set(x + w / 2, 0.55, y + 0.1);
     zg.add(label);
 

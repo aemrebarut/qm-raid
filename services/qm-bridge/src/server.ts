@@ -425,24 +425,42 @@ async function spawn(req: Request): Promise<Response> {
 // QM records spend some seconds after a run ends, hence the wide window.
 const USAGE_WINDOW_MS = 90_000;
 let spendBase: { tokens: number; costUsd: number } | null = null;
+let spendPolling = false; // single flight: a slow spend call never overlaps the next tick
 setInterval(async () => {
-  const now = Date.now();
-  for (const u of units.values()) if (u.active) lastWork.set(u.id, now);
-  const working = [...lastWork].filter(([, t]) => now - t < USAGE_WINDOW_MS).map(([id]) => id);
-  if (spendBase && working.length === 0) return;
+  if (spendPolling) return;
+  spendPolling = true;
   try {
+    const now = Date.now();
+    for (const u of units.values()) if (u.active) lastWork.set(u.id, now);
+    for (const id of lastWork.keys()) if (!units.has(id)) lastWork.delete(id); // deleted units get no usage
+    const working = [...lastWork].filter(([, t]) => now - t < USAGE_WINDOW_MS).map(([id]) => id);
     const cur = await orgSpend();
     const base = spendBase;
-    spendBase = cur;
-    if (!base || working.length === 0) return;
-    const tokens = cur.tokens - base.tokens;
-    const usd = cur.costUsd - base.costUsd;
-    if (tokens <= 0 && usd <= 0) return;
-    for (const unitId of working) {
-      emit({ type: "usage", unitId, tokens: Math.round(tokens / working.length), usd: usd / working.length });
+    const tokens = base ? cur.tokens - base.tokens : 0;
+    const usd = base ? cur.costUsd - base.costUsd : 0;
+    // Baseline only moves forward; spend accrued with nobody working is absorbed, not attributed later.
+    if (!base || tokens < 0 || usd < 0 || working.length === 0) {
+      if (!base || cur.tokens >= base.tokens) spendBase = cur;
+      return;
     }
+    if (tokens === 0 && usd === 0) return;
+    spendBase = cur;
+    // Integer token split; the remainder goes to the last unit so the parts sum to the org delta.
+    const each = Math.floor(tokens / working.length);
+    const eachUsd = usd / working.length;
+    working.forEach((unitId, i) => {
+      const last = i === working.length - 1;
+      emit({
+        type: "usage",
+        unitId,
+        tokens: last ? tokens - each * (working.length - 1) : each,
+        usd: last ? usd - eachUsd * (working.length - 1) : eachUsd,
+      });
+    });
   } catch {
     // spend is optional; ignore while QM is unreachable
+  } finally {
+    spendPolling = false;
   }
 }, 5_000);
 

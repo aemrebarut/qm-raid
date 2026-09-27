@@ -18,17 +18,33 @@ export interface FlowHooks {
 const RUNS_KEPT = 20;
 const DEFAULT_MAX_LOOPS = 2;
 const MAX_NODES = 12;
-const PREVIOUS_MAX = 8; // replies handed to the next node
+const PREVIOUS_MAX = 12; // replies handed to the next node (the latest of every node always goes, see previousFor)
 const REPLY_MAX = 2000; // chars kept per reply
 const SUMMARY_MAX = 160;
-const PRESETS: Workflow["preset"][] = ["solo", "pair", "trio", "fanout", "custom"];
+const PRESETS: Workflow["preset"][] = ["solo", "pair", "trio", "fanout", "recon", "testfirst", "herald", "duel", "custom"];
 const EDGE_ON: WorkflowEdge["on"][] = ["done", "approved", "changes"];
-const VERDICT = /VERDICT:\s*(APPROVED|CHANGES)(?::\s*(.*))?/i;
+// Keyword, then the rest of the line: "CHANGES: <what>" or the judge's "APPROVED (winner: <name>)".
+const VERDICT = /VERDICT:\s*(APPROVED|CHANGES)\b\s*:?\s*(.*)/i;
+
+// Role instructions for the preset roles beyond planner / implementer / reviewer (CONTRACT.md "Team workflows",
+// verbatim). config.ts ROLE_INSTRUCTIONS wins for any role it names; a node's own instructions win over both.
+const PRESET_ROLE_INSTRUCTIONS: Record<string, string> = {
+  scout: "Recall first. Investigate only: reproduce, point to the code, list the house rules and past learnings that apply. Do not fix.",
+  tester: "Recall first. Write the failing regression test and the exact acceptance check. Do not fix.",
+  herald: "Write the customer update for the affected customers in the house tone: what broke, what we fixed, what they need to do.",
+  judge: "Compare both fixes against the house rules. Pick the better one, say why in two lines, and end with VERDICT: APPROVED (winner: <name>) or VERDICT: CHANGES: <what> if neither is acceptable.",
+};
+export const roleInstructions = (role: string): string => {
+  const r = role.toLowerCase();
+  return ROLE_INSTRUCTIONS[r] ?? PRESET_ROLE_INSTRUCTIONS[r] ?? "";
+};
 
 type Result<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 type Ending = Exclude<WorkflowRun["status"], "running">;
-// Per-run data that is not part of the contract: the graph as it was at start, nodes waiting to start, finished replies.
-interface Ctx { run: WorkflowRun; wf: Workflow; pending: string[]; done: NodeBrief["previous"] }
+type Done = NodeBrief["previous"][number];
+// Per-run data that is not part of the contract: the graph as it was at start, nodes waiting to start (with the
+// finished nodes whose edges led there, for the handoff when they start), finished replies.
+interface Ctx { run: WorkflowRun; wf: Workflow; pending: string[]; arrivals: Map<string, Done[]>; done: Done[] }
 
 let hooks: FlowHooks | null = null;
 // Never reset, so an order from before /api/reset can never match a new run.
@@ -52,25 +68,38 @@ export function initWorkflows(h: FlowHooks): void {
 
 const node = (id: string, role: string, unitId: string): WorkflowNode => ({ id, role, unitId });
 const edge = (from: string, to: string, on: WorkflowEdge["on"]): WorkflowEdge => ({ from, to, on });
-const NEEDS: Record<string, number> = { solo: 1, pair: 2, trio: 3, fanout: 3 };
+const NEEDS: Record<string, number> = { solo: 1, pair: 2, trio: 3, fanout: 3, recon: 3, testfirst: 3, herald: 3, duel: 3 };
 
-// Members bind to roles in member order.
+// Members bind to roles in member order (the order the roles are listed in CONTRACT.md).
 export function presetWorkflow(preset: Workflow["preset"], members: string[]): Workflow | { error: string } {
   const m = [...new Set((Array.isArray(members) ? members : []).filter((x) => typeof x === "string" && x))];
   const need = NEEDS[preset];
-  if (!need) return { error: preset === "custom" ? "custom needs a full workflow graph" : "preset must be solo, pair, trio or fanout" };
+  if (!need) return { error: preset === "custom" ? "custom needs a full workflow graph" : "preset must be solo, pair, trio, fanout, recon, testfirst, herald or duel" };
   if (m.length < need) return { error: `${preset} needs ${need} member${need > 1 ? "s" : ""}` };
   let nodes: WorkflowNode[];
   let edges: WorkflowEdge[];
+  let entries: string[] | undefined;
   if (preset === "solo") {
     nodes = [node("implementer", "implementer", m[0]!)];
     edges = [];
   } else if (preset === "pair") {
     nodes = [node("implementer", "implementer", m[0]!), node("reviewer", "reviewer", m[1]!)];
     edges = [edge("implementer", "reviewer", "done"), edge("reviewer", "implementer", "changes")];
-  } else if (preset === "trio") {
-    nodes = [node("planner", "planner", m[0]!), node("implementer", "implementer", m[1]!), node("reviewer", "reviewer", m[2]!)];
-    edges = [edge("planner", "implementer", "done"), edge("implementer", "reviewer", "done"), edge("reviewer", "implementer", "changes")];
+  } else if (preset === "trio" || preset === "recon" || preset === "testfirst") {
+    // One prep role, then implementer -> reviewer with the changes loop.
+    const prep = preset === "trio" ? "planner" : preset === "recon" ? "scout" : "tester";
+    nodes = [node(prep, prep, m[0]!), node("implementer", "implementer", m[1]!), node("reviewer", "reviewer", m[2]!)];
+    edges = [edge(prep, "implementer", "done"), edge("implementer", "reviewer", "done"), edge("reviewer", "implementer", "changes")];
+  } else if (preset === "herald") {
+    nodes = [node("implementer", "implementer", m[0]!), node("reviewer", "reviewer", m[1]!), node("herald", "herald", m[2]!)];
+    edges = [edge("implementer", "reviewer", "done"), edge("reviewer", "herald", "approved"), edge("reviewer", "implementer", "changes")];
+  } else if (preset === "duel") {
+    nodes = [node("implementer1", "implementer", m[0]!), node("implementer2", "implementer", m[1]!), node("judge", "judge", m[2]!)];
+    edges = [
+      edge("implementer1", "judge", "done"), edge("implementer2", "judge", "done"),
+      edge("judge", "implementer1", "changes"), edge("judge", "implementer2", "changes"),
+    ];
+    entries = ["implementer1", "implementer2"];
   } else {
     const impls = m.slice(1, -1).map((u, i) => node(`implementer${i + 1}`, "implementer", u));
     nodes = [node("planner", "planner", m[0]!), ...impls, node("reviewer", "reviewer", m[m.length - 1]!)];
@@ -80,18 +109,24 @@ export function presetWorkflow(preset: Workflow["preset"], members: string[]): W
       ...impls.map((n) => edge("reviewer", n.id, "changes")),
     ];
   }
-  return { preset, entry: nodes[0]!.id, nodes, edges, maxLoops: DEFAULT_MAX_LOOPS };
+  const w: Workflow = { preset, entry: nodes[0]!.id, nodes, edges, maxLoops: DEFAULT_MAX_LOOPS };
+  if (entries) w.entries = entries;
+  return w;
 }
 
-// Error text or null. Fills missing optional fields in place (preset "custom", maxLoops 2, edges []), since the
-// engine stores a user-drawn graph as given.
+// The nodes a run starts with: every one of `entries` when set (parallel roots, e.g. duel), else `entry`.
+const startNodes = (w: Workflow): string[] => (Array.isArray(w.entries) && w.entries.length ? w.entries : [w.entry]);
+
+// Error text or null. Fills missing optional fields in place (preset "custom", maxLoops 2, edges [], entry = the
+// first of entries), since the engine stores a user-drawn graph as given.
 export function validateWorkflow(w: Workflow, members: string[]): string | null {
   if (!w || typeof w !== "object" || Array.isArray(w)) return "workflow must be an object";
   const x = w as any;
   x.preset ??= "custom";
   x.maxLoops ??= DEFAULT_MAX_LOOPS;
   x.edges ??= [];
-  if (!PRESETS.includes(x.preset)) return "preset must be solo, pair, trio, fanout or custom";
+  if (x.entry === undefined && Array.isArray(x.entries)) x.entry = x.entries[0];
+  if (!PRESETS.includes(x.preset)) return `preset must be one of ${PRESETS.join(", ")}`;
   if (!Array.isArray(x.nodes) || !x.nodes.length) return "workflow needs at least one node";
   if (x.nodes.length > MAX_NODES) return `a workflow has at most ${MAX_NODES} nodes`;
   const ids = new Set<string>();
@@ -105,6 +140,11 @@ export function validateWorkflow(w: Workflow, members: string[]): string | null 
     if (n.instructions !== undefined && (typeof n.instructions !== "string" || n.instructions.length > 2000)) return `node ${n.id}: instructions must be text of at most 2000 characters`;
   }
   if (typeof x.entry !== "string" || !ids.has(x.entry)) return "entry must be the id of a node";
+  if (x.entries !== undefined) {
+    if (!Array.isArray(x.entries) || !x.entries.length || x.entries.some((e: unknown) => typeof e !== "string" || !ids.has(e))) return "entries must be a non-empty list of node ids";
+    if (new Set(x.entries).size !== x.entries.length) return "entries must not repeat a node";
+    if (x.entries[0] !== x.entry) return "entry must be the first of entries";
+  }
   if (!Array.isArray(x.edges)) return "edges must be an array";
   for (const e of x.edges) {
     if (!e || typeof e !== "object" || !ids.has(e.from) || !ids.has(e.to)) return "every edge needs from and to node ids";
@@ -115,11 +155,12 @@ export function validateWorkflow(w: Workflow, members: string[]): string | null 
 }
 
 // The last line with a VERDICT wins, so a reviewer quoting an older verdict still ends with its own.
+// detail = the rest of that line: "add a retry test" for CHANGES, "(winner: Ada)" for a duel judge's APPROVED.
 export function parseVerdict(text: string): { verdict: "approved" | "changes"; detail: string } | null {
   let found: { verdict: "approved" | "changes"; detail: string } | null = null;
   for (const line of String(text ?? "").split(/\r?\n/)) {
     const m = line.match(VERDICT);
-    if (m) found = { verdict: m[1]!.toLowerCase() as "approved" | "changes", detail: (m[2] ?? "").replace(/[*_`\s]+$/, "").trim() };
+    if (m) found = { verdict: m[1]!.toLowerCase() as "approved" | "changes", detail: (m[2] ?? "").replace(/^[\s.:-]+|[\s*_`.]+$/g, "") };
   }
   return found;
 }
@@ -134,7 +175,7 @@ function outcome(wf: Workflow, n: WorkflowNode, reply: string): { status: "done"
   const v = parseVerdict(reply);
   if (!v) return { status: "approved", summary: head(`APPROVED (no VERDICT line): ${reply}`) };
   if (v.verdict === "changes") return { status: "changes", summary: head(`CHANGES: ${v.detail || reply}`) };
-  return { status: "approved", summary: head(v.detail ? `APPROVED: ${v.detail}` : "APPROVED") };
+  return { status: "approved", summary: head(v.detail ? `APPROVED ${v.detail}` : "APPROVED") };
 }
 
 // Does `from` lead to `to` along forward edges? `changes` edges are loops back and never make a node wait.
@@ -164,13 +205,25 @@ function nodeById(c: Ctx, id: string): WorkflowNode {
   return c.wf.nodes.find((n) => n.id === id)!;
 }
 
+// Replies for the next node, latest last: the latest reply of every finished node always goes (a large fanout keeps
+// its planner and every branch), older replies (earlier loop rounds) fill up to PREVIOUS_MAX.
+function previousFor(c: Ctx): NodeBrief["previous"] {
+  const keep = new Set<number>();
+  const seen = new Set<string>();
+  for (let i = c.done.length - 1; i >= 0; i--) if (!seen.has(c.done[i]!.nodeId)) { seen.add(c.done[i]!.nodeId); keep.add(i); }
+  for (let i = c.done.length - 1; i >= 0 && keep.size < PREVIOUS_MAX; i--) keep.add(i);
+  return c.done.filter((_, i) => keep.has(i)).map((p) => ({ ...p }));
+}
+
 function startNode(c: Ctx, id: string): boolean {
   const n = nodeById(c, id);
   const brief: NodeBrief = {
     runId: c.run.id, nodeId: n.id, role: n.role,
-    instructions: n.instructions?.trim() || ROLE_INSTRUCTIONS[n.role.toLowerCase()] || "",
-    previous: c.done.slice(-PREVIOUS_MAX).map((p) => ({ ...p })),
+    instructions: n.instructions?.trim() || roleInstructions(n.role),
+    previous: previousFor(c),
   };
+  const from = c.arrivals.get(n.id) ?? [];
+  c.arrivals.delete(n.id);
   const step: WorkflowStep = { nodeId: n.id, unitId: n.unitId, orderId: "", status: "active", summary: "", ts: Date.now() };
   c.run.steps.push(step);
   c.run.active.push(n.id);
@@ -190,6 +243,8 @@ function startNode(c: Ctx, id: string): boolean {
     endRun(c, "failed");
     return false;
   }
+  // Work passes between units only now that the node really starts (after its join), once per finished node that led here.
+  for (const f of from) if (f.unitId !== n.unitId) emit("workflow.handoff", { runId: c.run.id, fromUnitId: f.unitId, toUnitId: n.unitId, nodeId: n.id, summary: head(f.reply) });
   return true;
 }
 
@@ -212,6 +267,7 @@ function endRun(c: Ctx, status: Ending): void {
   if (c.run.status !== "running") return;
   c.run.status = status;
   c.pending = [];
+  c.arrivals.clear();
   // Each cancel re-enters onOrderEnded, which marks that step failed now that the run is over.
   for (const s of [...c.run.steps]) if (s.status === "active" && s.orderId) hooks?.cancelOrder(s.orderId);
   for (const s of c.run.steps) if (s.status === "active") { s.status = "failed"; s.summary ||= `cancelled: run ${status}`; }
@@ -250,12 +306,13 @@ export function startRun(teamId: number, targetId: string): Result<{ run: Workfl
   // One run per team: a new team order replaces the running one.
   for (const c of [...ctxs.values()]) if (c.run.teamId === teamId && c.run.status === "running" && live(c)) endRun(c, "cancelled");
   const run: WorkflowRun = { id: `w${nextRun++}`, teamId, targetId, status: "running", loops: 0, active: [], steps: [] };
-  const c: Ctx = { run, wf, pending: [], done: [] };
+  const c: Ctx = { run, wf, pending: [], arrivals: new Map(), done: [] };
   ctxs.set(run.id, c);
   runs().push(run);
   trimRuns();
-  if (!startNode(c, wf.entry)) {
-    const why = run.steps[run.steps.length - 1]?.summary || "entry node did not start";
+  for (const id of startNodes(wf)) {
+    if (startNode(c, id)) continue;
+    const why = run.steps.find((s) => s.status === "failed" && !s.summary.startsWith("cancelled"))?.summary || "entry node did not start";
     return { ok: false, error: why };
   }
   hooks.setTargetStatus(targetId, "engaged");
@@ -296,16 +353,16 @@ export function onOrderEnded(order: Order): void {
   const out = outcome(c.wf, n, reply);
   step.status = out.status;
   step.summary = out.summary;
-  c.done.push({ nodeId: n.id, role: n.role, unitId: n.unitId, reply: reply.trim().slice(0, REPLY_MAX) });
+  const finished: Done = { nodeId: n.id, role: n.role, unitId: n.unitId, reply: reply.trim().slice(0, REPLY_MAX) };
+  c.done.push(finished);
   const next = c.wf.edges.filter((e) => e.from === n.id && (e.on === "done" || e.on === out.status));
   if (out.status === "changes" && next.some((e) => e.on === "changes")) {
     c.run.loops++;
     if (c.run.loops > c.wf.maxLoops) return endRun(c, "needs_human");
   }
   for (const e of next) {
-    const to = nodeById(c, e.to);
-    if (to.unitId !== n.unitId) emit("workflow.handoff", { runId: c.run.id, fromUnitId: n.unitId, toUnitId: to.unitId, nodeId: to.id, summary: head(reply) });
-    if (!c.pending.includes(to.id)) c.pending.push(to.id);
+    if (!c.pending.includes(e.to)) c.pending.push(e.to);
+    c.arrivals.set(e.to, [...(c.arrivals.get(e.to) ?? []), finished]);
   }
   pump(c);
   if (c.run.status !== "running") return;

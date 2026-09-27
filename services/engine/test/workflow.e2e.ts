@@ -1,13 +1,19 @@
-// W1 live check on the TEST engine (4618, mock backend), owner raid-eng-flow. Never point it at 4610 (real QM).
-//   /tmp/engplan/with4618 raid-eng-flow bun test/workflow.e2e.ts [--speed 4] [--no-reset]
-// POST /api/reset (4618 has BRAIN_RESET=0), trio preset on team 1, team order on an open target, then expects
-// planner -> implementer -> reviewer (changes) -> implementer -> reviewer (approved) -> run done, 5 workflow orders,
-// 4 handoffs between the right units, and the target resolved only when the run is done. Mock config is restored.
-// Env: ENGINE_URL (http://127.0.0.1:4618), MOCK_URL (http://127.0.0.1:4615).
+// Workflow live check on the TEST engine (4618, mock backend), owner raid-eng-flow. Never point it at 4610 (real QM).
+//   /tmp/engplan/with4618 raid-eng-flow bun test/workflow.e2e.ts [--cases trio,needs_human,cancel,duel] [--speed 8] [--timeout 120] [--no-reset]
+// 4618 runs the last committed engine: commit first. POST /api/reset (4618 has BRAIN_RESET=0), then per case on team 1:
+// - trio: planner -> implementer -> reviewer (changes) -> implementer -> reviewer (approved) -> done, 5 workflow orders,
+//   4 handoffs between the right units, target resolved only after the last step.
+// - needs_human: mock review "changes": 3 CHANGES (maxLoops 2) -> needs_human, target open, no active orders.
+// - cancel: cancelling the implementer's order cancels the run and reopens the target.
+// - duel: both implementers start at once, the judge waits for both, then (mock) changes once and approves a winner.
+// Fails fast when the engine reloads mid-test (SSE drops or a second snapshot) and after --timeout seconds overall.
+// The shared mock config is restored at the end. Env: ENGINE_URL (http://127.0.0.1:4618), MOCK_URL (http://127.0.0.1:4615).
 const E = (process.env.ENGINE_URL ?? "http://127.0.0.1:4618").replace(/\/$/, "");
 const MOCK = (process.env.MOCK_URL ?? "http://127.0.0.1:4615").replace(/\/$/, "");
 const arg = (name: string, dflt: string) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] ?? dflt : dflt; };
-const SPEED = Number(arg("--speed", "4")) || 4;
+const CASES = arg("--cases", "trio,needs_human,cancel,duel").split(",").map((c) => c.trim()).filter(Boolean);
+const SPEED = Number(arg("--speed", "8")) || 8;
+const TIMEOUT_MS = (Number(arg("--timeout", "120")) || 120) * 1000;
 const RESET = !process.argv.includes("--no-reset");
 if (new URL(E).port === "4610") { console.error("refusing to run against 4610 (the real QM engine); use the test engine on 4618"); process.exit(2); }
 
@@ -25,85 +31,167 @@ function check(ok: boolean, what: string, detail: unknown = ""): void {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}${ok || detail === "" ? "" : `: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`}`);
 }
 
-// ---- engine SSE ----
+const mockBefore = (await call(`${MOCK}/debug/config`)).d?.config;
+async function restoreMock(): Promise<void> {
+  if (mockBefore) await call(`${MOCK}/debug/config`, "POST", { speed: mockBefore.speed, fail: mockBefore.fail, review: mockBefore.review });
+}
+// Hard stop: never hold the 4618 lock longer than the budget.
+const watchdog = setTimeout(async () => {
+  console.log(`FAIL overall timeout (${TIMEOUT_MS / 1000} s)`);
+  await restoreMock();
+  process.exit(1);
+}, TIMEOUT_MS);
+
+// ---- engine SSE: a dropped stream or a second snapshot means the engine reloaded and lost its runs ----
 const events: any[] = [];
 const ctl = new AbortController();
+let reloaded = "";
 async function listen(): Promise<void> {
-  const r = await fetch(`${E}/api/events`, { signal: ctl.signal });
-  const rd = r.body!.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await rd.read();
-    if (done) return;
-    buf += dec.decode(value, { stream: true });
-    let i;
-    while ((i = buf.indexOf("\n\n")) >= 0) {
-      const blk = buf.slice(0, i);
-      buf = buf.slice(i + 2);
-      const line = blk.split("\n").find((l) => l.startsWith("data: "));
-      if (line) try { events.push(JSON.parse(line.slice(6))); } catch {}
+  try {
+    const r = await fetch(`${E}/api/events`, { signal: ctl.signal });
+    const rd = r.body!.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const blk = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        const line = blk.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        let ev: any;
+        try { ev = JSON.parse(line.slice(6)); } catch { continue; }
+        if (ev.type === "state.snapshot" && events.some((e) => e.type === "state.snapshot")) reloaded ||= "second state.snapshot (engine reset or reloaded)";
+        events.push(ev);
+      }
     }
-  }
+  } catch {}
+  if (!ctl.signal.aborted) reloaded ||= "SSE stream closed (engine reloaded)";
 }
 async function until<T>(pick: () => T | undefined, ms: number): Promise<T | undefined> {
   const end = Date.now() + ms;
-  while (Date.now() < end) {
+  while (Date.now() < end && !reloaded) {
     const v = pick();
     if (v !== undefined) return v;
     await Bun.sleep(200);
   }
-  return undefined;
+  return pick();
+}
+const state = async () => (await call(`${E}/api/state`)).d;
+const openTarget = async () => (await state()).targets.find((t: any) => t.status === "open");
+const runEnd = (id: string, ms: number) => until(() => events.filter((e) => e.type === "workflow.updated" && e.run.id === id && e.run.status !== "running").pop()?.run, ms);
+async function startTeamRun(preset: string): Promise<{ runId: string; target: any } | null> {
+  const put = await call(`${E}/api/teams/1/workflow`, "PUT", { preset });
+  check(put.d?.ok === true && put.d.team?.workflow?.preset === preset, `PUT ${preset} preset`, put.d);
+  const target = await openTarget();
+  const res = await call(`${E}/api/orders`, "POST", { teamId: 1, targetId: target?.id });
+  const runId = res.d?.run?.id;
+  check(res.d?.ok === true && typeof runId === "string", `${preset}: team order starts a run`, res.d);
+  if (typeof runId !== "string") return null;
+  console.log(`${preset}: run ${runId} on ${target.id} (${target.issue})`);
+  return { runId, target };
+}
+const steps = (run: any) => run.steps.map((s: any) => `${s.nodeId}:${s.status}:${s.unitId}`);
+const handoffs = (runId: string) => events.filter((e) => e.type === "workflow.handoff" && e.runId === runId).map((e) => `${e.fromUnitId}>${e.toUnitId}:${e.nodeId}`);
+
+async function trio(m: string[]): Promise<void> {
+  const [planner, implementer, reviewer] = m;
+  const s = await startTeamRun("trio");
+  if (!s) return;
+  const final = await runEnd(s.runId, 60000);
+  check(final?.status === "done", "trio: run done", final && steps(final));
+  if (!final) return;
+  check(final.loops === 1, "trio: one changes loop", final.loops);
+  check(JSON.stringify(steps(final)) === JSON.stringify([`planner:done:${planner}`, `implementer:done:${implementer}`, `reviewer:changes:${reviewer}`, `implementer:done:${implementer}`, `reviewer:approved:${reviewer}`]), "trio: planner, implementer, reviewer (changes), implementer, reviewer (approved)", steps(final));
+  check(JSON.stringify(handoffs(s.runId)) === JSON.stringify([`${planner}>${implementer}:implementer`, `${implementer}>${reviewer}:reviewer`, `${reviewer}>${implementer}:implementer`, `${implementer}>${reviewer}:reviewer`]), "trio: 4 handoffs between the right units", handoffs(s.runId));
+  const st = await state();
+  const orders = st.orders.filter((o: any) => o.runId === s.runId);
+  check(orders.length === 5 && orders.every((o: any) => o.source === "workflow" && o.status === "done"), "trio: 5 done orders with source workflow and runId", orders.map((o: any) => `${o.id}:${o.status}`));
+  check(st.targets.find((t: any) => t.id === s.target.id)?.status === "resolved", "trio: target resolved");
+  const resolvedAt = events.findIndex((e) => e.type === "target.updated" && e.target.id === s.target.id && e.target.status === "resolved");
+  const lastStepDoneAt = events.findLastIndex((e) => e.type === "order.updated" && e.order.runId === s.runId && e.order.status === "done");
+  check(resolvedAt > lastStepDoneAt && resolvedAt >= 0, "trio: target resolved only after the last step", { resolvedAt, lastStepDoneAt });
+  check(st.workflowRuns.some((r: any) => r.id === s.runId && r.status === "done"), "trio: state.workflowRuns holds the run");
 }
 
-const mockBefore = (await call(`${MOCK}/debug/config`)).d?.config;
+async function needsHuman(): Promise<void> {
+  await call(`${MOCK}/debug/config`, "POST", { review: "changes" });
+  try {
+    const s = await startTeamRun("trio");
+    if (!s) return;
+    const end = await runEnd(s.runId, 60000);
+    check(end?.status === "needs_human" && end?.loops === 3, "needs_human: after 3 CHANGES (maxLoops 2)", end && { status: end.status, loops: end.loops });
+    const st = await state();
+    check(st.targets.find((t: any) => t.id === s.target.id)?.status === "open", "needs_human: target open again");
+    check(!st.orders.some((o: any) => o.runId === s.runId && o.status === "active"), "needs_human: no active orders left");
+  } finally {
+    await call(`${MOCK}/debug/config`, "POST", { review: "loop" });
+  }
+}
+
+async function cancel(): Promise<void> {
+  const s = await startTeamRun("trio");
+  if (!s) return;
+  const impl = await until(() => events.find((e) => e.type === "order.updated" && e.order.runId === s.runId && e.order.nodeId === "implementer" && e.order.status === "active")?.order, 30000);
+  check(!!impl, "cancel: implementer step started");
+  if (!impl) return;
+  const c = await call(`${E}/api/orders/${impl.id}/cancel`, "POST", {});
+  check(c.d?.ok === true, "cancel: POST /api/orders/:id/cancel", c.d);
+  const end = await runEnd(s.runId, 5000);
+  check(end?.status === "cancelled", "cancel: run cancelled", end?.status);
+  await Bun.sleep(2000); // a late mock reply for the cancelled order must change nothing
+  const st = await state();
+  check(st.targets.find((t: any) => t.id === s.target.id)?.status === "open", "cancel: target open again");
+  check(st.workflowRuns.find((r: any) => r.id === s.runId)?.status === "cancelled" && !st.orders.some((o: any) => o.runId === s.runId && o.status === "active"), "cancel: run stays cancelled, no active orders");
+}
+
+async function duel(m: string[]): Promise<void> {
+  const [a, b, judge] = m;
+  const s = await startTeamRun("duel");
+  if (!s) return;
+  const first = events.find((e) => e.type === "workflow.updated" && e.run.id === s.runId);
+  check(JSON.stringify([...(first?.run.active ?? [])].sort()) === JSON.stringify(["implementer1", "implementer2"]), "duel: both implementers start at once", first?.run.active);
+  const final = await runEnd(s.runId, 60000);
+  check(final?.status === "done", "duel: run done", final && steps(final));
+  if (!final) return;
+  const judged = final.steps.filter((x: any) => x.nodeId === "judge");
+  check(judged.length >= 1 && judged.at(-1).status === "approved" && judged.at(-1).unitId === judge, "duel: the judge approves last", steps(final));
+  // The judge never starts before both implementers of its round finished.
+  let ok = true;
+  const seen: Record<string, number> = {};
+  for (const x of final.steps) {
+    if (x.nodeId === "judge") { if ((seen.implementer1 ?? 0) !== (seen.implementer2 ?? 0) || !seen.implementer1) ok = false; }
+    else seen[x.nodeId] = (seen[x.nodeId] ?? 0) + 1;
+  }
+  check(ok, "duel: the judge waits for both implementers every round", steps(final));
+  const toJudge = handoffs(s.runId).filter((h) => h.endsWith(":judge"));
+  check(toJudge.length === 2 * judged.length && toJudge.every((h) => h.startsWith(`${a}>`) || h.startsWith(`${b}>`)), "duel: a handoff from each implementer to the judge per round", toJudge);
+  check((await state()).targets.find((t: any) => t.id === s.target.id)?.status === "resolved", "duel: target resolved");
+}
+
 try {
   if (RESET) check((await call(`${E}/api/reset`, "POST", {})).d?.ok === true, "reset 4618");
   if (mockBefore) await call(`${MOCK}/debug/config`, "POST", { speed: SPEED, fail: 0, review: "loop" });
-  void listen().catch(() => {});
-  await until(() => events.find((e) => e.type === "state.snapshot"), 5000);
-  const state = (await call(`${E}/api/state`)).d;
-  const team = state.teams.find((t: any) => t.id === 1);
+  void listen();
+  check(!!(await until(() => events.find((e) => e.type === "state.snapshot"), 5000)), "SSE snapshot");
+  const team = (await state()).teams.find((t: any) => t.id === 1);
   check(team?.members?.length >= 3, "team 1 has 3 members", team?.members);
-  const [planner, implementer, reviewer] = team.members as string[];
-
-  const put = await call(`${E}/api/teams/1/workflow`, "PUT", { preset: "trio" });
-  check(put.d?.ok === true && put.d.team?.workflow?.preset === "trio", "PUT trio preset", put.d);
-  const target = state.targets.find((t: any) => t.status === "open");
-  const order = await call(`${E}/api/orders`, "POST", { teamId: 1, targetId: target.id });
-  const runId = order.d?.run?.id;
-  check(order.d?.ok === true && typeof runId === "string", "team order starts a run", order.d);
-  console.log(`run ${runId} on ${target.id} (${target.issue}); planner ${planner}, implementer ${implementer}, reviewer ${reviewer}`);
-
-  let seen = "";
-  const final = await until(() => {
-    const u = events.filter((e) => e.type === "workflow.updated" && e.run.id === runId).pop();
-    const now = u ? `${u.run.status} ${u.run.steps.map((s: any) => `${s.nodeId}:${s.status}`).join(" ")}` : "";
-    if (now && now !== seen) { seen = now; console.log(`  ${now}`); }
-    return u && u.run.status !== "running" ? u.run : undefined;
-  }, 240000);
-  check(!!final, "run finished within 240 s", seen);
-  if (final) {
-    check(final.status === "done", "run done", final.status);
-    check(final.loops === 1, "one changes loop", final.loops);
-    const steps = final.steps.map((s: any) => `${s.nodeId}:${s.status}:${s.unitId}`);
-    check(JSON.stringify(steps) === JSON.stringify([`planner:done:${planner}`, `implementer:done:${implementer}`, `reviewer:changes:${reviewer}`, `implementer:done:${implementer}`, `reviewer:approved:${reviewer}`]), "steps planner, implementer, reviewer (changes), implementer, reviewer (approved)", steps);
-    const hand = events.filter((e) => e.type === "workflow.handoff" && e.runId === runId).map((e) => `${e.fromUnitId}>${e.toUnitId}:${e.nodeId}`);
-    check(JSON.stringify(hand) === JSON.stringify([`${planner}>${implementer}:implementer`, `${implementer}>${reviewer}:reviewer`, `${reviewer}>${implementer}:implementer`, `${implementer}>${reviewer}:reviewer`]), "4 handoffs between the right units", hand);
-    const st = (await call(`${E}/api/state`)).d;
-    const orders = st.orders.filter((o: any) => o.runId === runId);
-    check(orders.length === 5 && orders.every((o: any) => o.source === "workflow" && o.status === "done"), "5 done orders with source workflow and runId", orders.map((o: any) => `${o.id}:${o.source}:${o.status}`));
-    check(st.targets.find((t: any) => t.id === target.id)?.status === "resolved", "target resolved");
-    const resolvedAt = events.findIndex((e) => e.type === "target.updated" && e.target.id === target.id && e.target.status === "resolved");
-    const doneAt = events.findIndex((e) => e.type === "workflow.updated" && e.run.id === runId && e.run.status === "done");
-    const lastStepDoneAt = events.findLastIndex((e) => e.type === "order.updated" && e.order.runId === runId && e.order.status === "done");
-    check(resolvedAt > lastStepDoneAt && resolvedAt >= 0, "target resolved only after the last step (not on an earlier step)", { resolvedAt, lastStepDoneAt, doneAt });
-    check(st.workflowRuns.some((r: any) => r.id === runId && r.status === "done"), "state.workflowRuns holds the run");
+  const m = (team?.members ?? []) as string[];
+  const cases: Record<string, () => Promise<void>> = { trio: () => trio(m), needs_human: needsHuman, cancel, duel: () => duel(m) };
+  for (const name of CASES) {
+    if (reloaded) break;
+    if (!cases[name]) { check(false, `unknown case ${name}`); continue; }
+    await cases[name]!();
   }
+  if (reloaded) check(false, "engine stayed up during the test", reloaded);
   check((await call(`${E}/api/teams/1/workflow`, "DELETE")).d?.team?.workflow === null, "DELETE workflow clears it");
 } finally {
   ctl.abort();
-  if (mockBefore) await call(`${MOCK}/debug/config`, "POST", { speed: mockBefore.speed, fail: mockBefore.fail, review: mockBefore.review });
+  clearTimeout(watchdog);
+  await restoreMock();
 }
 console.log(failures ? `${failures} FAILED` : "workflow e2e passed");
 process.exit(failures ? 1 : 0);

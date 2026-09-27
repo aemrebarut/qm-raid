@@ -289,3 +289,115 @@ test("state keeps the last 20 runs", () => {
   expect(store.state.workflowRuns).toHaveLength(20);
   expect(store.state.workflowRuns.every((r) => r.status === "done")).toBe(true);
 });
+
+test("new presets: recon, testfirst, herald, duel graphs and role instructions", () => {
+  const recon = presetWorkflow("recon", ["u1", "u2", "u3"]) as Workflow;
+  expect(recon.nodes.map((n) => `${n.id}:${n.role}=${n.unitId}`)).toEqual(["scout:scout=u1", "implementer:implementer=u2", "reviewer:reviewer=u3"]);
+  expect(recon.edges).toContainEqual({ from: "reviewer", to: "implementer", on: "changes" });
+  const tf = presetWorkflow("testfirst", ["u1", "u2", "u3"]) as Workflow;
+  expect(tf.entry).toBe("tester");
+  const herald = presetWorkflow("herald", ["u1", "u2", "u3"]) as Workflow;
+  expect(herald.edges).toEqual([{ from: "implementer", to: "reviewer", on: "done" }, { from: "reviewer", to: "herald", on: "approved" }, { from: "reviewer", to: "implementer", on: "changes" }]);
+  const duel = presetWorkflow("duel", ["u1", "u2", "u3"]) as Workflow;
+  expect(duel).toMatchObject({ entry: "implementer1", entries: ["implementer1", "implementer2"] });
+  expect(duel.nodes.map((n) => `${n.id}:${n.role}=${n.unitId}`)).toEqual(["implementer1:implementer=u1", "implementer2:implementer=u2", "judge:judge=u3"]);
+  expect(presetWorkflow("duel", ["u1", "u2"])).toEqual({ error: "duel needs 3 members" });
+  for (const p of ["recon", "testfirst", "herald", "duel"] as const) expect(validateWorkflow(presetWorkflow(p, ["u1", "u2", "u3"]) as Workflow, ["u1", "u2", "u3"])).toBeNull();
+
+  setPreset(1, "recon");
+  run(1, "t101");
+  expect(briefs.get(activeOf("u1").id)).toMatchObject({ role: "scout", instructions: expect.stringContaining("Investigate only") });
+  store.state = fixtureState();
+  setPreset(1, "testfirst");
+  run(1, "t101");
+  expect(briefs.get(activeOf("u1").id)!.instructions).toContain("failing regression test");
+});
+
+test("herald: the herald starts only after approval and the target resolves only after the customer update", () => {
+  setPreset(1, "herald"); // implementer u1, reviewer u2, herald u3
+  const r = run(1, "t101");
+  finish("u1", "fix");
+  finish("u2", "VERDICT: CHANGES: cover refunds");
+  expect(r.active).toEqual(["implementer"]);
+  expect(activeOf("u3")).toBeUndefined();
+  finish("u1", "fix 2");
+  finish("u2", "VERDICT: APPROVED");
+  expect(r.active).toEqual(["herald"]);
+  expect(briefs.get(activeOf("u3").id)!.instructions).toContain("customer update");
+  expect(target("t101").status).toBe("engaged");
+  finish("u3", "Dear Acme Robotics, ...");
+  expect(r.status).toBe("done");
+  expect(target("t101").status).toBe("resolved");
+  expect(r.steps.map((s) => `${s.nodeId}:${s.status}`)).toEqual(["implementer:done", "reviewer:changes", "implementer:done", "reviewer:approved", "herald:done"]);
+});
+
+test("duel: both implementers start at once, the judge waits for both, changes restarts both, winner in the summary", () => {
+  setPreset(1, "duel"); // implementers u1 u2, judge u3
+  const r = run(1, "t104");
+  expect([...r.active].sort()).toEqual(["implementer1", "implementer2"]);
+  expect(active().map((o) => o.unitId).sort()).toEqual(["u1", "u2"]);
+  expect(target("t104").status).toBe("engaged");
+  finish("u2", "fix B");
+  expect(r.active).toEqual(["implementer1"]);
+  expect(handoffs()).toEqual([]); // the judge has not started, so no scroll yet
+  finish("u1", "fix A");
+  expect(r.active).toEqual(["judge"]);
+  expect(handoffs()).toEqual(["u2>u3:judge", "u1>u3:judge"]);
+  expect(briefs.get(activeOf("u3").id)).toMatchObject({ role: "judge", instructions: expect.stringContaining("winner") });
+  finish("u3", "Neither checks the house rule.\nVERDICT: CHANGES: both must dedupe by idempotency key");
+  expect([...r.active].sort()).toEqual(["implementer1", "implementer2"]);
+  finish("u1", "fix A2");
+  finish("u2", "fix B2");
+  finish("u3", "A is cleaner.\nVERDICT: APPROVED (winner: Ada)");
+  expect(r.status).toBe("done");
+  expect(r.loops).toBe(1);
+  expect(r.steps.at(-1)).toMatchObject({ nodeId: "judge", status: "approved", summary: "APPROVED (winner: Ada)" });
+  expect(target("t104").status).toBe("resolved");
+});
+
+test("entries validation", () => {
+  const base = () => ({ preset: "custom", maxLoops: 2, nodes: [{ id: "a", role: "implementer", unitId: "u1" }, { id: "b", role: "implementer", unitId: "u2" }], edges: [] }) as any;
+  const w = { ...base(), entries: ["a", "b"] };
+  expect(validateWorkflow(w, ["u1", "u2"])).toBeNull();
+  expect(w.entry).toBe("a");
+  expect(validateWorkflow({ ...base(), entry: "b", entries: ["a", "b"] }, ["u1", "u2"])).toContain("first of entries");
+  expect(validateWorkflow({ ...base(), entry: "a", entries: ["a", "z"] }, ["u1", "u2"])).toContain("entries");
+  expect(validateWorkflow({ ...base(), entry: "a", entries: ["a", "a"] }, ["u1", "u2"])).toContain("repeat");
+});
+
+test("rev P2: in a fanout the handoff to the reviewer fires only when the reviewer starts", () => {
+  setPreset(1, "fanout", ["u1", "u2", "u3", "u4"]);
+  const r = run(1, "t104");
+  finish("u1", "plan");
+  expect(handoffs()).toEqual(["u1>u2:implementer1", "u1>u3:implementer2"]);
+  finish("u2", "part one");
+  expect(r.active).toEqual(["implementer2"]);
+  expect(handoffs().filter((h) => h.endsWith(":reviewer"))).toEqual([]);
+  finish("u3", "part two");
+  expect(handoffs().filter((h) => h.endsWith(":reviewer"))).toEqual(["u2>u4:reviewer", "u3>u4:reviewer"]);
+  expect(r.active).toEqual(["reviewer"]);
+});
+
+test("rev P2: a large fanout hands the reviewer the planner and every branch", () => {
+  const members = Array.from({ length: 11 }, (_, i) => `x${i + 1}`);
+  for (const id of members) store.state.units.push({ ...store.state.units[0]!, id, name: id, orderId: null, team: 1 });
+  setPreset(1, "fanout", members); // planner x1, implementers x2..x10, reviewer x11
+  run(1, "t104");
+  finish("x1", "the plan");
+  for (let i = 2; i <= 10; i++) finish(`x${i}`, `branch ${i}`);
+  const prev = briefs.get(activeOf("x11").id)!.previous;
+  expect(prev.map((p) => p.unitId)).toEqual(members.slice(0, 10));
+  expect(prev[0]!.reply).toBe("the plan");
+});
+
+test("previous keeps every node's latest reply first, then older rounds up to the cap, latest last", () => {
+  setPreset(1, "trio");
+  const r = run(1, "t101");
+  finish("u1", "plan");
+  finish("u2", "impl 1");
+  finish("u3", "VERDICT: CHANGES: a");
+  finish("u2", "impl 2");
+  const prev = briefs.get(activeOf("u3").id)!.previous;
+  expect(prev.map((p) => p.reply)).toEqual(["plan", "impl 1", "VERDICT: CHANGES: a", "impl 2"]);
+  expect(r.status).toBe("running");
+});

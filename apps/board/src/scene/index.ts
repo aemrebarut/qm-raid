@@ -326,7 +326,7 @@ export function mountScene(el: HTMLElement, store: Store, bus: Bus) {
       let o: THREE.Object3D | null = h.object;
       while (o && !o.userData?.kind) o = o.parent;
       const kind = o?.userData?.kind as keyof typeof rank | undefined;
-      if (!o || !kind || !(kind in rank)) continue;
+      if (!o || !kind || !(kind in rank) || !o.visible) continue; // cleared camps stay raycastable otherwise
       if (rank[kind] < bestRank) { bestRank = rank[kind]; best = { kind, id: o.userData.id }; }
       if (bestRank === 0) break;
     }

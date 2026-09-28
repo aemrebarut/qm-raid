@@ -51,6 +51,7 @@ export class TargetView {
   private readonly puffs: THREE.Mesh[] = [];
   private titleTag: THREE.Sprite | null = null;
   private riseT = 0; // seconds left of the spawn rise
+  private goneT = 0; // seconds left before a freshly defeated camp is cleared from the map (Emre 17:0x: no dead bugs)
   /** packages/art camp (flag 'targets'); the placeholder body is not built then. */
   private readonly art: ReturnType<typeof makeTarget> | null = null;
 
@@ -164,6 +165,10 @@ export class TargetView {
     this.target = t;
     this.group.position.copy(tileToWorld(t.pos.x, t.pos.y));
     const resolved = t.status === "resolved";
+    // Dead bugs are cleaned up: a live resolve plays its collapse, then the camp leaves; already resolved ones never show.
+    if (!resolved) { this.group.visible = true; this.goneT = 0; }
+    else if (was !== "resolved") this.goneT = 4;
+    else if (this.goneT <= 0) this.group.visible = false;
     if (this.art) {
       // A live resolve plays the collapse; a snapshot that is already resolved goes straight to the resolved look.
       if (resolved) { if (was !== "resolved") this.art.defeat(); else this.art.setState("resolved"); }
@@ -228,6 +233,8 @@ export class TargetView {
   orderFlash() { this.flash = 1.2; }
 
   tick(t: number, dt: number) {
+    if (this.goneT > 0) { this.goneT -= dt; if (this.goneT <= 0) this.group.visible = false; }
+    if (!this.group.visible) return;
     if (this.riseT > 0) {
       this.riseT = Math.max(0, this.riseT - dt);
       const k = 1 - this.riseT / RISE;

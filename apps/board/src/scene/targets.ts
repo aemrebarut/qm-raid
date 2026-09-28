@@ -60,7 +60,7 @@ export class TargetView {
     this.phase = (hash(t.id) % 1000) / 160;
     this.size = 0.75 + 0.22 * (t.severity ?? 1);
     if (artOn("targets")) {
-      this.art = makeTarget({ kind: t.kind, severity: t.severity, seed: hash(t.id) });
+      this.art = makeTarget({ kind: "bug", severity: t.severity, seed: hash(t.id) }); // every issue is a bug camp, features too (Emre 16:58)
       this.size = (this.art.radius + 0.15) / 0.58; // selection rings hug the art camp
     }
     this.group.userData = { kind: "target", id: t.id };
